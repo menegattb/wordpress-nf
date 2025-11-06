@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { buscarPedidos, buscarPedidoPorId, testarConexao } = require('../services/woocommerce');
+const { buscarPedidos, buscarPedidoPorId, buscarCategorias, testarConexao } = require('../services/woocommerce');
 
 /**
  * GET /api/woocommerce/test
@@ -24,7 +24,7 @@ router.get('/test', async (req, res) => {
  */
 router.get('/pedidos', async (req, res) => {
   try {
-    const { status, per_page, page, after, before } = req.query;
+    const { status, per_page, page, after, before, mes } = req.query;
     
     const filtros = {};
     if (status) filtros.status = status;
@@ -32,6 +32,7 @@ router.get('/pedidos', async (req, res) => {
     if (page) filtros.page = parseInt(page);
     if (after) filtros.after = after;
     if (before) filtros.before = before;
+    if (mes) filtros.mes = mes; // Formato: YYYY-MM
     
     const resultado = await buscarPedidos(filtros);
     res.json(resultado);
@@ -51,6 +52,22 @@ router.get('/pedidos/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const resultado = await buscarPedidoPorId(id);
+    res.json(resultado);
+  } catch (error) {
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/woocommerce/categorias
+ * Busca categorias de produtos do WooCommerce
+ */
+router.get('/categorias', async (req, res) => {
+  try {
+    const resultado = await buscarCategorias();
     res.json(resultado);
   } catch (error) {
     res.status(500).json({

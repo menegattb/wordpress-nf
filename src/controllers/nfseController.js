@@ -2,10 +2,122 @@ const logger = require('../services/logger');
 const { emitirNFSe, consultarNFSe, cancelarNFSe } = require('../services/focusNFSe');
 const { buscarPedidoPorId, atualizarPedido } = require('../config/database');
 const { validarCPFCNPJ } = require('../services/validator');
+const { buscarPedidoPorId: buscarPedidoWC } = require('../services/woocommerce');
+const { mapearWooCommerceParaPedido } = require('../utils/mapeador');
 const config = require('../../config');
 
 // Passar config.fiscal também
 const configFiscal = config.fiscal;
+
+/**
+ * Emite NFSe em lote para múltiplos pedidos
+ */
+async function emitirNFSeLote(req, res) {
+  try {
+    const { pedido_ids, tipo_nf } = req.body;
+    
+    if (!pedido_ids || !Array.isArray(pedido_ids) || pedido_ids.length === 0) {
+      return res.status(400).json({
+        sucesso: false,
+        erro: 'Lista de pedido_ids é obrigatória'
+      });
+    }
+    
+    logger.info('Iniciando emissão em lote de NFSe', {
+      total: pedido_ids.length,
+      tipo_nf: tipo_nf || 'servico'
+    });
+    
+    const resultados = [];
+    let sucesso = 0;
+    let erros = 0;
+    
+    for (let i = 0; i < pedido_ids.length; i++) {
+      const pedidoId = pedido_ids[i];
+      
+      try {
+        logger.info(`Processando pedido ${i + 1}/${pedido_ids.length}`, {
+          pedido_id: pedidoId
+        });
+        
+        // Buscar pedido do WooCommerce
+        const resultadoWC = await buscarPedidoWC(pedidoId);
+        
+        if (!resultadoWC.sucesso) {
+          resultados.push({
+            pedido_id: pedidoId,
+            sucesso: false,
+            erro: resultadoWC.erro || 'Erro ao buscar pedido'
+          });
+          erros++;
+          continue;
+        }
+        
+        // Mapear para formato interno
+        const pedidoMapeado = mapearWooCommerceParaPedido(resultadoWC.pedido);
+        
+        // Emitir NFSe
+        const resultadoNFSe = await emitirNFSe(pedidoMapeado, config.emitente, configFiscal);
+        
+        if (resultadoNFSe.sucesso) {
+          resultados.push({
+            pedido_id: pedidoId,
+            sucesso: true,
+            referencia: resultadoNFSe.referencia,
+            nfse_numero: resultadoNFSe.numero || null,
+            status: resultadoNFSe.status
+          });
+          sucesso++;
+        } else {
+          resultados.push({
+            pedido_id: pedidoId,
+            sucesso: false,
+            erro: resultadoNFSe.erro || 'Erro ao emitir NFSe'
+          });
+          erros++;
+        }
+        
+      } catch (error) {
+        logger.error(`Erro ao processar pedido ${pedidoId}`, {
+          pedido_id: pedidoId,
+          error: error.message
+        });
+        
+        resultados.push({
+          pedido_id: pedidoId,
+          sucesso: false,
+          erro: error.message
+        });
+        erros++;
+      }
+    }
+    
+    logger.info('Emissão em lote concluída', {
+      total: pedido_ids.length,
+      sucesso,
+      erros
+    });
+    
+    res.json({
+      sucesso: true,
+      total: pedido_ids.length,
+      processados: resultados.length,
+      sucesso: sucesso,
+      erros: erros,
+      resultados: resultados
+    });
+    
+  } catch (error) {
+    logger.error('Erro ao emitir NFSe em lote', {
+      error: error.message
+    });
+    
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+}
 
 /**
  * Emite NFSe manualmente
@@ -112,6 +224,7 @@ async function cancelar(req, res) {
 module.exports = {
   emitirNFSeManual,
   consultarStatus,
-  cancelar
+  cancelar,
+  emitirNFSeLote
 };
 

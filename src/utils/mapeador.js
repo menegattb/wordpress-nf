@@ -109,7 +109,7 @@ function mapearWooCommerceParaPedido(pedidoWC) {
  * Mapeia dados do pedido interno para formato Focus NFSe
  * Baseado no código Google Apps Script que está funcionando
  */
-async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal) {
+async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, tipoNF = 'servico') {
   logger.mapping('Iniciando mapeamento Pedido → Focus NFSe', {
     pedido_id: dadosPedido.pedido_id
   });

@@ -2,7 +2,14 @@ const winston = require('winston');
 const DailyRotateFile = require('winston-daily-rotate-file');
 const path = require('path');
 const fs = require('fs');
-const { salvarLog } = require('../config/database');
+// Importação lazy para evitar dependência circular
+let salvarLog = null;
+try {
+  const db = require('../config/database');
+  salvarLog = db.salvarLog;
+} catch (error) {
+  // Ignorar se database não estiver disponível
+}
 
 // Criar diretório de logs se não existir
 const logsDir = path.join(process.cwd(), 'logs');
@@ -95,11 +102,13 @@ async function logToDatabase(level, message, meta = {}) {
   };
   
   // Salva no banco de forma assíncrona (não bloqueia)
-  salvarLog(logEntry).catch(err => {
-    // Se falhar ao salvar no banco, apenas loga no arquivo
-    // Evitar recursão infinita - não usar logger.error aqui
-    console.error('Erro ao salvar log no banco:', err.message);
-  });
+  if (salvarLog) {
+    salvarLog(logEntry).catch(err => {
+      // Se falhar ao salvar no banco, apenas loga no arquivo
+      // Evitar recursão infinita - não usar logger.error aqui
+      console.error('Erro ao salvar log no banco:', err.message);
+    });
+  }
 }
 
 /**

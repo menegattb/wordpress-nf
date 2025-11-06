@@ -20,5 +20,11 @@ router.get('/consulta/:referencia', nfseController.consultarStatus);
  */
 router.delete('/:referencia', nfseController.cancelar);
 
+/**
+ * POST /api/nfse/emitir-lote
+ * Emite NFSe em lote para múltiplos pedidos
+ */
+router.post('/emitir-lote', nfseController.emitirNFSeLote);
+
 module.exports = router;
 
