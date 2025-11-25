@@ -450,6 +450,23 @@ async function mapearPedidoParaNFe(dadosPedido, configEmitente, configFiscal) {
     uf: dadosMunicipioEmitente.uf
   });
   
+  // Determinar CFOP baseado no estado do destinatário
+  // PE (mesmo estado) = 5102 (venda interna)
+  // Outros estados = 6108 (venda interestadual para consumidor final CPF)
+  const ufEmitente = dadosMunicipioEmitente.uf || 'PE';
+  const ufDestinatario = dadosMunicipioDestinatario.uf || estadoDestinatario || '';
+  const isVendaInterestadual = ufDestinatario && ufDestinatario.toUpperCase() !== ufEmitente.toUpperCase();
+  const cfopCalculado = isVendaInterestadual ? '6108' : '5102';
+  
+  logger.debug('CFOP calculado baseado no estado', {
+    service: 'mapeador',
+    action: 'calcularCFOP',
+    uf_emitente: ufEmitente,
+    uf_destinatario: ufDestinatario,
+    is_interestadual: isVendaInterestadual,
+    cfop: cfopCalculado
+  });
+  
   // Mapear produtos para items da NFe
   const items = (dadosPedido.servicos || []).map((produto, index) => {
     // Extrair NCM dos meta_data do produto
@@ -457,10 +474,10 @@ async function mapearPedidoParaNFe(dadosPedido, configEmitente, configFiscal) {
       m.key && (m.key.toLowerCase() === 'ncm' || m.key.toLowerCase() === 'codigo_ncm')
     )?.value || configFiscal?.ncm_padrao || '49019900';
     
-    // Extrair CFOP dos meta_data
+    // Usar CFOP calculado (pode ser sobrescrito pelo meta_data do produto)
     const cfop = produto.meta_data?.find(m => 
       m.key && m.key.toLowerCase() === 'cfop'
-    )?.value || configFiscal?.cfop_padrao || '5102';
+    )?.value || cfopCalculado;
     
     const quantidade = parseFloat(produto.quantidade || 1);
     const valorUnitario = parseFloat(produto.valor_unitario || produto.total || 0);
