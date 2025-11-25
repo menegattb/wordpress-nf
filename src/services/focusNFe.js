@@ -88,8 +88,6 @@ function createApiClient() {
  * Emite uma NFe de Produto
  */
 async function emitirNFe(dadosPedido, configEmitente, configFiscal = null) {
-  const referencia = dadosPedido.referencia || `NFE-${dadosPedido.pedido_id || Date.now()}`;
-  
   let apiConfig = null;
   try {
     apiConfig = getApiConfig();
@@ -102,9 +100,24 @@ async function emitirNFe(dadosPedido, configEmitente, configFiscal = null) {
     throw configError;
   }
   
+  // Em homologação, adicionar timestamp para permitir múltiplas emissões do mesmo pedido
+  // Em produção, usar referência fixa para evitar duplicatas
+  const isHomologacao = apiConfig.ambiente === 'homologacao';
+  const timestampSufixo = isHomologacao ? `-${Date.now()}` : '';
+  const referencia = dadosPedido.referencia || `NFE-${dadosPedido.pedido_id || Date.now()}${timestampSufixo}`;
+  
+  logger.info(`Referência gerada para NFe: ${referencia} (ambiente: ${apiConfig.ambiente})`, {
+    service: 'focusNFe',
+    action: 'emitir_nfe',
+    pedido_id: dadosPedido.pedido_id,
+    ambiente: apiConfig.ambiente,
+    is_homologacao: isHomologacao
+  });
+  
   logger.focusNFe('emitir_nfe', 'Iniciando emissão de NFe', {
     pedido_id: dadosPedido.pedido_id,
-    referencia
+    referencia,
+    ambiente: apiConfig.ambiente
   });
   
   try {

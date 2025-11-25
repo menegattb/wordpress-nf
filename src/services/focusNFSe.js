@@ -89,8 +89,6 @@ function createApiClient() {
  * Emite uma NFSe
  */
 async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipoNF = 'servico') {
-  const referencia = dadosPedido.referencia || `NFSE-${dadosPedido.pedido_id || Date.now()}`;
-  
   // Obter configuração da API antes do try para estar disponível no catch
   let apiConfig = null;
   try {
@@ -104,10 +102,25 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
     throw configError;
   }
   
+  // Em homologação, adicionar timestamp para permitir múltiplas emissões do mesmo pedido
+  // Em produção, usar referência fixa para evitar duplicatas
+  const isHomologacao = apiConfig.ambiente === 'homologacao';
+  const timestampSufixo = isHomologacao ? `-${Date.now()}` : '';
+  const referencia = dadosPedido.referencia || `NFSE-${dadosPedido.pedido_id || Date.now()}${timestampSufixo}`;
+  
+  logger.info(`Referência gerada para NFSe: ${referencia} (ambiente: ${apiConfig.ambiente})`, {
+    service: 'focusNFe',
+    action: 'emitir_nfse',
+    pedido_id: dadosPedido.pedido_id,
+    ambiente: apiConfig.ambiente,
+    is_homologacao: isHomologacao
+  });
+  
   logger.focusNFe('emitir_nfse', 'Iniciando emissão de NFSe', {
     pedido_id: dadosPedido.pedido_id,
     referencia,
-    tipo_nf: tipoNF
+    tipo_nf: tipoNF,
+    ambiente: apiConfig.ambiente
   });
   
   try {
