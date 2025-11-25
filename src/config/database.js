@@ -101,7 +101,7 @@ async function query(text, params = []) {
 }
 
 /**
- * Executa migrations
+ * Executa migrations - SQL inline para funcionar na Vercel
  */
 async function migrate() {
   if (!hasDatabase || !sql) {
@@ -112,48 +112,100 @@ async function migrate() {
   try {
     console.log('Iniciando migrations...');
     
-    // Lista de migrations em ordem de execução
-    const migrations = [
-      '001_create_pedidos.sql',
-      '002_add_ambiente_nfse.sql',
-      '003_create_nfe.sql'
+    // Criar tabela pedidos
+    console.log('Criando tabela pedidos...');
+    await sql`
+      CREATE TABLE IF NOT EXISTS pedidos (
+        id SERIAL PRIMARY KEY,
+        pedido_id TEXT UNIQUE NOT NULL,
+        origem TEXT NOT NULL DEFAULT 'woocommerce',
+        dados_pedido JSONB NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pendente',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    
+    // Criar tabela nfse
+    console.log('Criando tabela nfse...');
+    await sql`
+      CREATE TABLE IF NOT EXISTS nfse (
+        id SERIAL PRIMARY KEY,
+        pedido_id INTEGER,
+        pedido_wc_id TEXT,
+        referencia TEXT NOT NULL UNIQUE,
+        chave_nfse TEXT,
+        status_focus TEXT,
+        status_sefaz TEXT,
+        mensagem_sefaz TEXT,
+        caminho_xml TEXT,
+        caminho_pdf TEXT,
+        dados_completos JSONB,
+        ambiente TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    
+    // Criar tabela nfe
+    console.log('Criando tabela nfe...');
+    await sql`
+      CREATE TABLE IF NOT EXISTS nfe (
+        id SERIAL PRIMARY KEY,
+        pedido_id INTEGER,
+        pedido_wc_id TEXT,
+        referencia TEXT NOT NULL UNIQUE,
+        chave_nfe TEXT,
+        status_focus TEXT,
+        status_sefaz TEXT,
+        mensagem_sefaz TEXT,
+        caminho_xml_nota_fiscal TEXT,
+        caminho_danfe TEXT,
+        dados_completos JSONB,
+        ambiente TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    
+    // Criar tabela logs
+    console.log('Criando tabela logs...');
+    await sql`
+      CREATE TABLE IF NOT EXISTS logs (
+        id SERIAL PRIMARY KEY,
+        level TEXT NOT NULL,
+        service TEXT,
+        action TEXT,
+        pedido_id TEXT,
+        referencia TEXT,
+        message TEXT NOT NULL,
+        data JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    
+    // Criar índices
+    console.log('Criando índices...');
+    const indices = [
+      'CREATE INDEX IF NOT EXISTS idx_pedidos_status ON pedidos(status)',
+      'CREATE INDEX IF NOT EXISTS idx_pedidos_pedido_id ON pedidos(pedido_id)',
+      'CREATE INDEX IF NOT EXISTS idx_nfse_pedido_id ON nfse(pedido_id)',
+      'CREATE INDEX IF NOT EXISTS idx_nfse_referencia ON nfse(referencia)',
+      'CREATE INDEX IF NOT EXISTS idx_nfse_status_focus ON nfse(status_focus)',
+      'CREATE INDEX IF NOT EXISTS idx_nfe_pedido_id ON nfe(pedido_id)',
+      'CREATE INDEX IF NOT EXISTS idx_nfe_referencia ON nfe(referencia)',
+      'CREATE INDEX IF NOT EXISTS idx_nfe_status_focus ON nfe(status_focus)',
+      'CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level)',
+      'CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_logs_pedido_id ON logs(pedido_id)'
     ];
     
-    for (const migrationFile of migrations) {
-      const migrationPath = path.join(__dirname, '../../migrations', migrationFile);
-      
-      // Verificar se arquivo existe
-      if (!fs.existsSync(migrationPath)) {
-        console.log(`⚠ Migration ${migrationFile} não encontrada, pulando...`);
-        continue;
+    for (const idx of indices) {
+      try {
+        await sql.query(idx);
+      } catch (e) {
+        // Ignorar erros de índice já existente
       }
-      
-      console.log(`Executando migration: ${migrationFile}`);
-      const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
-      
-      // Executa cada comando separadamente
-      const commands = migrationSQL
-        .split(';')
-        .map(cmd => cmd.trim())
-        .filter(cmd => cmd.length > 0 && !cmd.startsWith('--'));
-      
-      for (const command of commands) {
-        if (command.trim()) {
-          try {
-            await sql.query(command);
-          } catch (error) {
-            // Ignora erros de "already exists", "duplicate", "does not exist" (para IF NOT EXISTS)
-            if (!error.message.includes('already exists') && 
-                !error.message.includes('duplicate') &&
-                !error.message.includes('does not exist')) {
-              console.error(`Erro ao executar comando da migration ${migrationFile}:`, error.message);
-              // Não lança erro para permitir continuar com outras migrations
-            }
-          }
-        }
-      }
-      
-      console.log(`✓ Migration ${migrationFile} executada`);
     }
     
     console.log('✓ Todas as migrations executadas com sucesso');
