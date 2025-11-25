@@ -34,19 +34,41 @@ function mapearWooCommerceParaPedido(pedidoWC) {
   }
   
   // Mapear produtos como serviços
-  const servicos = (pedidoWC.line_items || []).map((item, index) => ({
-    numero_item: index + 1,
-    codigo: item.sku || item.id?.toString() || `ITEM-${index + 1}`,
-    nome: item.name,
-    quantidade: parseFloat(item.quantity || 1),
-    valor_unitario: parseFloat(item.price || 0),
-    total: parseFloat(item.total || 0),
-    subtotal: parseFloat(item.subtotal || 0),
-    // Campos específicos para NFSe
-    codigo_tributacao_municipio: item.meta_data?.find(m => m.key === 'codigo_tributacao')?.value || null,
-    item_lista_servico: item.meta_data?.find(m => m.key === 'item_lista_servico')?.value || null,
-    discriminacao: item.meta_data?.find(m => m.key === 'discriminacao')?.value || item.name
-  }));
+  const servicos = (pedidoWC.line_items || []).map((item, index) => {
+    // Extrair categorias do item
+    let categorias = [];
+    if (item.categories && Array.isArray(item.categories)) {
+      categorias = item.categories.map(cat => cat.name || cat).filter(Boolean);
+    } else if (item.category && typeof item.category === 'string') {
+      categorias = [item.category];
+    } else if (item.meta_data) {
+      // Tentar buscar categoria dos meta_data
+      const categoriaMeta = item.meta_data.find(m => 
+        m.key && (m.key.toLowerCase().includes('categoria') || m.key.toLowerCase().includes('category'))
+      );
+      if (categoriaMeta && categoriaMeta.value) {
+        categorias = Array.isArray(categoriaMeta.value) ? categoriaMeta.value : [categoriaMeta.value];
+      }
+    }
+    
+    return {
+      numero_item: index + 1,
+      codigo: item.sku || item.id?.toString() || `ITEM-${index + 1}`,
+      nome: item.name,
+      quantidade: parseFloat(item.quantity || 1),
+      valor_unitario: parseFloat(item.price || 0),
+      total: parseFloat(item.total || 0),
+      subtotal: parseFloat(item.subtotal || 0),
+      // Categorias
+      categorias: categorias,
+      // Campos específicos para NFSe
+      codigo_tributacao_municipio: item.meta_data?.find(m => m.key === 'codigo_tributacao')?.value || null,
+      item_lista_servico: item.meta_data?.find(m => m.key === 'item_lista_servico')?.value || null,
+      discriminacao: item.meta_data?.find(m => m.key === 'discriminacao')?.value || item.name,
+      // Preservar meta_data para uso em NFe (NCM, CFOP, etc)
+      meta_data: item.meta_data || []
+    };
+  });
   
   // Nota: WooCommerce pode armazenar bairro em diferentes campos dependendo da configuração
   // Tentar buscar em ordem: campos customizados, address_2, ou usar city como fallback
@@ -329,8 +351,260 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
   return nfse;
 }
 
+/**
+ * Mapeia dados do pedido interno para formato Focus NFe (Produto)
+ * Conforme documentação Focus NFe API v2
+ */
+async function mapearPedidoParaNFe(dadosPedido, configEmitente, configFiscal) {
+  logger.mapping('Iniciando mapeamento Pedido → Focus NFe', {
+    pedido_id: dadosPedido.pedido_id
+  });
+  
+  // Validar documento do destinatário
+  const documento = validarCPFCNPJ(dadosPedido.cpf_cnpj);
+  if (!documento.valido) {
+    throw new Error(`Documento do destinatário inválido: ${documento.erro}`);
+  }
+  
+  // Gerar data no formato ISO
+  let dataEmissao;
+  // Sempre usar data/hora atual para evitar erro "Data anterior ao permitido"
+  // A SEFAZ não permite emitir notas com data no passado
+  const agora = new Date();
+  const offset = -agora.getTimezoneOffset();
+  const offsetHours = Math.floor(Math.abs(offset) / 60);
+  const offsetMinutes = Math.abs(offset) % 60;
+  const offsetSign = offset >= 0 ? '+' : '-';
+  const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}${String(offsetMinutes).padStart(2, '0')}`;
+  
+  const ano = agora.getFullYear();
+  const mes = String(agora.getMonth() + 1).padStart(2, '0');
+  const dia = String(agora.getDate()).padStart(2, '0');
+  const hora = String(agora.getHours()).padStart(2, '0');
+  const minuto = String(agora.getMinutes()).padStart(2, '0');
+  
+  dataEmissao = `${ano}-${mes}-${dia}T${hora}:${minuto}${offsetStr}`;
+  
+  // Log se a data do pedido for diferente da data atual (para rastreamento)
+  if (dadosPedido.data_emissao) {
+    const dataPedido = new Date(dadosPedido.data_emissao);
+    if (!isNaN(dataPedido.getTime()) && dataPedido < agora) {
+      logger.warn('Data do pedido está no passado, usando data atual para evitar rejeição da SEFAZ', {
+        service: 'mapeador',
+        action: 'mapearPedidoParaNFe',
+        pedido_id: dadosPedido.pedido_id,
+        data_pedido: dadosPedido.data_emissao,
+        data_usada: dataEmissao
+      });
+    }
+  }
+  
+  // Validar e preparar CEP do destinatário
+  // NÃO buscar código IBGE aqui - enviar primeiro com dados fornecidos
+  // Se Focus NFe rejeitar, o retry em focusNFe.js buscará o código IBGE
+  let cepDestinatario = limparDocumento(dadosPedido.endereco?.cep || '');
+  if (!cepDestinatario || cepDestinatario === '') {
+    throw new Error('CEP do destinatário é obrigatório. Informe o CEP no endereço do pedido.');
+  }
+  cepDestinatario = cepDestinatario.replace(/\D/g, '').padStart(8, '0').substring(0, 8);
+  
+  const cidadeDestinatario = dadosPedido.endereco?.cidade || '';
+  const estadoDestinatario = dadosPedido.endereco?.estado || '';
+  
+  // Usar dados fornecidos diretamente - não buscar código IBGE aqui
+  // O Focus NFe validará e, se rejeitar por código IBGE, o retry buscará
+  const dadosMunicipioDestinatario = {
+    codigoIBGE: null, // Não buscamos aqui - será buscado no retry se necessário
+    cidade: cidadeDestinatario,
+    uf: estadoDestinatario,
+    bairro: dadosPedido.endereco?.bairro || ''
+  };
+  
+  logger.debug('Usando dados fornecidos do destinatário (sem busca prévia de código IBGE)', {
+    service: 'mapeador',
+    action: 'mapearPedidoParaNFe',
+    pedido_id: dadosPedido.pedido_id,
+    cep: cepDestinatario,
+    cidade: cidadeDestinatario,
+    estado: estadoDestinatario
+  });
+  
+  // Usar dados do emitente configurados diretamente - não buscar via API para evitar timeout
+  let cepEmitente = limparDocumento(configEmitente.cep || '');
+  if (cepEmitente && cepEmitente !== '') {
+    cepEmitente = cepEmitente.replace(/\D/g, '').padStart(8, '0').substring(0, 8);
+  }
+  
+  // Usar dados configurados do emitente diretamente
+  const dadosMunicipioEmitente = {
+    codigoIBGE: configEmitente.codigo_municipio,
+    uf: configEmitente.uf || 'PE',
+    cidade: configEmitente.municipio || 'Ipojuca'
+  };
+  
+  logger.debug('Usando dados configurados do emitente (sem busca via API)', {
+    service: 'mapeador',
+    action: 'mapearPedidoParaNFe',
+    codigo_municipio: dadosMunicipioEmitente.codigoIBGE,
+    cidade: dadosMunicipioEmitente.cidade,
+    uf: dadosMunicipioEmitente.uf
+  });
+  
+  // Mapear produtos para items da NFe
+  const items = (dadosPedido.servicos || []).map((produto, index) => {
+    // Extrair NCM dos meta_data do produto
+    const ncm = produto.meta_data?.find(m => 
+      m.key && (m.key.toLowerCase() === 'ncm' || m.key.toLowerCase() === 'codigo_ncm')
+    )?.value || configFiscal?.ncm_padrao || '49019900';
+    
+    // Extrair CFOP dos meta_data
+    const cfop = produto.meta_data?.find(m => 
+      m.key && m.key.toLowerCase() === 'cfop'
+    )?.value || configFiscal?.cfop_padrao || '5102';
+    
+    const quantidade = parseFloat(produto.quantidade || 1);
+    const valorUnitario = parseFloat(produto.valor_unitario || produto.total || 0);
+    const valorBruto = parseFloat(produto.total || valorUnitario * quantidade);
+    
+    return {
+      numero_item: index + 1,
+      codigo_produto: produto.codigo || produto.sku || `PROD-${index + 1}`,
+      descricao: produto.nome || produto.descricacao || 'Produto',
+      cfop: parseInt(cfop),
+      unidade_comercial: 'UN', // Padrão
+      quantidade_comercial: quantidade,
+      valor_unitario_comercial: valorUnitario,
+      valor_unitario_tributavel: valorUnitario,
+      unidade_tributavel: 'UN', // Padrão
+      codigo_ncm: parseInt(ncm.replace(/\D/g, '').substring(0, 8)),
+      quantidade_tributavel: quantidade,
+      valor_bruto: valorBruto,
+      icms_origem: parseInt(configFiscal?.icms_origem || '0'),
+      icms_situacao_tributaria: parseInt(configFiscal?.icms_situacao_tributaria || '400'),
+      pis_situacao_tributaria: configFiscal?.pis_situacao_tributaria || '07',
+      cofins_situacao_tributaria: configFiscal?.cofins_situacao_tributaria || '07',
+      inclui_no_total: 1
+    };
+  });
+  
+  if (items.length === 0) {
+    throw new Error('A NFe deve ter pelo menos um item');
+  }
+  
+  // Calcular totais
+  const valorProdutos = items.reduce((sum, item) => sum + parseFloat(item.valor_bruto || 0), 0);
+  const valorFrete = parseFloat(dadosPedido.frete || 0);
+  const valorTotal = valorProdutos + valorFrete;
+  
+  // Determinar indicador de inscrição estadual do destinatário
+  let indicadorInscricaoEstadual = 9; // Não contribuinte
+  if (documento.tipo === 'CNPJ') {
+    indicadorInscricaoEstadual = 1; // Contribuinte ICMS
+  }
+  
+  // Determinar se é consumidor final
+  // Se não contribuinte (indicador = 9), deve ser consumidor final (1)
+  // Se contribuinte (indicador = 1), pode ser normal (0) ou consumidor final (1)
+  // Por padrão, se não contribuinte, é consumidor final
+  const consumidorFinal = indicadorInscricaoEstadual === 9 ? 1 : (dadosPedido.consumidor_final !== undefined ? dadosPedido.consumidor_final : 0);
+  
+  // Tratar inscrição estadual do emitente
+  // Só enviar se estiver configurada (não enviar "ISENTO" automaticamente)
+  // Se estiver vazia, não enviar o campo (será removido na limpeza)
+  let inscricaoEstadualEmitente = configEmitente.inscricao_estadual || '';
+  if (inscricaoEstadualEmitente && inscricaoEstadualEmitente.trim() !== '') {
+    inscricaoEstadualEmitente = inscricaoEstadualEmitente.trim();
+  } else {
+    // Se estiver vazia, deixar undefined para não enviar o campo
+    inscricaoEstadualEmitente = undefined;
+  }
+  
+  // Estrutura NFe conforme documentação
+  const nfe = {
+    natureza_operacao: dadosPedido.natureza_operacao || 'Remessa',
+    data_emissao: dataEmissao,
+    data_entrada_saida: dataEmissao,
+    tipo_documento: 1, // 1 = Saída
+    local_destino: 1, // 1 = Operação interna (pode ser ajustado conforme necessário)
+    finalidade_emissao: 1, // 1 = Normal
+    consumidor_final: consumidorFinal, // 0 = Normal, 1 = Consumidor final (1 se não contribuinte)
+    presenca_comprador: 2, // 2 = Operação não presencial, pela Internet
+    
+    // Emitente
+    cnpj_emitente: configEmitente.cnpj,
+    nome_emitente: configEmitente.razao_social,
+    nome_fantasia_emitente: configEmitente.nome_fantasia || configEmitente.razao_social,
+    municipio_emitente: dadosMunicipioEmitente.cidade || configEmitente.municipio || 'Ipojuca',
+    uf_emitente: dadosMunicipioEmitente.uf || configEmitente.uf || 'PE',
+    regime_tributario_emitente: parseInt(configFiscal?.regime_tributario || '1'),
+    
+    // Destinatário
+    nome_destinatario: dadosPedido.razao_social || dadosPedido.nome || 'CONSUMIDOR FINAL',
+    cpf_destinatario: documento.tipo === 'CPF' ? documento.documento : undefined,
+    cnpj_destinatario: documento.tipo === 'CNPJ' ? documento.documento : undefined,
+    inscricao_estadual_destinatario: dadosPedido.inscricao_estadual || undefined,
+    indicador_inscricao_estadual_destinatario: indicadorInscricaoEstadual,
+    telefone_destinatario: dadosPedido.telefone ? parseInt(dadosPedido.telefone.replace(/\D/g, '')) : undefined,
+    logradouro_destinatario: dadosPedido.endereco?.rua || undefined,
+    numero_destinatario: dadosPedido.endereco?.numero || 'S/N',
+    bairro_destinatario: dadosMunicipioDestinatario.bairro || dadosPedido.endereco?.bairro || undefined,
+    municipio_destinatario: dadosMunicipioDestinatario.cidade || dadosPedido.endereco?.cidade || '',
+    uf_destinatario: dadosMunicipioDestinatario.uf || dadosPedido.endereco?.estado || '',
+    pais_destinatario: dadosPedido.endereco?.pais || 'Brasil',
+    cep_destinatario: cepDestinatario, // Manter como string para preservar zeros à esquerda
+    
+    // Itens
+    items: items,
+    
+    // Totais
+    valor_frete: valorFrete,
+    valor_seguro: 0,
+    valor_total: parseFloat(valorTotal.toFixed(2)),
+    valor_produtos: parseFloat(valorProdutos.toFixed(2)),
+    modalidade_frete: 0 // 0 = Por conta do emitente
+  };
+  
+  // Adicionar campos do emitente apenas se não estiverem vazios
+  if (configEmitente.logradouro && configEmitente.logradouro.trim() !== '') {
+    nfe.logradouro_emitente = configEmitente.logradouro;
+  }
+  if (configEmitente.numero && configEmitente.numero.trim() !== '') {
+    nfe.numero_emitente = configEmitente.numero;
+  }
+  if (configEmitente.bairro && configEmitente.bairro.trim() !== '') {
+    nfe.bairro_emitente = configEmitente.bairro;
+  }
+  // CEP do emitente - só adicionar se não for "00000000"
+  if (cepEmitente && cepEmitente !== '00000000') {
+    nfe.cep_emitente = cepEmitente;
+  }
+  // Inscrição estadual do emitente - só adicionar se estiver configurada
+  if (inscricaoEstadualEmitente !== undefined) {
+    nfe.inscricao_estadual_emitente = inscricaoEstadualEmitente;
+  }
+  
+  // Remover campos undefined e strings vazias
+  Object.keys(nfe).forEach(key => {
+    if (nfe[key] === undefined || nfe[key] === '') {
+      delete nfe[key];
+    }
+  });
+  
+  logger.mapping('Mapeamento para Focus NFe concluído', {
+    pedido_id: dadosPedido.pedido_id,
+    destinatario: nfe.nome_destinatario,
+    valor_total: nfe.valor_total,
+    items_count: items.length,
+    consumidor_final: nfe.consumidor_final,
+    indicador_inscricao_estadual: nfe.indicador_inscricao_estadual_destinatario
+  });
+  
+  return nfe;
+}
+
 module.exports = {
   mapearWooCommerceParaPedido,
-  mapearPedidoParaNFSe
+  mapearPedidoParaNFSe,
+  mapearPedidoParaNFe
 };
 

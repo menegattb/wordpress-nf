@@ -18,23 +18,26 @@ function getApiConfig() {
   let token = null;
   
   if (ambiente === 'producao') {
-    token = process.env.FOCUS_NFE_TOKEN_PRODUCAO || config.focusNFe.token;
+    // Em produção, EXIGIR token de produção explicitamente
+    // Não usar fallback do token de homologação para evitar erros
+    token = process.env.FOCUS_NFE_TOKEN_PRODUCAO;
+    
+    if (!token || token === 'undefined' || token.trim() === '') {
+      throw new Error(
+        '⚠️ Token de PRODUÇÃO não configurado!\n\n' +
+        'Para emitir notas em produção, configure a variável de ambiente:\n' +
+        'FOCUS_NFE_TOKEN_PRODUCAO=seu_token_de_producao\n\n' +
+        'O token de produção é diferente do token de homologação e deve ser obtido no painel da Focus NFe.'
+      );
+    }
   } else {
     // Homologação: tentar variável de ambiente primeiro, depois config.js, depois padrão
     token = process.env.FOCUS_NFE_TOKEN_HOMOLOGACAO || config.focusNFe.token || '4tn92XZHfM22uOfhtmbhb3dMvLk48ymA';
-  }
-  
-  // Verificar se o token do config.js está vazio/undefined e usar padrão
-  if (!token || token === 'undefined' || token.trim() === '') {
-    if (ambiente === 'homologacao') {
+    
+    // Garantir que não está vazio
+    if (!token || token === 'undefined' || token.trim() === '') {
       token = '4tn92XZHfM22uOfhtmbhb3dMvLk48ymA';
-    } else {
-      token = config.focusNFe.token;
     }
-  }
-  
-  if (!token) {
-    throw new Error('Token Focus NFe não configurado. Configure FOCUS_NFE_TOKEN_HOMOLOGACAO ou FOCUS_NFE_TOKEN_PRODUCAO');
   }
   
   logger.debug('Configuração Focus NFe', {
@@ -78,14 +81,14 @@ function createApiClient() {
     headers: {
       'Content-Type': 'application/json'
     },
-    timeout: 30000 // 30 segundos
+    timeout: 9000 // 9 segundos (limite Vercel free = 10s)
   });
 }
 
 /**
  * Emite uma NFSe
  */
-async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null) {
+async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipoNF = 'servico') {
   const referencia = dadosPedido.referencia || `PED-${dadosPedido.pedido_id || Date.now()}`;
   
   // Obter configuração da API antes do try para estar disponível no catch
@@ -103,7 +106,8 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null) {
   
   logger.focusNFe('emitir_nfse', 'Iniciando emissão de NFSe', {
     pedido_id: dadosPedido.pedido_id,
-    referencia
+    referencia,
+    tipo_nf: tipoNF
   });
   
   try {
@@ -114,7 +118,7 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null) {
     });
     
     const fiscalConfig = configFiscal || config.fiscal;
-    const nfseData = await mapearPedidoParaNFSe(dadosPedido, configEmitente, fiscalConfig);
+    const nfseData = await mapearPedidoParaNFSe(dadosPedido, configEmitente, fiscalConfig, tipoNF);
     
     // Validação básica (campos obrigatórios)
     logger.focusNFe('emitir_nfse', 'Validando campos obrigatórios', {
@@ -218,14 +222,28 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null) {
       token_length: apiConfig.token ? apiConfig.token.length : 0
     });
     
+    // Log completo do payload antes de enviar (para debug)
+    logger.focusNFe('emitir_nfse', 'Enviando requisição para Focus NFe', {
+      pedido_id: dadosPedido.pedido_id,
+      referencia,
+      tipo_nf: tipoNF,
+      url: `${apiConfig.baseUrl}/nfse?ref=${referencia}`,
+      payload_keys: Object.keys(nfseData),
+      prestador_cnpj: nfseData.prestador?.cnpj,
+      tomador_doc: nfseData.tomador?.cpf || nfseData.tomador?.cnpj,
+      valor_servicos: nfseData.servico?.valor_servicos
+    });
+    
     const response = await api.post(`/nfse?ref=${referencia}`, nfseData);
     
     logger.focusNFe('emitir_nfse', 'Resposta recebida da Focus NFe', {
       pedido_id: dadosPedido.pedido_id,
       referencia,
+      tipo_nf: tipoNF,
       status: response.data.status,
       status_sefaz: response.data.status_sefaz,
-      status_code: response.status
+      status_code: response.status,
+      response_data: response.data
     });
     
     // Salvar no banco de dados
@@ -238,7 +256,8 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null) {
       mensagem_sefaz: response.data.mensagem_sefaz || null,
       caminho_xml: response.data.caminho_xml || null,
       caminho_pdf: response.data.caminho_pdf || null,
-      dados_completos: response.data
+      dados_completos: response.data,
+      ambiente: apiConfig.ambiente || 'homologacao'
     });
     
     logger.focusNFe('emitir_nfse', 'NFSe registrada no banco de dados', {
@@ -356,7 +375,8 @@ async function consultarNFSe(referencia) {
   try {
     const api = createApiClient();
     
-    const response = await api.get(`/nfse/${referencia}.json`);
+    // Usar completa=1 para obter todos os dados da nota
+    const response = await api.get(`/nfse/${referencia}.json?completa=1`);
     
     logger.focusNFe('consultar_nfse', 'Status consultado', {
       referencia,
@@ -466,10 +486,320 @@ async function cancelarNFSe(referencia, justificativa) {
   }
 }
 
+/**
+ * Lista todas as NFSe da Focus NFe com paginação automática
+ * @param {Object} filtros - Filtros opcionais (data_inicio, data_fim, status, etc)
+ * @returns {Promise<Object>} Lista de NFSe
+ */
+async function listarTodasNFSe(filtros = {}) {
+  logger.focusNFe('listar_todas_nfse', 'Listando todas as NFSe da Focus NFe', {
+    filtros
+  });
+  
+  try {
+    const api = createApiClient();
+    const apiConfig = getApiConfig();
+    
+    // Buscar todas as notas com paginação
+    let todasNotas = [];
+    let offset = 0;
+    const limitePorPagina = 100; // Buscar 100 por vez
+    let temMaisNotas = true;
+    let tentativas = 0;
+    const maxTentativas = 1000; // Limite de segurança (máximo 100.000 notas)
+    
+    while (temMaisNotas && tentativas < maxTentativas) {
+      // Construir query string com filtros e paginação
+      const params = new URLSearchParams();
+      if (filtros.data_inicio) {
+        params.append('data_inicio', filtros.data_inicio);
+      }
+      if (filtros.data_fim) {
+        params.append('data_fim', filtros.data_fim);
+      }
+      if (filtros.status) {
+        params.append('status', filtros.status);
+      }
+      params.append('limite', limitePorPagina.toString());
+      params.append('offset', offset.toString());
+      
+      const queryString = params.toString();
+      const url = `/nfse.json?${queryString}`;
+      
+      logger.debug(`Buscando NFSe da Focus NFe (página ${Math.floor(offset / limitePorPagina) + 1})`, {
+        service: 'focusNFe',
+        action: 'listar_todas_nfse',
+        url,
+        ambiente: apiConfig.ambiente,
+        offset,
+        limite: limitePorPagina
+      });
+      
+      const response = await api.get(url);
+      
+      // Processar resposta
+      let notasPagina = [];
+      
+      // Log da resposta bruta para debug
+      logger.debug('Resposta bruta da API Focus NFe', {
+        service: 'focusNFe',
+        action: 'listar_todas_nfse',
+        tipo_resposta: typeof response.data,
+        is_array: Array.isArray(response.data),
+        is_object: response.data && typeof response.data === 'object',
+        keys: response.data && typeof response.data === 'object' ? Object.keys(response.data) : null,
+        keys_count: response.data && typeof response.data === 'object' ? Object.keys(response.data).length : 0,
+        ambiente: apiConfig.ambiente,
+        offset,
+        limite: limitePorPagina
+      });
+      
+      // A API da Focus NFe retorna um objeto indexado por referência
+      // Exemplo: {"PED-123": {...}, "PED-456": {...}}
+      // Quando não há notas, retorna {} (objeto vazio)
+      
+      if (Array.isArray(response.data)) {
+        // Se for array (formato alternativo)
+        notasPagina = response.data;
+      } else if (response.data && typeof response.data === 'object') {
+        if (response.data.notas && Array.isArray(response.data.notas)) {
+          // Se tiver propriedade 'notas' com array
+          notasPagina = response.data.notas;
+        } else {
+          // Objeto indexado por referência (formato padrão da Focus NFe)
+          const keys = Object.keys(response.data);
+          
+          // Se não há chaves, é um objeto vazio = não há mais notas
+          if (keys.length === 0) {
+            logger.info('Objeto vazio retornado - não há mais notas', {
+              service: 'focusNFe',
+              action: 'listar_todas_nfse',
+              ambiente: apiConfig.ambiente,
+              offset
+            });
+            temMaisNotas = false;
+            break;
+          }
+          
+          // Converter objeto em array
+          notasPagina = keys.map(key => {
+            const nota = response.data[key];
+            // Garantir que a referência está presente
+            if (!nota.referencia && !nota.ref) {
+              nota.referencia = key;
+              nota.ref = key;
+            } else if (!nota.referencia) {
+              nota.referencia = nota.ref;
+            } else if (!nota.ref) {
+              nota.ref = nota.referencia;
+            }
+            return nota;
+          });
+        }
+      }
+      
+      todasNotas = todasNotas.concat(notasPagina);
+      
+      logger.info(`NFSe encontradas na página ${Math.floor(offset / limitePorPagina) + 1}`, {
+        service: 'focusNFe',
+        action: 'listar_todas_nfse',
+        notas_na_pagina: notasPagina.length,
+        total_acumulado: todasNotas.length,
+        ambiente: apiConfig.ambiente
+      });
+      
+      // Se retornou menos que o limite, não há mais notas
+      if (notasPagina.length < limitePorPagina) {
+        temMaisNotas = false;
+      } else {
+        offset += limitePorPagina;
+        tentativas++;
+      }
+    }
+    
+    logger.focusNFe('listar_todas_nfse', 'NFSe listadas com sucesso', {
+      total: todasNotas.length,
+      ambiente: apiConfig.ambiente,
+      paginas_buscadas: Math.floor(offset / limitePorPagina) + (temMaisNotas ? 1 : 0)
+    });
+    
+    return {
+      sucesso: true,
+      notas: todasNotas,
+      total: todasNotas.length,
+      ambiente: apiConfig.ambiente
+    };
+    
+  } catch (error) {
+    const statusCode = error.response?.status;
+    const erro = error.response?.data || error.message;
+    
+    // 404 significa que não há notas (situação normal, não é erro)
+    if (statusCode === 404) {
+      logger.focusNFe('listar_todas_nfse', 'Nenhuma NFSe encontrada na Focus NFe', {
+        ambiente: getApiConfig().ambiente,
+        status_code: 404
+      });
+      
+      return {
+        sucesso: true,
+        notas: [],
+        total: 0,
+        ambiente: getApiConfig().ambiente,
+        mensagem: 'Nenhuma NFSe encontrada'
+      };
+    }
+    
+    logger.focusNFe('listar_todas_nfse', 'Erro ao listar NFSe', {
+      erro: typeof erro === 'string' ? erro : JSON.stringify(erro),
+      status_code: statusCode
+    });
+    
+    return {
+      sucesso: false,
+      erro: erro,
+      erro_status: statusCode, // Adicionar status code explicitamente
+      mensagem: error.response?.data?.mensagem || error.message,
+      notas: []
+    };
+  }
+}
+
+/**
+ * Testa conexão com a API Focus NFe
+ * Faz uma requisição de teste para validar token e ambiente
+ */
+async function testarConexao() {
+  logger.focusNFe('testar_conexao', 'Iniciando teste de conexão', {});
+  
+  try {
+    const apiConfig = getApiConfig();
+    const api = createApiClient();
+    
+    // Usar uma referência que não existe para testar autenticação
+    // Se retornar 404, significa que o token está válido (autenticação OK, nota não existe)
+    // Se retornar 401/403, significa que o token está inválido
+    const referenciaTeste = `teste-conexao-${Date.now()}`;
+    
+    logger.debug('Testando conexão Focus NFe', {
+      service: 'focusNFe',
+      action: 'testar_conexao',
+      ambiente: apiConfig.ambiente,
+      referencia_teste: referenciaTeste,
+      baseUrl: apiConfig.baseUrl
+    });
+    
+    try {
+      // Tentar consultar uma nota que não existe
+      const response = await api.get(`/nfse/${referenciaTeste}.json`);
+      
+      // Se chegou aqui, a nota existe (improvável, mas possível)
+      logger.focusNFe('testar_conexao', 'Conexão OK - Nota encontrada (inesperado)', {
+        status: response.status
+      });
+      
+      return {
+        sucesso: true,
+        mensagem: 'Conexão estabelecida com sucesso',
+        status: response.status,
+        ambiente: apiConfig.ambiente,
+        token_preview: apiConfig.token ? apiConfig.token.substring(0, 10) + '...' : 'N/A'
+      };
+      
+    } catch (error) {
+      // Analisar o status code do erro
+      const statusCode = error.response?.status;
+      
+      if (statusCode === 404) {
+        // 404 = Nota não encontrada, mas autenticação OK
+        logger.focusNFe('testar_conexao', 'Conexão OK - Token válido', {
+          status: statusCode,
+          ambiente: apiConfig.ambiente
+        });
+        
+        return {
+          sucesso: true,
+          mensagem: 'Conexão estabelecida com sucesso. Token válido.',
+          status: statusCode,
+          ambiente: apiConfig.ambiente,
+          token_preview: apiConfig.token ? apiConfig.token.substring(0, 10) + '...' : 'N/A',
+          detalhes: 'A autenticação foi validada com sucesso. A API respondeu corretamente.'
+        };
+        
+      } else if (statusCode === 401 || statusCode === 403) {
+        // 401/403 = Token inválido ou sem permissão
+        logger.focusNFe('testar_conexao', 'Erro de autenticação - Token inválido', {
+          status: statusCode,
+          ambiente: apiConfig.ambiente,
+          erro: error.response?.data || error.message
+        });
+        
+        return {
+          sucesso: false,
+          erro: 'Token inválido ou sem permissão',
+          status: statusCode,
+          ambiente: apiConfig.ambiente,
+          mensagem: error.response?.data?.mensagem || error.response?.data?.codigo || 'Token inválido ou sem permissão para acessar a API',
+          detalhes: 'Verifique se o token está correto e se tem permissão para acessar a API FocusNFe.'
+        };
+        
+      } else if (statusCode) {
+        // Outro erro HTTP
+        logger.focusNFe('testar_conexao', 'Erro na conexão', {
+          status: statusCode,
+          ambiente: apiConfig.ambiente,
+          erro: error.response?.data || error.message
+        });
+        
+        return {
+          sucesso: false,
+          erro: `Erro HTTP ${statusCode}`,
+          status: statusCode,
+          ambiente: apiConfig.ambiente,
+          mensagem: error.response?.data?.mensagem || error.message || `Erro ao conectar com a API (status ${statusCode})`,
+          detalhes: error.response?.data || 'Erro desconhecido ao testar conexão'
+        };
+        
+      } else {
+        // Erro de rede ou timeout
+        logger.focusNFe('testar_conexao', 'Erro de rede ou timeout', {
+          ambiente: apiConfig.ambiente,
+          erro: error.message
+        });
+        
+        return {
+          sucesso: false,
+          erro: 'Erro de conexão',
+          ambiente: apiConfig.ambiente,
+          mensagem: error.message || 'Erro ao conectar com a API FocusNFe. Verifique sua conexão com a internet.',
+          detalhes: 'Não foi possível estabelecer conexão com o servidor da FocusNFe.'
+        };
+      }
+    }
+    
+  } catch (error) {
+    // Erro ao obter configuração ou criar cliente
+    logger.error('Erro ao testar conexão Focus NFe', {
+      service: 'focusNFe',
+      action: 'testar_conexao',
+      error: error.message
+    });
+    
+    return {
+      sucesso: false,
+      erro: error.message,
+      mensagem: error.message || 'Erro ao configurar conexão com FocusNFe',
+      detalhes: 'Verifique se o token e ambiente estão configurados corretamente.'
+    };
+  }
+}
+
 module.exports = {
   emitirNFSe,
   consultarNFSe,
   cancelarNFSe,
-  getApiConfig
+  listarTodasNFSe,
+  getApiConfig,
+  testarConexao
 };
 

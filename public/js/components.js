@@ -50,46 +50,214 @@ function formatarStatus(status) {
 }
 
 /**
- * Renderiza tabela de requisições (NFSe)
+ * Renderiza filtros para Buscar Notas
  */
-function renderizarTabelaRequisicoes(requisicoes) {
-    if (!requisicoes || requisicoes.length === 0) {
+function renderizarFiltrosBuscarNotas() {
+    return `
+        <div style="padding: 20px; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
+            <h3 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600; color: #333;">🗑️ Cancelar Nota por Referência</h3>
+            <p style="margin: 0 0 16px 0; color: #666; font-size: 14px;">
+                Digite a referência da nota que deseja cancelar:
+            </p>
+            
+            <div style="margin-bottom: 16px;">
+                <label for="referencia-cancelar" style="display: block; margin-bottom: 6px; font-weight: 600; color: #333;">
+                    Referência da Nota
+                </label>
+                <input 
+                    type="text" 
+                    id="referencia-cancelar" 
+                    name="referencia"
+                    class="form-input" 
+                    placeholder="Ex: PED-6454"
+                    style="width: 100%; font-size: 16px; padding: 12px;"
+                />
+                <small style="display: block; margin-top: 6px; color: #666; font-size: 13px;">
+                    Digite a referência da nota (ex: PED-6454) e clique em "Cancelar Nota"
+                </small>
+            </div>
+            
+            <div style="margin-top: 20px; display: flex; gap: 8px; align-items: center;">
+                <button 
+                    type="button" 
+                    onclick="cancelarPorReferencia()" 
+                    class="btn btn-danger"
+                    style="margin: 0; padding: 12px 24px; font-size: 16px;"
+                    id="btn-cancelar-referencia"
+                >
+                    🗑️ Cancelar Nota
+                </button>
+                <button 
+                    type="button" 
+                    onclick="limparReferencia()" 
+                    class="btn btn-secondary"
+                    style="margin: 0; padding: 12px 24px; font-size: 16px;"
+                >
+                    Limpar
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Limpa filtros de buscar notas
+ */
+function limparFiltrosBuscarNotas() {
+    const form = document.getElementById('form-filtros-buscar-notas');
+    if (form) {
+        form.reset();
+    }
+}
+
+/**
+ * Renderiza tabela de buscar notas (com botão de cancelar)
+ */
+function renderizarTabelaBuscarNotas(notas) {
+    if (!notas || notas.length === 0) {
         return `
             <div class="empty-state">
                 <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="8" y="12" width="48" height="40" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
-                    <path d="M8 20h48M20 28h24M20 36h24M20 44h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <circle cx="32" cy="32" r="24" stroke="currentColor" stroke-width="2" fill="none"/>
+                    <path d="M32 20v12M32 40h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
-                <h3>Nenhuma requisição encontrada</h3>
-                <p>Não há requisições para exibir no momento.</p>
+                <h3>Nenhuma nota encontrada</h3>
+                <p>Não há notas que correspondam aos filtros informados.</p>
             </div>
         `;
     }
 
-    const rows = requisicoes.map(req => {
-        const emitente = req.dados_completos?.prestador?.razao_social || 
-                        req.dados_completos?.prestador?.nome || 
-                        '-';
-        const dataEmissao = formatarData(req.created_at);
-        const numero = req.chave_nfse ? req.chave_nfse.substring(0, 20) + '...' : '-';
-        const destinatario = req.dados_completos?.tomador?.razao_social || 
-                           req.dados_completos?.tomador?.nome || 
-                           '-';
-        const valor = req.dados_completos?.servico?.valor_servicos || 
-                     req.dados_completos?.valor_total || 
-                     0;
-        const referencia = req.referencia || '-';
-        const status = formatarStatus(req.status_focus);
+    const rows = notas.map(nota => {
+        const dataEmissao = formatarData(nota.created_at || nota.data_emissao);
+        const referencia = nota.referencia || nota.ref || '-';
+        const pedidoId = nota.pedido_externo || nota.pedido_id || '-';
+        const tipoNota = nota.tipo_nota || (nota.chave_nfe ? 'nfe' : 'nfse');
+        const tipoBadge = tipoNota === 'nfe' 
+            ? '<span class="badge badge-info">NFe</span>' 
+            : '<span class="badge badge-success">NFSe</span>';
+        
+        // Badge de origem
+        const origem = nota.origem || 'banco_local';
+        const origemBadge = origem === 'focus_nfe' 
+            ? '<span class="badge badge-primary" title="Nota encontrada na Focus NFe">Focus NFe</span>'
+            : '<span class="badge badge-secondary" title="Nota do banco local">Banco Local</span>';
+        
+        // Extrair cliente baseado no tipo de nota
+        let cliente = '-';
+        if (tipoNota === 'nfe') {
+            cliente = nota.dados_completos?.destinatario?.nome_destinatario || 
+                     nota.dados_completos?.destinatario?.razao_social || 
+                     nota.nome_destinatario ||
+                     '-';
+        } else {
+            cliente = nota.dados_completos?.tomador?.razao_social || 
+                     nota.dados_completos?.tomador?.nome || 
+                     nota.razao_social ||
+                     '-';
+        }
+        
+        // Extrair valor baseado no tipo de nota
+        let valor = 0;
+        if (tipoNota === 'nfe') {
+            valor = nota.dados_completos?.valor_total || nota.valor_total || 0;
+        } else {
+            valor = nota.dados_completos?.servico?.valor_servicos || 
+                   nota.dados_completos?.valor_total || 
+                   nota.valor_servicos ||
+                   nota.valor_total ||
+                   0;
+        }
+        
+        const ambiente = nota.ambiente || 'homologacao';
+        const ambienteBadge = ambiente === 'producao' 
+            ? '<span class="badge badge-success">Produção</span>' 
+            : '<span class="badge badge-warning">Homologação</span>';
+        const status = formatarStatus(nota.status || nota.status_focus);
+        
+        // Verificar se pode cancelar (não cancelada e autorizada)
+        const statusLower = (nota.status || nota.status_focus || '').toLowerCase();
+        const podeCancelar = !statusLower.includes('cancelado') && 
+                            (statusLower.includes('autorizado') || statusLower === 'autorizado');
+        
+        // URLs para visualizar
+        const baseUrl = ambiente === 'producao' 
+            ? 'https://api.focusnfe.com.br'
+            : 'https://homologacao.focusnfe.com.br';
+        
+        let urlVisualizar = null;
+        if (tipoNota === 'nfe') {
+            // Para NFe, usar caminho_danfe ou caminho_xml_nota_fiscal
+            const caminhoDanfe = nota.caminho_danfe || nota.dados_completos?.caminho_danfe;
+            const caminhoXml = nota.caminho_xml_nota_fiscal || nota.dados_completos?.caminho_xml_nota_fiscal;
+            urlVisualizar = caminhoDanfe || caminhoXml;
+        } else if (tipoNota === 'nfse') {
+            // Para NFSe, usar url ou caminho_xml
+            urlVisualizar = nota.url || nota.dados_completos?.url || 
+                          nota.caminho_xml || nota.dados_completos?.caminho_xml_nota_fiscal ||
+                          nota.dados_completos?.caminho_xml_nota_fsical;
+        }
+        
+        const urlCompleta = urlVisualizar 
+            ? (urlVisualizar.startsWith('http') ? urlVisualizar : `${baseUrl}${urlVisualizar}`)
+            : null;
+        
+        const botaoVisualizar = urlCompleta
+            ? `<button 
+                   onclick="visualizarNota('${urlCompleta}', '${tipoNota}', '${ambiente}')" 
+                   class="btn btn-sm btn-primary"
+                   title="Visualizar ${tipoNota === 'nfe' ? 'DANFe' : 'NFSe'}"
+                   style="margin-right: 4px;"
+               >
+                   👁️ Visualizar
+               </button>`
+            : `<button 
+                   disabled
+                   class="btn btn-sm btn-secondary"
+                   title="URL de visualização não disponível"
+                   style="margin-right: 4px;"
+               >
+                   👁️ Visualizar
+               </button>`;
+        
+        // Obter chave da nota para cancelamento alternativo
+        const chaveNota = nota.chave_nfe || nota.chave_nfse || nota.chave || 
+                         (nota.dados_completos && (nota.dados_completos.chave_nfe || nota.dados_completos.chave_nfse));
+        
+        // Se não tem referência mas tem chave, usar cancelamento por chave
+        const temReferencia = referencia && referencia !== '-';
+        const usarCancelamentoPorChave = !temReferencia && chaveNota;
+        
+        const botaoCancelar = podeCancelar
+            ? `<button 
+                   onclick="${usarCancelamentoPorChave ? `cancelarNotaPorChave('${chaveNota}', '${tipoNota}', '${ambiente}')` : `cancelarNota('${referencia}', '${tipoNota}', '${ambiente}')`}" 
+                   class="btn btn-sm btn-danger"
+                   title="Cancelar esta nota"
+               >
+                   🗑️ Cancelar
+               </button>`
+            : `<button 
+                   disabled
+                   class="btn btn-sm btn-secondary"
+                   title="Nota não pode ser cancelada (já cancelada ou não autorizada)"
+               >
+                   🗑️ Cancelar
+               </button>`;
 
         return `
             <tr>
-                <td>${emitente}</td>
                 <td>${dataEmissao}</td>
-                <td>${numero}</td>
-                <td>${destinatario}</td>
-                <td>${formatarValor(valor)}</td>
+                <td>${tipoBadge}</td>
+                <td>${origemBadge}</td>
                 <td>${referencia}</td>
+                <td>${pedidoId}</td>
+                <td>${cliente}</td>
+                <td>${formatarValor(valor)}</td>
+                <td>${ambienteBadge}</td>
                 <td>${status}</td>
+                <td style="white-space: nowrap;">
+                    ${botaoVisualizar}
+                    ${botaoCancelar}
+                </td>
             </tr>
         `;
     }).join('');
@@ -99,13 +267,16 @@ function renderizarTabelaRequisicoes(requisicoes) {
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Emitente</th>
-                        <th>Data Emissão</th>
-                        <th>Número</th>
-                        <th>Destinatário</th>
-                        <th>Valor</th>
+                        <th>Data</th>
+                        <th>Tipo</th>
+                        <th>Origem</th>
                         <th>Referência</th>
+                        <th>Pedido ID</th>
+                        <th>Cliente</th>
+                        <th>Valor</th>
+                        <th>Ambiente</th>
                         <th>Status</th>
+                        <th>Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -117,9 +288,215 @@ function renderizarTabelaRequisicoes(requisicoes) {
 }
 
 /**
+ * Renderiza filtros para Notas Enviadas
+ */
+function renderizarFiltrosNotasEnviadas() {
+    return `
+        <form id="form-filtros-notas" class="filters-form" onsubmit="event.preventDefault(); filtrarNotasEnviadas();">
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label for="filtro-data-inicio">Data Início</label>
+                    <input 
+                        type="date" 
+                        id="filtro-data-inicio" 
+                        name="data_inicio"
+                        class="form-input"
+                    />
+                </div>
+                
+                <div class="filter-group">
+                    <label for="filtro-data-fim">Data Fim</label>
+                    <input 
+                        type="date" 
+                        id="filtro-data-fim" 
+                        name="data_fim"
+                        class="form-input"
+                    />
+                </div>
+                
+                <div class="filter-group">
+                    <label for="filtro-status">Status</label>
+                    <select id="filtro-status" name="status_focus" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="autorizado">Autorizado</option>
+                        <option value="processando_autorizacao">Processando</option>
+                        <option value="erro_autorizacao">Erro</option>
+                        <option value="cancelado">Cancelado</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="filtro-ambiente">Ambiente</label>
+                    <select id="filtro-ambiente" name="ambiente" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="homologacao">Homologação</option>
+                        <option value="producao">Produção</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="filters-actions">
+                <button type="button" class="btn btn-secondary" onclick="sincronizarNotasFocus()" title="Sincronizar todas as notas da Focus NFe">
+                    🔄 Sincronizar com Focus NFe
+                </button>
+                <button type="submit" class="btn btn-primary">Filtrar</button>
+                <button type="button" onclick="limparFiltrosNotasEnviadas()" class="btn btn-secondary">Limpar Filtros</button>
+            </div>
+        </form>
+    `;
+}
+
+/**
+ * Renderiza tabela de requisições (alias para renderizarTabelaNotasEnviadas)
+ */
+function renderizarTabelaRequisicoes(requisicoes) {
+    // Usar a mesma função de notas enviadas, já que são a mesma coisa
+    return renderizarTabelaNotasEnviadas(requisicoes);
+}
+
+/**
+ * Renderiza tabela de notas enviadas (NFSe e NFe)
+ */
+function renderizarTabelaNotasEnviadas(notas) {
+    if (!notas || notas.length === 0) {
+        return `
+            <div class="empty-state">
+                <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="8" y="12" width="48" height="40" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
+                    <path d="M8 20h48M20 28h24M20 36h24M20 44h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <h3>Nenhuma nota encontrada</h3>
+                <p>Não há notas para exibir no momento.</p>
+            </div>
+        `;
+    }
+
+    const rows = notas.map(nota => {
+        const dataEmissao = formatarData(nota.created_at);
+        const referencia = nota.referencia || '-';
+        const pedidoId = nota.pedido_externo || nota.pedido_id || '-';
+        const tipoNota = nota.tipo_nota || 'nfse';
+        const tipoLabel = tipoNota === 'nfe' ? 'NFe' : 'NFSe';
+        const tipoBadge = tipoNota === 'nfe' 
+            ? '<span class="badge badge-info">NFe</span>' 
+            : '<span class="badge badge-success">NFSe</span>';
+        
+        // Extrair cliente baseado no tipo de nota
+        let cliente = '-';
+        if (tipoNota === 'nfe') {
+            // NFe: dados_completos.destinatario.nome_destinatario
+            cliente = nota.dados_completos?.destinatario?.nome_destinatario || 
+                     nota.dados_completos?.destinatario?.razao_social || 
+                     '-';
+        } else {
+            // NFSe: dados_completos.tomador.razao_social ou nome
+            cliente = nota.dados_completos?.tomador?.razao_social || 
+                     nota.dados_completos?.tomador?.nome || 
+                     '-';
+        }
+        
+        // Extrair valor baseado no tipo de nota
+        let valor = 0;
+        if (tipoNota === 'nfe') {
+            // NFe: dados_completos.valor_total
+            valor = nota.dados_completos?.valor_total || 0;
+        } else {
+            // NFSe: dados_completos.servico.valor_servicos ou valor_total
+            valor = nota.dados_completos?.servico?.valor_servicos || 
+                   nota.dados_completos?.valor_total || 
+                   0;
+        }
+        
+        const ambiente = nota.ambiente || 'homologacao';
+        const ambienteLabel = ambiente === 'producao' ? 'Produção' : 'Homologação';
+        const ambienteBadge = ambiente === 'producao' 
+            ? '<span class="badge badge-success">Produção</span>' 
+            : '<span class="badge badge-warning">Homologação</span>';
+        const status = formatarStatus(nota.status_focus);
+
+        return `
+            <tr>
+                <td>${dataEmissao}</td>
+                <td>${tipoBadge}</td>
+                <td>${referencia}</td>
+                <td>${pedidoId}</td>
+                <td>${cliente}</td>
+                <td>${formatarValor(valor)}</td>
+                <td>${ambienteBadge}</td>
+                <td>${status}</td>
+                <td>
+                    <button 
+                        onclick="verLogsNota('${referencia}')" 
+                        class="btn btn-sm btn-secondary"
+                        title="Ver logs desta nota"
+                    >
+                        Ver Logs
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <div class="table-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Tipo</th>
+                        <th>Referência</th>
+                        <th>Pedido ID</th>
+                        <th>Cliente</th>
+                        <th>Valor</th>
+                        <th>Ambiente</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+/**
+ * Extrai categorias dos produtos do pedido
+ */
+function extrairCategoriasPedido(pedido) {
+    if (!pedido.line_items || !Array.isArray(pedido.line_items)) {
+        return [];
+    }
+    
+    const categorias = new Set();
+    pedido.line_items.forEach(item => {
+        // Tentar obter categorias de diferentes formas
+        if (item.categories && Array.isArray(item.categories)) {
+            item.categories.forEach(cat => {
+                if (typeof cat === 'string') {
+                    categorias.add(cat);
+                } else if (cat && cat.name) {
+                    categorias.add(cat.name);
+                }
+            });
+        }
+        if (item.category && typeof item.category === 'string') {
+            categorias.add(item.category);
+        }
+        // Se não tiver categoria direta, usar o nome do produto como fallback
+        if (categorias.size === 0 && item.name) {
+            categorias.add(item.name);
+        }
+    });
+    
+    return Array.from(categorias);
+}
+
+/**
  * Renderiza tabela de pedidos WooCommerce
  */
-function renderizarTabelaPedidos(pedidos) {
+function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
     console.log('renderizarTabelaPedidos chamado com:', pedidos ? pedidos.length : 0, 'pedidos');
     
     if (!pedidos || pedidos.length === 0) {
@@ -137,53 +514,154 @@ function renderizarTabelaPedidos(pedidos) {
     }
 
     console.log('Renderizando', pedidos.length, 'pedidos na tabela');
-    const rows = pedidos.map((pedido, index) => {
-        if (index === 0) {
-            console.log('Primeiro pedido:', {
-                id: pedido.id,
-                date_created: pedido.date_created,
-                billing: pedido.billing,
-                total: pedido.total
+    
+    // Mapear status para labels
+    const statusLabels = {
+        'pending': 'Pendente',
+        'processing': 'Processando',
+        'on-hold': 'Em espera',
+        'completed': 'Concluído',
+        'cancelled': 'Cancelado',
+        'refunded': 'Reembolsado',
+        'failed': 'Falhou'
+    };
+    
+    let rows = '';
+    
+    if (agruparPorCategoria) {
+        // Agrupar pedidos por categoria
+        const pedidosPorCategoria = {};
+        
+        pedidos.forEach(pedido => {
+            const categorias = extrairCategoriasPedido(pedido);
+            const categoriaPrincipal = categorias.length > 0 ? categorias[0] : 'Sem categoria';
+            
+            if (!pedidosPorCategoria[categoriaPrincipal]) {
+                pedidosPorCategoria[categoriaPrincipal] = [];
+            }
+            pedidosPorCategoria[categoriaPrincipal].push(pedido);
+        });
+        
+        // Renderizar por categoria
+        Object.keys(pedidosPorCategoria).sort().forEach(categoria => {
+            const pedidosCategoria = pedidosPorCategoria[categoria];
+            const categoriaId = categoria.toLowerCase().replace(/\s+/g, '-');
+            
+            rows += `
+                <tr style="background-color: var(--color-gray-light);">
+                    <td colspan="8" style="padding: 12px; font-weight: 600; font-size: 16px;">
+                        ${categoria} (${pedidosCategoria.length} pedido${pedidosCategoria.length !== 1 ? 's' : ''})
+                    </td>
+                </tr>
+            `;
+            
+            pedidosCategoria.forEach(pedido => {
+                const id = pedido.id || pedido.number || '-';
+                const data = formatarData(pedido.date_created || pedido.created_at);
+                const cliente = pedido.billing 
+                    ? `${pedido.billing.first_name || ''} ${pedido.billing.last_name || ''}`.trim() || pedido.billing.company || 'N/A'
+                    : 'N/A';
+                const total = formatarValor(parseFloat(pedido.total || 0));
+                const statusAtual = pedido.status || 'pending';
+                const statusLabel = statusLabels[statusAtual] || statusAtual;
+                
+                rows += `
+                    <tr>
+                        <td>
+                            <input 
+                                type="checkbox" 
+                                class="checkbox-pedido" 
+                                data-pedido-id="${id}"
+                                onchange="atualizarSelecaoPedidos()"
+                                style="width: 18px; height: 18px; cursor: pointer;">
+                        </td>
+                        <td>#${id}</td>
+                        <td>${data}</td>
+                        <td>${cliente}</td>
+                        <td>${total}</td>
+                        <td>${statusLabel}</td>
+                        <td>${categoria}</td>
+                        <td>
+                            <button class="btn btn-secondary" onclick="verDetalhesPedido(${id})">Ver Detalhes</button>
+                            ${!pedido.tem_nfse ? `<button class="btn btn-primary" onclick="emitirNFSePedido(${id})">Emitir NF</button>` : ''}
+                        </td>
+                    </tr>
+                `;
             });
-        }
-        const id = pedido.id || pedido.number || '-';
-        const data = formatarData(pedido.date_created || pedido.created_at);
-        const cliente = pedido.billing 
-            ? `${pedido.billing.first_name || ''} ${pedido.billing.last_name || ''}`.trim() || pedido.billing.company || 'N/A'
-            : 'N/A';
-        const total = formatarValor(parseFloat(pedido.total || 0));
-        const status = pedido.status || '-';
-        const temNFSe = pedido.tem_nfse ? '✓' : '-';
+        });
+    } else {
+        // Renderizar normalmente
+        pedidos.forEach((pedido, index) => {
+            if (index === 0) {
+                console.log('Primeiro pedido:', {
+                    id: pedido.id,
+                    date_created: pedido.date_created,
+                    billing: pedido.billing,
+                    total: pedido.total
+                });
+            }
+            const id = pedido.id || pedido.number || '-';
+            const data = formatarData(pedido.date_created || pedido.created_at);
+            const cliente = pedido.billing 
+                ? `${pedido.billing.first_name || ''} ${pedido.billing.last_name || ''}`.trim() || pedido.billing.company || 'N/A'
+                : 'N/A';
+            const total = formatarValor(parseFloat(pedido.total || 0));
+            const statusAtual = pedido.status || 'pending';
+            const statusLabel = statusLabels[statusAtual] || statusAtual;
+            
+            // Extrair categorias
+            const categorias = extrairCategoriasPedido(pedido);
+            const categoriaTexto = categorias.length > 0 ? categorias.join(', ') : 'Sem categoria';
 
-        return `
-            <tr>
-                <td>#${id}</td>
-                <td>${data}</td>
-                <td>${cliente}</td>
-                <td>${total}</td>
-                <td>${status}</td>
-                <td>${temNFSe}</td>
-                <td>
-                    <button class="btn btn-secondary" onclick="verDetalhesPedido(${id})">Ver Detalhes</button>
-                    ${!pedido.tem_nfse ? `<button class="btn btn-primary" onclick="emitirNFSePedido(${id})">Emitir NFSe</button>` : ''}
-                </td>
-            </tr>
-        `;
-    }).join('');
+            rows += `
+                <tr>
+                    <td>
+                        <input 
+                            type="checkbox" 
+                            class="checkbox-pedido" 
+                            data-pedido-id="${id}"
+                            onchange="atualizarSelecaoPedidos()"
+                            style="width: 18px; height: 18px; cursor: pointer;">
+                    </td>
+                    <td>#${id}</td>
+                    <td>${data}</td>
+                    <td>${cliente}</td>
+                    <td>${total}</td>
+                    <td>${statusLabel}</td>
+                    <td>${categoriaTexto}</td>
+                    <td>
+                        <button class="btn btn-secondary" onclick="verDetalhesPedido(${id})">Ver Detalhes</button>
+                        ${!pedido.tem_nfse ? `<button class="btn btn-primary" onclick="emitirNFSePedido(${id})">Emitir NFSe</button>` : ''}
+                    </td>
+                </tr>
+            `;
+        });
+    }
 
     console.log('Tabela renderizada com', rows.split('</tr>').length - 1, 'linhas');
     
+    // Gerar ID único para esta tabela (baseado no timestamp)
+    const tabelaId = 'tabela-pedidos-' + Date.now();
+    
     return `
         <div class="table-container">
-            <table class="table">
+            <table class="table" id="${tabelaId}">
                 <thead>
                     <tr>
+                        <th style="width: 50px;">
+                            <input 
+                                type="checkbox" 
+                                class="checkbox-selecionar-todos"
+                                onchange="selecionarTodosPedidos(this, '${tabelaId}')"
+                                style="width: 18px; height: 18px; cursor: pointer;"
+                                title="Selecionar todos">
+                        </th>
                         <th>ID</th>
                         <th>Data</th>
                         <th>Cliente</th>
                         <th>Total</th>
                         <th>Status</th>
-                        <th>NFSe</th>
+                        <th>Categoria</th>
                         <th>Ações</th>
                     </tr>
                 </thead>
@@ -419,6 +897,14 @@ window.Components = {
     renderizarProgressoEmissao,
     renderizarPaginacao,
     renderizarLoading,
-    renderizarFormularioPesquisa
+    renderizarFormularioPesquisa,
+    renderizarFiltrosNotasEnviadas,
+    renderizarTabelaNotasEnviadas,
+    renderizarFiltrosBuscarNotas,
+    renderizarTabelaBuscarNotas,
+    extrairCategoriasPedido
 };
+
+// Debug: confirmar que Components foi carregado
+console.log('Components carregado:', Object.keys(window.Components));
 

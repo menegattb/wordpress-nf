@@ -341,11 +341,140 @@ async function testarConexao() {
   }
 }
 
+/**
+ * Sincroniza pedidos do WooCommerce salvando no banco de dados
+ */
+async function sincronizarPedidos() {
+  const logger = require('./logger');
+  const { salvarPedido } = require('../config/database');
+  const { mapearWooCommerceParaPedido } = require('../utils/mapeador');
+  
+  logger.info('Iniciando sincronização de pedidos do WooCommerce', {
+    service: 'woocommerce',
+    action: 'sincronizar_pedidos'
+  });
+  
+  try {
+    let todosPedidos = [];
+    let page = 1;
+    let totalPages = 1;
+    let pedidosSalvos = 0;
+    let pedidosAtualizados = 0;
+    let erros = 0;
+    
+    // Buscar primeira página para obter total de páginas
+    const primeiraPagina = await buscarPedidos({
+      per_page: 100,
+      page: 1,
+      orderby: 'date',
+      order: 'desc'
+    });
+    
+    const pedidos = primeiraPagina.pedidos || [];
+    todosPedidos = pedidos;
+    totalPages = parseInt(primeiraPagina.total_pages || 1);
+    
+    logger.info('Buscando pedidos do WooCommerce', {
+      service: 'woocommerce',
+      action: 'sincronizar_pedidos',
+      total_pages: totalPages,
+      primeira_pagina: pedidos.length
+    });
+    
+    // Buscar páginas restantes
+    for (page = 2; page <= totalPages; page++) {
+      const pagina = await buscarPedidos({
+        per_page: 100,
+        page: page,
+        orderby: 'date',
+        order: 'desc'
+      });
+      
+      const paginaPedidos = pagina.pedidos || [];
+      todosPedidos = todosPedidos.concat(paginaPedidos);
+    }
+    
+    logger.info(`Total de ${todosPedidos.length} pedidos encontrados. Iniciando salvamento no banco...`, {
+      service: 'woocommerce',
+      action: 'sincronizar_pedidos'
+    });
+    
+    // Salvar cada pedido no banco
+    for (const pedidoWC of todosPedidos) {
+      try {
+        // Mapear pedido WooCommerce para formato interno
+        const dadosPedido = mapearWooCommerceParaPedido(pedidoWC);
+        
+        // Determinar status baseado no status do WooCommerce
+        let status = 'pendente';
+        if (pedidoWC.status === 'completed') {
+          status = 'pendente'; // Pendente de emissão de NFSe
+        } else if (pedidoWC.status === 'processing') {
+          status = 'processando';
+        } else if (pedidoWC.status === 'cancelled') {
+          status = 'cancelado';
+        }
+        
+        // Salvar no banco (usando ON CONFLICT para atualizar se já existir)
+        await salvarPedido({
+          pedido_id: dadosPedido.pedido_id,
+          origem: 'woocommerce',
+          dados_pedido: dadosPedido,
+          status: status
+        });
+        
+        // Verificar se foi inserção ou atualização (não temos como saber diretamente, então assumimos atualização se já existir)
+        pedidosSalvos++;
+        
+      } catch (error) {
+        erros++;
+        logger.error('Erro ao salvar pedido durante sincronização', {
+          service: 'woocommerce',
+          action: 'sincronizar_pedidos',
+          pedido_id: pedidoWC.id || pedidoWC.number,
+          error: error.message
+        });
+      }
+    }
+    
+    logger.info('Sincronização de pedidos concluída', {
+      service: 'woocommerce',
+      action: 'sincronizar_pedidos',
+      total_pedidos: todosPedidos.length,
+      pedidos_salvos: pedidosSalvos,
+      erros: erros
+    });
+    
+    return {
+      sucesso: true,
+      mensagem: `Sincronização concluída: ${pedidosSalvos} pedidos processados`,
+      total_pedidos: todosPedidos.length,
+      pedidos_salvos: pedidosSalvos,
+      pedidos_atualizados: pedidosAtualizados,
+      erros: erros
+    };
+    
+  } catch (error) {
+    logger.error('Erro ao sincronizar pedidos do WooCommerce', {
+      service: 'woocommerce',
+      action: 'sincronizar_pedidos',
+      error: error.message
+    });
+    
+    return {
+      sucesso: false,
+      erro: error.message,
+      mensagem: `Erro ao sincronizar pedidos: ${error.message}`
+    };
+  }
+}
+
 module.exports = {
   buscarPedidos,
   buscarPedidoPorId,
   buscarCategorias,
   buscarProdutosPorCategorias,
-  testarConexao
+  testarConexao,
+  sincronizarPedidos
 };
 

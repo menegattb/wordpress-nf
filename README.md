@@ -162,6 +162,101 @@ No painel do WooCommerce:
    - **URL de Entrega**: `https://seu-dominio.com/api/webhook/woocommerce`
    - **Segredo**: (opcional, configure no .env)
 
+## 🔔 Configuração de Webhooks da Focus NFe
+
+O sistema agora suporta webhooks da Focus NFe para receber notificações automáticas quando notas são emitidas, autorizadas, canceladas, etc.
+
+### Endpoint de Recebimento
+
+O endpoint que recebe as notificações da Focus NFe é:
+```
+POST /api/webhook/focus-nfe
+```
+
+### Configurar Webhooks na Focus NFe
+
+#### Via API (Recomendado)
+
+1. Obtenha a URL do webhook:
+```bash
+GET /api/config/webhook-url
+```
+
+2. Crie o webhook para NFe:
+```bash
+POST /api/webhook/focus/criar
+Content-Type: application/json
+
+{
+  "event": "nfe",
+  "url": "https://seu-dominio.com/api/webhook/focus-nfe",
+  "ambiente": "homologacao"
+}
+```
+
+3. Crie o webhook para NFSe:
+```bash
+POST /api/webhook/focus/criar
+Content-Type: application/json
+
+{
+  "event": "nfse",
+  "url": "https://seu-dominio.com/api/webhook/focus-nfe",
+  "ambiente": "homologacao"
+}
+```
+
+#### Eventos Disponíveis
+
+- `nfe` - Notificações de NFe (produtos)
+- `nfse` - Notificações de NFSe (serviços)
+- `nfsen` - Notificações de NFSe Nacional
+- `cte` - Notificações de CTe
+- `mdfe` - Notificações de MDFe
+- `nfcom` - Notificações de NFCom
+
+### Gerenciar Webhooks
+
+**Listar todos os webhooks:**
+```bash
+GET /api/webhook/focus/listar?ambiente=homologacao
+```
+
+**Consultar um webhook específico:**
+```bash
+GET /api/webhook/focus/:hookId?ambiente=homologacao
+```
+
+**Deletar um webhook:**
+```bash
+DELETE /api/webhook/focus/:hookId?ambiente=homologacao
+```
+
+**Reenviar notificação para uma nota:**
+```bash
+POST /api/webhook/focus/reenviar/:referencia
+Content-Type: application/json
+
+{
+  "tipo_nota": "nfe",
+  "ambiente": "homologacao"
+}
+```
+
+### Vantagens dos Webhooks
+
+- ✅ **Sem polling**: Não precisa consultar constantemente o status das notas
+- ✅ **Tempo real**: Recebe notificações imediatamente quando há mudanças
+- ✅ **Eficiente**: Reduz chamadas à API da Focus NFe
+- ✅ **Automático**: As notas são salvas/atualizadas automaticamente no banco local
+
+### Importante
+
+- A URL do webhook deve ser **publicamente acessível** (não funciona com `localhost`)
+- Para desenvolvimento local, use ferramentas como [ngrok](https://ngrok.com/) para expor seu servidor
+- Em produção, certifique-se de que a URL está correta e acessível
+- A Focus NFe tentará reenviar notificações em caso de falha (1 min, 30 min, 1h, 3h, 24h)
+
 ## 🗄️ Estrutura do Banco de Dados
 
 ### Tabela `pedidos`

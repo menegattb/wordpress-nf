@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { buscarPedidos, buscarPedidoPorId, buscarCategorias, testarConexao } = require('../services/woocommerce');
+const { buscarPedidos, buscarPedidoPorId, buscarCategorias, testarConexao, sincronizarPedidos } = require('../services/woocommerce');
 
 /**
  * GET /api/woocommerce/test
@@ -68,6 +68,22 @@ router.get('/pedidos/:id', async (req, res) => {
 router.get('/categorias', async (req, res) => {
   try {
     const resultado = await buscarCategorias();
+    res.json(resultado);
+  } catch (error) {
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/woocommerce/sincronizar
+ * Sincroniza pedidos do WooCommerce salvando no banco de dados
+ */
+router.post('/sincronizar', async (req, res) => {
+  try {
+    const resultado = await sincronizarPedidos();
     res.json(resultado);
   } catch (error) {
     res.status(500).json({

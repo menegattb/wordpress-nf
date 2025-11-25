@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel API - WordPress NF</title>
+    <title>Wordpress - Focus NFe</title>
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -11,38 +11,14 @@
         <!-- Header -->
         <header class="header">
             <div class="header-left">
-                <h1 class="header-title">Painel API</h1>
+                <h1 class="header-title">Wordpress - Focus NFe</h1>
             </div>
             <div class="header-right">
-                <div class="header-links">
-                    <a href="#" class="header-link">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="1" y="1" width="6" height="6" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                            <rect x="9" y="1" width="6" height="6" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                            <rect x="1" y="9" width="6" height="6" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                            <rect x="9" y="9" width="6" height="6" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                        </svg>
-                        Serviços
-                    </a>
-                    <a href="#" class="header-link">Lungta Psicoterapia</a>
-                </div>
                 <div class="header-icons">
-                    <button class="icon-btn" title="Ajuda">
+                    <button class="icon-btn" id="btn-mostrar-logs" title="Mostrar Logs" onclick="toggleLogsServidor()">
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="10" cy="10" r="9" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                            <text x="10" y="14" text-anchor="middle" font-size="12" font-weight="bold" fill="currentColor">?</text>
-                        </svg>
-                    </button>
-                    <button class="icon-btn" title="Download">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M10 3v10M10 13l-4-4M10 13l4-4M3 16h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </button>
-                    <button class="icon-btn" title="Notificações">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M10 2a5 5 0 0 1 5 5v3.5l1.5 1.5H3.5L5 10.5V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                            <path d="M7.5 15.5h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                            <circle cx="13" cy="4" r="2" fill="#FF6B35"/>
+                            <rect x="3" y="4" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                            <path d="M3 8h14M3 12h14" stroke="currentColor" stroke-width="1.5"/>
                         </svg>
                     </button>
                     <button class="icon-btn" title="Perfil">
@@ -58,7 +34,6 @@
         <div class="main-layout">
             <!-- Sidebar -->
             <aside class="sidebar">
-                <h2 class="sidebar-title">Painel API</h2>
                 <nav class="sidebar-nav">
                     <button class="sidebar-item active" data-section="meus-dados">
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -90,23 +65,19 @@
                         </svg>
                         <span>Pedidos WooCommerce</span>
                     </button>
-                    <button class="sidebar-item" data-section="requisicoes">
+                    <button class="sidebar-item" data-section="notas-enviadas">
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            <rect x="3" y="4" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                            <path d="M3 8h14M7 12h6" stroke="currentColor" stroke-width="1.5"/>
                         </svg>
-                        <span>Requisições</span>
+                        <span>Notas Enviadas</span>
                     </button>
-                    <button class="sidebar-item" data-section="municipios">
+                    <button class="sidebar-item" data-section="buscar-notas">
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M10 3L3 7v10h4v-6h6v6h4V7l-7-4z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                            <circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                            <path d="m15 15-3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                         </svg>
-                        <span>Municípios</span>
-                    </button>
-                    <button class="sidebar-item" data-section="webhooks">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M5 10h10M10 5l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        <span>Webhooks</span>
+                        <span>Excluir notas enviadas</span>
                     </button>
                 </nav>
             </aside>

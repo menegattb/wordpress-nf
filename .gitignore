@@ -39,3 +39,7 @@ tmp/
 temp/
 uploads/
 
+# Data storage (quando usando armazenamento em memória)
+data/
+
+.env

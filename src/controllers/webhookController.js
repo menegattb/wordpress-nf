@@ -1,6 +1,6 @@
 const logger = require('../services/logger');
 const { mapearWooCommerceParaPedido } = require('../utils/mapeador');
-const { salvarPedido, buscarPedidoPorPedidoId, atualizarPedido } = require('../config/database');
+const { salvarPedido, buscarPedidoPorPedidoId, atualizarPedido, salvarNFSe, atualizarNFSe, buscarNFSePorReferencia, salvarNFe, atualizarNFe, buscarNFePorReferencia } = require('../config/database');
 const { emitirNFSe } = require('../services/focusNFSe');
 const config = require('../../config');
 
@@ -107,69 +107,69 @@ async function processarWebhook(req, res) {
       });
     }
     
-    // Emitir NFSe (assíncrono - não bloqueia resposta)
-    logger.webhook('Iniciando emissão de NFSe (assíncrono)', {
+    // Emitir NFSe (SÍNCRONO - aguarda resultado antes de responder)
+    // Necessário para Vercel serverless onde a função termina após resposta
+    logger.webhook('Iniciando emissão de NFSe', {
       pedido_id: dadosPedido.pedido_id
     });
     
-    emitirNFSe(dadosPedido, config.emitente, configFiscal)
-      .then(resultado => {
-        if (resultado.sucesso) {
-          logger.webhook('NFSe emitida com sucesso', {
-            pedido_id: dadosPedido.pedido_id,
-            referencia: resultado.referencia,
-            status: resultado.status
-          });
-          
-          // Atualizar status do pedido
-          atualizarPedido(dadosPedido.pedido_id_db, {
-            status: resultado.status === 'autorizado' ? 'emitida' : 'processando'
-          }).catch(err => {
-            logger.error('Erro ao atualizar status do pedido', {
-              pedido_id: dadosPedido.pedido_id,
-              error: err.message
-            });
-          });
-        } else {
-          logger.webhook('Erro ao emitir NFSe', {
-            pedido_id: dadosPedido.pedido_id,
-            erro: resultado.erro
-          });
-          
-          // Atualizar status do pedido para erro
-          atualizarPedido(dadosPedido.pedido_id_db, {
-            status: 'erro'
-          }).catch(err => {
-            logger.error('Erro ao atualizar status do pedido', {
-              pedido_id: dadosPedido.pedido_id,
-              error: err.message
-            });
-          });
-        }
-      })
-      .catch(err => {
-        logger.error('Erro ao processar emissão de NFSe', {
+    try {
+      const resultado = await emitirNFSe(dadosPedido, config.emitente, configFiscal);
+      
+      if (resultado.sucesso) {
+        logger.webhook('NFSe emitida com sucesso', {
           pedido_id: dadosPedido.pedido_id,
-          error: err.message
+          referencia: resultado.referencia,
+          status: resultado.status
+        });
+        
+        // Atualizar status do pedido
+        await atualizarPedido(dadosPedido.pedido_id_db, {
+          status: resultado.status === 'autorizado' ? 'emitida' : 'processando'
+        });
+        
+        return res.status(200).json({
+          mensagem: 'Pedido processado e NFSe emitida',
+          pedido_id: dadosPedido.pedido_id,
+          status: resultado.status,
+          referencia: resultado.referencia
+        });
+      } else {
+        logger.webhook('Erro ao emitir NFSe', {
+          pedido_id: dadosPedido.pedido_id,
+          erro: resultado.erro
         });
         
         // Atualizar status do pedido para erro
-        atualizarPedido(dadosPedido.pedido_id_db, {
+        await atualizarPedido(dadosPedido.pedido_id_db, {
           status: 'erro'
-        }).catch(dbErr => {
-          logger.error('Erro ao atualizar status do pedido', {
-            pedido_id: dadosPedido.pedido_id,
-            error: dbErr.message
-          });
         });
+        
+        // Retornar 200 para evitar reenvios do WooCommerce
+        return res.status(200).json({
+          mensagem: 'Pedido recebido, erro na emissão',
+          pedido_id: dadosPedido.pedido_id,
+          erro: resultado.erro
+        });
+      }
+    } catch (err) {
+      logger.error('Erro ao processar emissão de NFSe', {
+        pedido_id: dadosPedido.pedido_id,
+        error: err.message
       });
-    
-    // Retornar resposta imediata
-    res.status(200).json({
-      mensagem: 'Pedido recebido e processamento iniciado',
-      pedido_id: dadosPedido.pedido_id,
-      status: 'processando'
-    });
+      
+      // Atualizar status do pedido para erro
+      await atualizarPedido(dadosPedido.pedido_id_db, {
+        status: 'erro'
+      });
+      
+      // Retornar 200 para evitar reenvios do WooCommerce
+      return res.status(200).json({
+        mensagem: 'Pedido recebido, erro no processamento',
+        pedido_id: dadosPedido.pedido_id,
+        erro: err.message
+      });
+    }
     
   } catch (error) {
     logger.error('Erro ao processar webhook', {
@@ -184,7 +184,149 @@ async function processarWebhook(req, res) {
   }
 }
 
+/**
+ * Processa webhook da Focus NFe (notificações de notas)
+ */
+async function processarWebhookFocusNFe(req, res) {
+  try {
+    const dadosNota = req.body;
+    
+    logger.info('🔔 [WEBHOOK FOCUS] Notificação recebida da Focus NFe', {
+      referencia: dadosNota.ref || dadosNota.referencia,
+      status: dadosNota.status,
+      tipo: dadosNota.chave_nfe ? 'nfe' : (dadosNota.numero_rps ? 'nfse' : 'desconhecido'),
+      payload: dadosNota
+    });
+    
+    // Determinar tipo de nota
+    let tipoNota = null;
+    if (dadosNota.chave_nfe || dadosNota.chave_cte) {
+      tipoNota = dadosNota.chave_cte ? 'cte' : 'nfe';
+    } else if (dadosNota.numero_rps || dadosNota.cnpj_prestador) {
+      tipoNota = 'nfse';
+    } else {
+      logger.warn('🔔 [WEBHOOK FOCUS] Tipo de nota não identificado', {
+        payload: dadosNota
+      });
+      return res.status(400).json({
+        erro: 'Tipo de nota não identificado'
+      });
+    }
+    
+    const referencia = dadosNota.ref || dadosNota.referencia;
+    if (!referencia) {
+      logger.warn('🔔 [WEBHOOK FOCUS] Referência não encontrada', {
+        payload: dadosNota
+      });
+      return res.status(400).json({
+        erro: 'Referência não encontrada'
+      });
+    }
+    
+    // Determinar ambiente baseado na URL ou dados
+    const ambiente = dadosNota.ambiente || (process.env.FOCUS_NFE_AMBIENTE || 'homologacao');
+    
+    // Adicionar campos específicos por tipo
+    if (tipoNota === 'nfe') {
+      // Preparar dados da NFe para salvar
+      const dadosNFe = {
+        referencia,
+        chave_nfe: dadosNota.chave_nfe,
+        status_focus: dadosNota.status,
+        status_sefaz: dadosNota.status_sefaz,
+        mensagem_sefaz: dadosNota.mensagem_sefaz,
+        caminho_xml_nota_fiscal: dadosNota.caminho_xml_nota_fiscal,
+        caminho_danfe: dadosNota.caminho_danfe,
+        dados_completos: dadosNota,
+        ambiente
+      };
+      
+      // Verificar se já existe
+      const nfeExistente = await buscarNFePorReferencia(referencia);
+      
+      if (nfeExistente) {
+        logger.info('🔔 [WEBHOOK FOCUS] NFe já existe, atualizando', {
+          referencia,
+          status_anterior: nfeExistente.status_focus,
+          status_novo: dadosNota.status
+        });
+        
+        await atualizarNFe(referencia, dadosNFe);
+      } else {
+        logger.info('🔔 [WEBHOOK FOCUS] Salvando nova NFe', {
+          referencia,
+          status: dadosNota.status
+        });
+        
+        await salvarNFe(dadosNFe);
+      }
+    } else if (tipoNota === 'nfse') {
+      // Preparar dados da NFSe para salvar
+      const dadosNFSe = {
+        referencia,
+        chave_nfse: dadosNota.codigo_verificacao || dadosNota.numero,
+        status_focus: dadosNota.status,
+        status_sefaz: dadosNota.status_sefaz,
+        mensagem_sefaz: dadosNota.mensagem_sefaz,
+        caminho_xml: dadosNota.caminho_xml_nota_fsical || dadosNota.caminho_xml_nota_fiscal,
+        dados_completos: dadosNota,
+        ambiente
+      };
+      
+      // Verificar se já existe
+      const nfseExistente = await buscarNFSePorReferencia(referencia);
+      
+      if (nfseExistente) {
+        logger.info('🔔 [WEBHOOK FOCUS] NFSe já existe, atualizando', {
+          referencia,
+          status_anterior: nfseExistente.status_focus,
+          status_novo: dadosNota.status
+        });
+        
+        await atualizarNFSe(referencia, dadosNFSe);
+      } else {
+        logger.info('🔔 [WEBHOOK FOCUS] Salvando nova NFSe', {
+          referencia,
+          status: dadosNota.status
+        });
+        
+        await salvarNFSe(dadosNFSe);
+      }
+    }
+    
+    logger.info('✅ [WEBHOOK FOCUS] Nota processada com sucesso', {
+      referencia,
+      tipo: tipoNota,
+      status: dadosNota.status
+    });
+    
+    // Retornar resposta 200 para confirmar recebimento
+    res.status(200).json({
+      mensagem: 'Notificação recebida e processada',
+      referencia,
+      tipo: tipoNota,
+      status: dadosNota.status
+    });
+    
+  } catch (error) {
+    logger.error('❌ [WEBHOOK FOCUS] Erro ao processar notificação', {
+      error: error.message,
+      stack: error.stack,
+      payload: req.body
+    });
+    
+    // Retornar 200 mesmo em caso de erro para evitar reenvios desnecessários
+    // A Focus NFe tentará reenviar se retornarmos erro, mas se for erro nosso,
+    // não queremos que ela continue tentando indefinidamente
+    res.status(200).json({
+      erro: 'Erro ao processar notificação (mas recebida)',
+      mensagem: error.message
+    });
+  }
+}
+
 module.exports = {
-  processarWebhook
+  processarWebhook,
+  processarWebhookFocusNFe
 };
 

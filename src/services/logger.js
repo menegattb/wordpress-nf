@@ -48,10 +48,10 @@ const consoleFormat = winston.format.combine(
 
 // Configuração de transports
 const transports = [
-  // Console - sempre mostrar info e acima no desenvolvimento
+  // Console - apenas erros e warnings (logs ocultos por padrão)
   new winston.transports.Console({
     format: consoleFormat,
-    level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug')
+    level: process.env.LOG_LEVEL || 'warn' // Apenas warnings e erros no console
   }),
   
   // Arquivo de erro

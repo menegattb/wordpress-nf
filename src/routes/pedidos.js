@@ -9,16 +9,40 @@ const pedidoController = require('../controllers/pedidoController');
 router.get('/', pedidoController.listar);
 
 /**
+ * GET /api/pedidos/nfse/listar
+ * Lista NFSe (deve vir antes de /:id para evitar conflito)
+ */
+router.get('/nfse/listar', pedidoController.listarNFSe);
+
+/**
+ * GET /api/pedidos/notas/listar
+ * Lista todas as notas (NFSe e NFe) combinadas
+ */
+router.get('/notas/listar', pedidoController.listarTodasNotas);
+
+/**
+ * POST /api/pedidos/notas/sincronizar
+ * Sincroniza todas as notas da Focus NFe com o banco local
+ */
+router.post('/notas/sincronizar', pedidoController.sincronizarNotas);
+
+/**
+ * GET /api/pedidos/logs
+ * Lista logs relacionados a pedidos
+ */
+router.get('/logs', pedidoController.listarLogsPedidos);
+
+/**
+ * PUT /api/pedidos/:id/status
+ * Atualiza status de um pedido (deve vir antes de /:id)
+ */
+router.put('/:id/status', pedidoController.atualizarStatus);
+
+/**
  * GET /api/pedidos/:id
  * Busca pedido por ID
  */
 router.get('/:id', pedidoController.buscarPorId);
-
-/**
- * GET /api/pedidos/nfse/listar
- * Lista NFSe
- */
-router.get('/nfse/listar', pedidoController.listarNFSe);
 
 module.exports = router;
 

@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const logger = require('./src/services/logger');
 
 // Importar rotas
@@ -21,21 +22,17 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Servir arquivos estáticos da pasta public
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Middleware de logging
+// Middleware de logging (sem console.log, apenas salva nos arquivos)
 app.use((req, res, next) => {
-  // Log no console para debug
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`, {
-    ip: req.ip,
-    query: req.query,
-    body: req.method === 'POST' ? JSON.stringify(req.body).substring(0, 200) : undefined
-  });
-  
+  // Log apenas nos arquivos, não no console
   logger.info(`${req.method} ${req.path}`, {
     service: 'server',
     action: 'request',
     method: req.method,
     path: req.path,
-    ip: req.ip
+    ip: req.ip,
+    query: req.query,
+    body: req.method === 'POST' ? req.body : undefined
   });
   next();
 });
@@ -47,11 +44,25 @@ app.use('/api/pedidos', pedidoRoutes);
 app.use('/api/woocommerce', woocommerceRoutes);
 app.use('/api/config', configRoutes);
 
+// Função auxiliar para ler ambiente do .env
+function lerAmbienteDoEnv() {
+  const envPath = path.join(__dirname, '.env');
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    const ambienteMatch = envContent.match(/^FOCUS_NFE_AMBIENTE=(.+)$/m);
+    if (ambienteMatch) {
+      return ambienteMatch[1].trim();
+    }
+  }
+  return process.env.FOCUS_NFE_AMBIENTE || 'homologacao';
+}
+
 // Rota de health check
 app.get('/health', (req, res) => {
+  const ambiente = lerAmbienteDoEnv();
   res.json({
     status: 'ok',
-    ambiente: process.env.FOCUS_NFE_AMBIENTE || 'homologacao',
+    ambiente: ambiente,
     timestamp: new Date().toISOString()
   });
 });
@@ -113,7 +124,8 @@ try {
     console.log(`\n🚀 Servidor rodando na porta ${PORT}`);
     console.log(`📊 Ambiente: ${process.env.FOCUS_NFE_AMBIENTE || 'homologacao'}`);
     console.log(`🌐 Health check: http://localhost:${PORT}/health`);
-    console.log(`📡 Webhook: http://localhost:${PORT}/api/webhook/woocommerce`);
+    console.log(`📡 Webhook WooCommerce: http://localhost:${PORT}/api/webhook/woocommerce`);
+    console.log(`🔔 Webhook Focus NFe: http://localhost:${PORT}/api/webhook/focus-nfe`);
     console.log(`🧾 API NFSe: http://localhost:${PORT}/api/nfse`);
     console.log(`💻 Front-end: http://localhost:${PORT}\n`);
   });

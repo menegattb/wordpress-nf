@@ -4,7 +4,6 @@ let estadoAtual = {
     secaoAtiva: 'meus-dados',
     paginaAtual: 1,
     filtros: {},
-    subsecao: null, // Para subseções dentro de conexao-focus
     dados: {
         requisicoes: [],
         pedidos: [],
@@ -16,8 +15,31 @@ let estadoAtual = {
  * Inicialização da aplicação
  */
 document.addEventListener('DOMContentLoaded', () => {
-    inicializarNavegacao();
-    carregarSecao('meus-dados');
+    // Verificar se Components está disponível
+    if (!window.Components) {
+        console.error('Components não está disponível no DOMContentLoaded');
+        // Tentar novamente após um pequeno delay
+        setTimeout(() => {
+            if (window.Components) {
+                inicializarNavegacao();
+                carregarSecao('meus-dados');
+            } else {
+                console.error('Components ainda não está disponível após delay');
+                document.getElementById('content-area').innerHTML = `
+                    <div class="content-section">
+                        <div style="padding: 20px; text-align: center; color: #dc3545;">
+                            <h3>Erro ao carregar componentes</h3>
+                            <p>O arquivo components.js não foi carregado corretamente.</p>
+                            <p>Por favor, verifique o console do navegador (F12) para mais detalhes.</p>
+                        </div>
+                    </div>
+                `;
+            }
+        }, 200);
+    } else {
+        inicializarNavegacao();
+        carregarSecao('meus-dados');
+    }
 });
 
 /**
@@ -51,20 +73,22 @@ function atualizarSidebarAtivo(secao) {
  * Carrega seção específica
  */
 async function carregarSecao(secao) {
-    // Resetar subseção se mudar de seção
-    if (estadoAtual.secaoAtiva !== secao && estadoAtual.secaoAtiva === 'conexao-focus') {
-        estadoAtual.subsecao = null;
-    }
-    // Se entrar em conexao-focus, resetar subseção
-    if (secao === 'conexao-focus' && estadoAtual.secaoAtiva !== 'conexao-focus') {
-        estadoAtual.subsecao = null;
-    }
     
     estadoAtual.secaoAtiva = secao;
     atualizarSidebarAtivo(secao);
     
     const contentArea = document.getElementById('content-area');
-    contentArea.innerHTML = Components.renderizarLoading();
+    if (!contentArea) {
+        console.error('content-area não encontrado');
+        return;
+    }
+    
+    // Verificar se Components está disponível
+    if (window.Components && window.Components.renderizarLoading) {
+        contentArea.innerHTML = window.Components.renderizarLoading();
+    } else {
+        contentArea.innerHTML = '<div class="content-section"><div class="loading-spinner"></div><p>Carregando...</p></div>';
+    }
 
     switch (secao) {
         case 'meus-dados':
@@ -76,17 +100,14 @@ async function carregarSecao(secao) {
         case 'conexao-focus':
             await carregarConexaoFocus();
             break;
-        case 'requisicoes':
-            await carregarRequisicoes();
+        case 'notas-enviadas':
+            await carregarNotasEnviadas();
+            break;
+        case 'buscar-notas':
+            await carregarBuscarNotas();
             break;
         case 'pedidos':
             await carregarPedidos();
-            break;
-        case 'municipios':
-            carregarMunicipios();
-            break;
-        case 'webhooks':
-            carregarWebhooks();
             break;
         default:
             contentArea.innerHTML = '<div class="content-section"><h2>Seção não encontrada</h2></div>';
@@ -98,7 +119,13 @@ async function carregarSecao(secao) {
  */
 async function carregarMeusDados() {
     const contentArea = document.getElementById('content-area');
-    contentArea.innerHTML = Components.renderizarLoading();
+    if (!contentArea) return;
+    
+    if (window.Components && window.Components.renderizarLoading) {
+        contentArea.innerHTML = window.Components.renderizarLoading();
+    } else {
+        contentArea.innerHTML = '<div class="content-section"><div class="loading-spinner"></div><p>Carregando...</p></div>';
+    }
     
     // Buscar dados do servidor
     let dadosEmitente = {
@@ -228,7 +255,13 @@ function resetarMeusDados() {
  */
 async function carregarConexaoWooCommerce() {
     const contentArea = document.getElementById('content-area');
-    contentArea.innerHTML = Components.renderizarLoading();
+    if (!contentArea) return;
+    
+    if (window.Components && window.Components.renderizarLoading) {
+        contentArea.innerHTML = window.Components.renderizarLoading();
+    } else {
+        contentArea.innerHTML = '<div class="content-section"><div class="loading-spinner"></div><p>Carregando...</p></div>';
+    }
     
     // Buscar configurações do WooCommerce
     const resultado = await API.Config.getWooCommerce();
@@ -475,91 +508,56 @@ function resetarWooCommerce() {
 }
 
 /**
- * Carrega seção de Conexão FocusNFe
+ * Carrega seção de Conexão FocusNFe - Página única com todas as configurações
  */
 async function carregarConexaoFocus() {
     const contentArea = document.getElementById('content-area');
+    if (!contentArea) return;
     
-    // Se não tem subseção definida, mostrar menu de subseções
-    if (!estadoAtual.subsecao) {
-        const html = `
-            <div class="content-section">
-                <h2 class="section-title">Conexão FocusNFe</h2>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 24px;">
-                    <button class="subsecao-card" onclick="carregarSubsecao('tokens')">
-                        <svg width="48" height="48" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom: 12px;">
-                            <path d="M10 2L3 6v8l7 4 7-4V6l-7-4z" stroke="var(--color-orange)" stroke-width="1.5" fill="none"/>
-                            <circle cx="10" cy="10" r="2" stroke="var(--color-orange)" stroke-width="1.5" fill="none"/>
-                        </svg>
-                        <h3>Tokens</h3>
-                        <p>Gerenciar tokens de homologação e produção</p>
-                    </button>
-                    <button class="subsecao-card" onclick="carregarSubsecao('ambiente')">
-                        <svg width="48" height="48" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom: 12px;">
-                            <rect x="3" y="3" width="14" height="14" rx="2" stroke="var(--color-orange)" stroke-width="1.5" fill="none"/>
-                            <path d="M3 8h14M8 3v14" stroke="var(--color-orange)" stroke-width="1.5"/>
-                        </svg>
-                        <h3>Ambiente</h3>
-                        <p>Configurar ambiente (Homologação/Produção)</p>
-                    </button>
-                </div>
-            </div>
-        `;
-        contentArea.innerHTML = html;
+    if (window.Components && window.Components.renderizarLoading) {
+        contentArea.innerHTML = window.Components.renderizarLoading();
     } else {
-        // Carregar subseção específica
-        switch (estadoAtual.subsecao) {
-            case 'tokens':
-                carregarTokens();
-                break;
-            case 'ambiente':
-                carregarAmbiente();
-                break;
-        }
+        contentArea.innerHTML = '<div class="content-section"><div class="loading-spinner"></div><p>Carregando...</p></div>';
     }
-}
-
-/**
- * Carrega subseção específica
- */
-async function carregarSubsecao(subsecao) {
-    estadoAtual.subsecao = subsecao;
-    await carregarConexaoFocus();
-}
-
-/**
- * Volta para menu de subseções
- */
-async function voltarConexaoFocus() {
-    estadoAtual.subsecao = null;
-    await carregarConexaoFocus();
-}
-
-/**
- * Carrega subseção de Tokens
- */
-async function carregarTokens() {
-    const contentArea = document.getElementById('content-area');
-    contentArea.innerHTML = Components.renderizarLoading();
     
-    // Buscar informações do servidor
+    // Buscar configurações do FocusNFe
     const resultado = await API.Config.getFocus();
+    const healthResult = await API.Config.getHealth();
+    
     const dadosFocus = resultado.sucesso ? resultado.dados : {
         ambiente: 'homologacao',
         token_homologacao: '4tn92XZHfM22uOfhtmbhb3dMvLk48ymA',
         token_producao: ''
     };
     
+    const ambienteAtual = healthResult.sucesso ? (healthResult.dados.ambiente || dadosFocus.ambiente) : dadosFocus.ambiente;
+    
     const tokenHomologacao = dadosFocus.token_homologacao || '';
     const tokenProducao = dadosFocus.token_producao || '';
     
     const html = `
         <div class="content-section">
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px;">
-                <button class="btn btn-secondary" onclick="voltarConexaoFocus()" style="padding: 8px 16px;">← Voltar</button>
-                <h2 class="section-title" style="margin: 0;">Tokens</h2>
+            <h2 class="section-title">Conexão FocusNFe</h2>
+            <div style="max-width: 900px;">
+                <form id="form-focus-config">
+                    <!-- Ambiente -->
+                    <div class="form-group" style="margin-bottom: 32px;">
+                        <label class="form-label">Ambiente</label>
+                        <select class="form-select" id="focus-ambiente">
+                            <option value="homologacao" ${ambienteAtual === 'homologacao' ? 'selected' : ''}>Homologação (Testes)</option>
+                            <option value="producao" ${ambienteAtual === 'producao' ? 'selected' : ''}>Produção (Real)</option>
+                        </select>
+                        <small style="color: var(--color-gray-medium); margin-top: 4px; display: block;">
+                            Ambiente atual: <strong>${ambienteAtual.toUpperCase()}</strong>
+                            <br>
+                            <span style="font-size: 12px;">
+                                <strong>Homologação:</strong> Ambiente de testes, notas não têm valor fiscal<br>
+                                <strong>Produção:</strong> Ambiente real, notas têm valor fiscal
+                            </span>
+                        </small>
             </div>
-            <div style="max-width: 800px;">
+                    
+                    <!-- Token de Homologação -->
                 <div class="form-group" style="margin-bottom: 32px;">
                     <label class="form-label">Token de Homologação</label>
                     <div style="display: flex; gap: 8px;">
@@ -570,6 +568,8 @@ async function carregarTokens() {
                         Token atual: <span id="token-preview-homologacao">${tokenHomologacao ? tokenHomologacao.substring(0, 10) + '...' : 'Não configurado'}</span>
                     </small>
                 </div>
+                    
+                    <!-- Token de Produção -->
                 <div class="form-group" style="margin-bottom: 32px;">
                     <label class="form-label">Token de Produção</label>
                     <div style="display: flex; gap: 8px;">
@@ -580,61 +580,56 @@ async function carregarTokens() {
                         Token atual: <span id="token-preview-producao">${tokenProducao ? tokenProducao.substring(0, 10) + '...' : 'Não configurado'}</span>
                     </small>
                 </div>
-                <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                    <button type="button" class="btn btn-secondary" onclick="resetarTokens()">Cancelar</button>
-                    <button type="button" class="btn btn-primary" onclick="salvarTokens()">Salvar Tokens</button>
+                    
+                    <!-- Informações adicionais -->
+                    <div style="background-color: var(--color-gray-light); padding: 20px; border-radius: 8px; margin-bottom: 24px;">
+                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px; color: var(--color-gray-dark);">Como obter os tokens</h3>
+                        <ol style="margin: 0; padding-left: 20px; color: var(--color-gray-medium); font-size: 14px; line-height: 1.8;">
+                            <li>Acesse o painel da FocusNFe: <a href="https://focusnfe.com.br" target="_blank" style="color: var(--color-orange);">https://focusnfe.com.br</a></li>
+                            <li>Faça login na sua conta</li>
+                            <li>Vá em <strong>Configurações > Tokens</strong></li>
+                            <li>Copie o token de homologação ou produção conforme necessário</li>
+                            <li>Cole o token no campo correspondente acima</li>
+                        </ol>
                 </div>
+                    
+                    <!-- Teste de Conexão -->
+                    <div style="margin-bottom: 24px; padding-top: 24px; border-top: 1px solid var(--color-border);">
+                        <button type="button" class="btn btn-secondary" onclick="testarConexaoFocus()" id="btn-testar-conexao" style="width: 100%; margin-bottom: 16px;">
+                            Testar Conexão
+                        </button>
+                        <div id="resultado-teste-focus" style="display: none;"></div>
+            </div>
+                    
+                    <!-- Botões de ação -->
+                <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                        <button type="button" class="btn btn-secondary" onclick="resetarFocusConfig()">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Salvar Configurações</button>
+                </div>
+                </form>
             </div>
         </div>
     `;
     
     contentArea.innerHTML = html;
+    
+    // Adicionar event listener ao formulário
+    const form = document.getElementById('form-focus-config');
+    if (form) {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await salvarFocusConfig();
+        });
+    }
+    
+    // Salvar dados originais para reset
+    estadoAtual.dados.focus = {
+        ambiente: ambienteAtual,
+        token_homologacao: tokenHomologacao,
+        token_producao: tokenProducao
+    };
 }
 
-/**
- * Carrega subseção de Ambiente
- */
-async function carregarAmbiente() {
-    const contentArea = document.getElementById('content-area');
-    
-    // Buscar ambiente atual
-    const resultado = await API.Config.getHealth();
-    const ambienteAtual = resultado.sucesso ? (resultado.dados.ambiente || 'homologacao') : 'homologacao';
-    
-    const html = `
-        <div class="content-section">
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px;">
-                <button class="btn btn-secondary" onclick="voltarConexaoFocus()" style="padding: 8px 16px;">← Voltar</button>
-                <h2 class="section-title" style="margin: 0;">Ambiente</h2>
-            </div>
-            <div style="max-width: 600px;">
-                <div class="form-group" style="margin-bottom: 24px;">
-                    <label class="form-label">Ambiente Atual</label>
-                    <select class="form-select" id="config-ambiente">
-                        <option value="homologacao" ${ambienteAtual === 'homologacao' ? 'selected' : ''}>Homologação (Testes)</option>
-                        <option value="producao" ${ambienteAtual === 'producao' ? 'selected' : ''}>Produção (Real)</option>
-                    </select>
-                    <small style="color: var(--color-gray-medium); margin-top: 4px; display: block;">
-                        Ambiente atual: <strong>${ambienteAtual.toUpperCase()}</strong>
-                    </small>
-                </div>
-                <div style="background-color: var(--color-gray-light); padding: 16px; border-radius: 4px; margin-bottom: 24px;">
-                    <h4 style="margin-bottom: 8px; font-size: 14px; font-weight: 600;">Informações:</h4>
-                    <ul style="margin: 0; padding-left: 20px; color: var(--color-gray-medium); font-size: 13px;">
-                        <li><strong>Homologação:</strong> Ambiente de testes, notas não têm valor fiscal</li>
-                        <li><strong>Produção:</strong> Ambiente real, notas têm valor fiscal</li>
-                    </ul>
-                </div>
-                <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                    <button type="button" class="btn btn-secondary" onclick="resetarAmbiente()">Cancelar</button>
-                    <button type="button" class="btn btn-primary" onclick="salvarAmbiente()">Salvar Ambiente</button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    contentArea.innerHTML = html;
-}
 
 /**
  * Toggle visibilidade do token
@@ -643,6 +638,8 @@ function toggleTokenVisibility(tipo) {
     const input = document.getElementById(`token-${tipo}`);
     const btn = document.getElementById(`btn-toggle-${tipo}`);
     
+    if (!input || !btn) return;
+    
     if (input.type === 'password') {
         input.type = 'text';
         btn.textContent = 'Ocultar';
@@ -650,55 +647,166 @@ function toggleTokenVisibility(tipo) {
         input.type = 'password';
         btn.textContent = 'Mostrar';
     }
+    
+    // Atualizar preview
+    const previewId = `token-preview-${tipo}`;
+    const preview = document.getElementById(previewId);
+    if (preview && input.value) {
+        preview.textContent = input.value.substring(0, 10) + '...';
+    }
 }
 
 /**
- * Salva tokens
+ * Salva configurações do FocusNFe
  */
-async function salvarTokens() {
-    const tokenHomologacao = document.getElementById('token-homologacao').value;
-    const tokenProducao = document.getElementById('token-producao').value;
+async function salvarFocusConfig() {
+    const ambiente = document.getElementById('focus-ambiente').value;
+    const tokenHomologacao = document.getElementById('token-homologacao').value.trim();
+    const tokenProducao = document.getElementById('token-producao').value.trim();
     
-    if (!tokenHomologacao && !tokenProducao) {
-        alert('Preencha pelo menos um token');
+    // Validação básica
+    if (ambiente === 'homologacao' && !tokenHomologacao) {
+        alert('O token de homologação é obrigatório quando o ambiente está em homologação.');
         return;
     }
     
-    // Por enquanto, apenas mostra mensagem (implementar API depois)
-    alert('Funcionalidade de salvar tokens será implementada via API.\n\nTokens:\nHomologação: ' + (tokenHomologacao ? tokenHomologacao.substring(0, 10) + '...' : 'Não alterado') + '\nProdução: ' + (tokenProducao ? tokenProducao.substring(0, 10) + '...' : 'Não alterado'));
-}
-
-/**
- * Reseta tokens
- */
-async function resetarTokens() {
-    const resultado = await API.Config.getFocus();
-    const dadosFocus = resultado.sucesso ? resultado.dados : {
-        token_homologacao: '4tn92XZHfM22uOfhtmbhb3dMvLk48ymA',
-        token_producao: ''
-    };
+    if (ambiente === 'producao' && !tokenProducao) {
+        alert('O token de produção é obrigatório quando o ambiente está em produção.');
+        return;
+    }
     
-    document.getElementById('token-homologacao').value = dadosFocus.token_homologacao || '';
-    document.getElementById('token-producao').value = dadosFocus.token_producao || '';
-}
-
-/**
- * Salva ambiente
- */
-async function salvarAmbiente() {
-    const ambiente = document.getElementById('config-ambiente').value;
+    // Mostrar loading
+    const submitBtn = document.querySelector('#form-focus-config button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Salvando...';
     
-    // Por enquanto, apenas mostra mensagem (implementar API depois)
-    alert('Funcionalidade de salvar ambiente será implementada via API.\n\nAmbiente selecionado: ' + ambiente.toUpperCase());
+    try {
+        const resultado = await API.Config.salvarFocus({
+            ambiente: ambiente,
+            token_homologacao: tokenHomologacao,
+            token_producao: tokenProducao
+        });
+        
+        if (resultado.sucesso) {
+            alert('Configurações salvas com sucesso!');
+            // Recarregar página para atualizar dados
+            await carregarConexaoFocus();
+        } else {
+            alert('Erro ao salvar configurações: ' + (resultado.erro || 'Erro desconhecido'));
+        }
+    } catch (error) {
+        console.error('Erro ao salvar configurações:', error);
+        alert('Erro ao salvar configurações: ' + error.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+    }
 }
 
 /**
- * Reseta ambiente
+ * Reseta configurações do FocusNFe
  */
-async function resetarAmbiente() {
-    const resultado = await API.Config.getHealth();
-    const ambienteAtual = resultado.sucesso ? (resultado.dados.ambiente || 'homologacao') : 'homologacao';
-    document.getElementById('config-ambiente').value = ambienteAtual;
+async function resetarFocusConfig() {
+    if (estadoAtual.dados.focus) {
+        const dados = estadoAtual.dados.focus;
+        document.getElementById('focus-ambiente').value = dados.ambiente || 'homologacao';
+        document.getElementById('token-homologacao').value = dados.token_homologacao || '';
+        document.getElementById('token-producao').value = dados.token_producao || '';
+        
+        // Atualizar previews
+        const previewHomologacao = document.getElementById('token-preview-homologacao');
+        const previewProducao = document.getElementById('token-preview-producao');
+        if (previewHomologacao) {
+            previewHomologacao.textContent = dados.token_homologacao ? dados.token_homologacao.substring(0, 10) + '...' : 'Não configurado';
+        }
+        if (previewProducao) {
+            previewProducao.textContent = dados.token_producao ? dados.token_producao.substring(0, 10) + '...' : 'Não configurado';
+        }
+    } else {
+        // Recarregar do servidor
+        await carregarConexaoFocus();
+    }
+}
+
+/**
+ * Testa conexão com FocusNFe
+ */
+async function testarConexaoFocus() {
+    const resultadoDiv = document.getElementById('resultado-teste-focus');
+    const btnTestar = document.getElementById('btn-testar-conexao');
+    
+    if (!resultadoDiv || !btnTestar) return;
+    
+    // Mostrar loading
+    resultadoDiv.style.display = 'block';
+    resultadoDiv.innerHTML = `
+        <div style="padding: 12px; background-color: #f8f9fa; border-radius: 4px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <div class="loading-spinner" style="width: 16px; height: 16px; border-width: 2px;"></div>
+                <span style="color: #666; font-size: 14px;">Testando conexão com FocusNFe...</span>
+            </div>
+        </div>
+    `;
+    
+    btnTestar.disabled = true;
+    btnTestar.textContent = 'Testando...';
+    
+    try {
+        const resultado = await API.Config.testarConexao();
+        
+        let html = '';
+        if (resultado.sucesso) {
+            html = `
+                <div style="padding: 16px; background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; color: #155724;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #155724;">✓ Conexão bem-sucedida!</h4>
+                    <div style="font-size: 14px; line-height: 1.8;">
+                        <div><strong>Status:</strong> ${resultado.mensagem || 'Conexão estabelecida'}</div>
+                        <div><strong>Ambiente:</strong> ${resultado.ambiente ? resultado.ambiente.toUpperCase() : 'N/A'}</div>
+                        ${resultado.status ? `<div><strong>Status HTTP:</strong> ${resultado.status}</div>` : ''}
+                        ${resultado.token_preview ? `<div><strong>Token:</strong> ${resultado.token_preview}</div>` : ''}
+                        ${resultado.detalhes ? `<div style="margin-top: 8px; font-size: 13px; color: #155724;">${resultado.detalhes}</div>` : ''}
+                    </div>
+                </div>
+            `;
+        } else {
+            html = `
+                <div style="padding: 16px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; color: #721c24;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #721c24;">✗ Erro na conexão</h4>
+                    <div style="font-size: 14px; line-height: 1.8;">
+                        <div><strong>Erro:</strong> ${resultado.erro || resultado.mensagem || 'Erro desconhecido'}</div>
+                        ${resultado.status ? `<div><strong>Status HTTP:</strong> ${resultado.status}</div>` : ''}
+                        ${resultado.ambiente ? `<div><strong>Ambiente:</strong> ${resultado.ambiente.toUpperCase()}</div>` : ''}
+                        ${resultado.detalhes ? `<div style="margin-top: 12px; font-size: 13px; color: #721c24;"><strong>Detalhes:</strong> ${resultado.detalhes}</div>` : ''}
+                        <div style="margin-top: 12px; font-size: 13px;">
+                            <strong>Possíveis causas:</strong>
+                            <ul style="margin: 8px 0 0 20px; padding: 0;">
+                                <li>Token inválido ou expirado</li>
+                                <li>Token não tem permissão para acessar a API</li>
+                                <li>Ambiente incorreto (homologação vs produção)</li>
+                                <li>Problemas de rede ou firewall</li>
+                                <li>Servidor FocusNFe temporariamente indisponível</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        resultadoDiv.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Erro ao testar conexão:', error);
+        resultadoDiv.innerHTML = `
+            <div style="padding: 16px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; color: #721c24;">
+                <h4 style="margin: 0 0 8px 0; font-size: 16px; color: #721c24;">✗ Erro ao testar conexão</h4>
+                <div style="font-size: 14px;">${error.message || 'Erro desconhecido ao testar conexão'}</div>
+            </div>
+        `;
+    } finally {
+        btnTestar.disabled = false;
+        btnTestar.textContent = 'Testar Conexão';
+    }
 }
 
 /**
@@ -710,12 +818,12 @@ async function carregarRequisicoes() {
     const html = `
         <div class="content-section">
             <h2 class="section-title">Pesquisa de Requisições</h2>
-            ${Components.renderizarFormularioPesquisa('pesquisarRequisicoes', 'limparFiltrosRequisicoes')}
+            ${window.Components ? window.Components.renderizarFormularioPesquisa('pesquisarRequisicoes', 'limparFiltrosRequisicoes') : '<div>Erro: Components não disponível</div>'}
         </div>
         <div class="content-section">
             <h2 class="section-title">Requisições</h2>
             <div id="tabela-requisicoes">
-                ${Components.renderizarLoading()}
+                ${window.Components ? window.Components.renderizarLoading() : '<div class="loading-spinner"></div><p>Carregando...</p>'}
             </div>
             <div id="paginacao-requisicoes"></div>
         </div>
@@ -736,7 +844,7 @@ async function buscarRequisicoes() {
     
     if (!tabelaArea) return;
     
-    tabelaArea.innerHTML = Components.renderizarLoading();
+    tabelaArea.innerHTML = window.Components ? window.Components.renderizarLoading() : '<div class="loading-spinner"></div><p>Carregando...</p>';
     
     const filtros = {
         limite: 50,
@@ -748,15 +856,15 @@ async function buscarRequisicoes() {
     
     if (resultado.sucesso) {
         estadoAtual.dados.requisicoes = Array.isArray(resultado.dados) ? resultado.dados : [];
-        tabelaArea.innerHTML = Components.renderizarTabelaRequisicoes(estadoAtual.dados.requisicoes);
+        tabelaArea.innerHTML = window.Components ? window.Components.renderizarTabelaRequisicoes(estadoAtual.dados.requisicoes) : '<div>Erro: Components não disponível</div>';
         
         // Calcular paginação (assumindo 50 itens por página)
         const totalPaginas = Math.ceil(estadoAtual.dados.requisicoes.length / 50) || 1;
-        paginacaoArea.innerHTML = Components.renderizarPaginacao(
+        paginacaoArea.innerHTML = window.Components ? window.Components.renderizarPaginacao(
             estadoAtual.paginaAtual,
             totalPaginas,
             'mudarPaginaRequisicoes'
-        );
+        ) : '';
     } else {
         tabelaArea.innerHTML = `<div class="empty-state"><p>Erro ao carregar requisições: ${resultado.erro}</p></div>`;
     }
@@ -863,6 +971,58 @@ function atualizarStatusConexao(mensagem, tipo = 'info') {
 /**
  * Carrega seção de Pedidos WooCommerce - Mostra todos os pedidos com filtros de mês
  */
+/**
+ * Converte pedido do banco de dados para formato WooCommerce (para compatibilidade com a interface)
+ */
+function converterPedidoBancoParaWooCommerce(pedidoBanco) {
+    // Parsear dados_pedido se for string JSON
+    let dados = pedidoBanco.dados_pedido || {};
+    if (typeof dados === 'string') {
+        try {
+            dados = JSON.parse(dados);
+        } catch (e) {
+            console.warn('Erro ao parsear dados_pedido:', e);
+            dados = {};
+        }
+    }
+    
+    // Converter para formato WooCommerce
+    return {
+        id: parseInt(pedidoBanco.pedido_id) || pedidoBanco.pedido_id,
+        number: pedidoBanco.pedido_id,
+        date_created: dados.data_pedido || dados.data_emissao || pedidoBanco.created_at,
+        total: String(dados.valor_total || dados.valor_servicos || '0'),
+        status: pedidoBanco.status || dados.status_wc || 'pending',
+        billing: {
+            first_name: dados.nome ? dados.nome.split(' ')[0] : '',
+            last_name: dados.nome ? dados.nome.split(' ').slice(1).join(' ') : '',
+            company: dados.razao_social || '',
+            email: dados.email || '',
+            phone: dados.telefone || '',
+            address_1: dados.endereco?.rua || '',
+            address_2: dados.endereco?.complemento || dados.endereco?.numero || '',
+            city: dados.endereco?.cidade || '',
+            state: dados.endereco?.estado || '',
+            postcode: dados.endereco?.cep || '',
+            country: dados.endereco?.pais || 'BR'
+        },
+        line_items: (dados.servicos || []).map(servico => ({
+            id: servico.codigo || servico.numero_item,
+            name: servico.nome || servico.discriminacao || 'Serviço',
+            quantity: servico.quantidade || 1,
+            price: servico.valor_unitario || 0,
+            total: servico.total || servico.valor_unitario || 0,
+            subtotal: servico.subtotal || servico.total || servico.valor_unitario || 0,
+            categories: servico.categorias || [],
+            category: servico.categorias && servico.categorias.length > 0 ? servico.categorias[0] : null
+        })),
+        shipping_total: String(dados.frete || '0'),
+        discount_total: String(dados.desconto_total || '0'),
+        payment_method: dados.forma_pagamento || 'pix',
+        customer_note: dados.observacoes || ''
+    };
+}
+
 async function carregarPedidos() {
     const contentArea = document.getElementById('content-area');
     
@@ -872,98 +1032,84 @@ async function carregarPedidos() {
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                 <h2 class="section-title" style="margin: 0;">Pedidos WooCommerce</h2>
                 <div id="status-woocommerce" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
-                    <span style="color: #666; font-size: 12px;">⏳ Iniciando conexão...</span>
+                    <span style="color: #666; font-size: 12px;">⏳ Carregando do WooCommerce...</span>
                 </div>
             </div>
             <div style="text-align: center; padding: 40px;">
                 <div class="loading-spinner" style="width: 40px; height: 40px; margin: 0 auto 16px;"></div>
-                <p style="color: var(--color-gray-medium);">Carregando pedidos...</p>
+                <p style="color: var(--color-gray-medium);">Carregando pedidos do WooCommerce...</p>
             </div>
         </div>
     `;
     
     try {
-        atualizarStatusConexao('Testando conexão com WooCommerce...', 'info');
-        
-        // Primeiro, testar a conexão
-        const testeConexao = await API.WooCommerce.testarConexao();
-        console.log('Teste de conexão:', testeConexao);
-        
-        if (!testeConexao.sucesso) {
-            atualizarStatusConexao(`✗ Erro na conexão: ${testeConexao.erro || 'Erro desconhecido'}`, 'error');
-            throw new Error(testeConexao.erro || 'Erro ao conectar com WooCommerce');
-        }
-        
-        atualizarStatusConexao(`✓ Conexão OK - Total de pedidos: ${testeConexao.total_pedidos || 'N/A'}`, 'success');
-        
         // Gerar lista de meses (últimos 12 meses)
         const meses = gerarListaMeses();
-        atualizarStatusConexao('Lista de meses gerada', 'info');
         
-        // Buscar TODOS os pedidos (sem filtro de status)
-        atualizarStatusConexao('Buscando todos os pedidos (sem filtro de status)...', 'info');
-        console.log('Buscando todos os pedidos (sem filtro de status)...');
-        
-        let resultado = await API.WooCommerce.buscarPedidos({
-            per_page: 100,
-            page: 1,
-            orderby: 'date',
-            order: 'desc'
-        });
-        
-        console.log('Resultado da busca:', resultado);
-        console.log('Tipo do resultado:', typeof resultado);
-        console.log('Chaves do resultado:', Object.keys(resultado || {}));
+        // Buscar pedidos diretamente do WooCommerce (sem usar banco)
+        atualizarStatusConexao('Carregando pedidos do WooCommerce...', 'info');
         
         let todosPedidos = [];
-        // Verificar se resultado tem pedidos diretamente ou dentro de dados
-        const pedidos = resultado.pedidos || (resultado.dados && resultado.dados.pedidos) || [];
-        const sucesso = resultado.sucesso || (resultado.dados && resultado.dados.sucesso) || false;
+        let page = 1;
+        const perPage = 100; // WooCommerce permite até 100 por página
         
-        if (sucesso && pedidos && pedidos.length > 0) {
-            todosPedidos = pedidos;
-            console.log(`Encontrados ${todosPedidos.length} pedidos na primeira página`);
-            atualizarStatusConexao(`Página 1: ${todosPedidos.length} pedidos encontrados`, 'success');
-            
-            // Se houver mais páginas, buscar todas
-            const totalPages = parseInt(resultado.total_pages || (resultado.dados && resultado.dados.total_pages)) || 1;
-            console.log(`Total de páginas: ${totalPages} (tipo: ${typeof totalPages})`);
-            
-            if (totalPages > 1) {
-                atualizarStatusConexao(`Buscando ${totalPages - 1} página(s) adicional(is)...`, 'info');
-                for (let page = 2; page <= totalPages; page++) {
-                    atualizarStatusConexao(`Buscando página ${page} de ${totalPages}...`, 'info');
-                    console.log(`Buscando página ${page}...`);
-                    const pagina = await API.WooCommerce.buscarPedidos({
-                        per_page: 100,
+        // Buscar pedidos de todos os meses (últimos 12 meses)
+        while (true) {
+            const resultado = await API.WooCommerce.buscarPedidos({
+                per_page: perPage,
                         page: page,
                         orderby: 'date',
                         order: 'desc'
                     });
                     
-                    const paginaPedidos = pagina.pedidos || (pagina.dados && pagina.dados.pedidos) || [];
-                    const paginaSucesso = pagina.sucesso || (pagina.dados && pagina.dados.sucesso) || false;
-                    
-                    if (paginaSucesso && paginaPedidos && paginaPedidos.length > 0) {
-                        todosPedidos = todosPedidos.concat(paginaPedidos);
-                        console.log(`Página ${page}: ${paginaPedidos.length} pedidos`);
-                        atualizarStatusConexao(`Página ${page}: ${paginaPedidos.length} pedidos`, 'success');
-                    }
-                }
+            // Verificar estrutura da resposta
+            let pedidos = [];
+            if (Array.isArray(resultado)) {
+                pedidos = resultado;
+            } else if (resultado && Array.isArray(resultado.dados)) {
+                pedidos = resultado.dados;
+            } else if (resultado && Array.isArray(resultado.pedidos)) {
+                pedidos = resultado.pedidos;
+            } else if (resultado && resultado.sucesso && Array.isArray(resultado.dados)) {
+                pedidos = resultado.dados;
+            } else {
+                console.warn('Formato de resposta inesperado:', resultado);
+                break;
             }
             
-            atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos carregados com sucesso`, 'success');
-        } else {
-            const erro = resultado.erro || (resultado.dados && resultado.dados.erro) || 'Não foi possível carregar pedidos';
-            atualizarStatusConexao(`✗ Erro: ${erro}`, 'error');
-            console.error('Erro ao buscar pedidos:', erro);
-            console.error('Resultado completo:', resultado);
+            if (!pedidos || pedidos.length === 0) {
+                break;
+            }
+            
+            todosPedidos = todosPedidos.concat(pedidos);
+            
+            // Se retornou menos que perPage, é a última página
+            if (pedidos.length < perPage) {
+                break;
+            }
+            
+            page++;
+            
+            // Atualizar status
+            atualizarStatusConexao(`Carregando pedidos do WooCommerce... (${todosPedidos.length} carregados)`, 'info');
         }
+        
+        // Ordenar por data (mais recente primeiro)
+        todosPedidos.sort((a, b) => {
+            const dateA = new Date(a.date_created || 0);
+            const dateB = new Date(b.date_created || 0);
+            return dateB - dateA;
+        });
+        
+        atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos carregados do WooCommerce`, 'success');
         
         // Salvar no estado
         estadoAtual.dados.meses = meses;
         estadoAtual.dados.todosPedidos = todosPedidos;
         estadoAtual.filtroMes = null; // Sem filtro inicialmente
+        estadoAtual.filtroStatus = null;
+        estadoAtual.filtroCategoria = null;
+        estadoAtual.agruparPorCategoria = false;
         
         // Debug: verificar dados antes de renderizar
         console.log('Dados antes de renderizar:', {
@@ -972,12 +1118,13 @@ async function carregarPedidos() {
             primeiroPedido: todosPedidos[0] ? {
                 id: todosPedidos[0].id,
                 date_created: todosPedidos[0].date_created,
+                status: todosPedidos[0].status,
                 total: todosPedidos[0].total
             } : null
         });
         
         // Renderizar tela
-        renderizarTelaPedidos(todosPedidos, meses, null);
+        renderizarTelaPedidos(todosPedidos, meses);
         
     } catch (error) {
         console.error('Erro ao carregar pedidos:', error);
@@ -999,16 +1146,39 @@ async function carregarPedidos() {
 }
 
 /**
- * Renderiza a tela de pedidos com filtros
+ * Renderiza a tela de pedidos com accordion de meses
  */
-function renderizarTelaPedidos(pedidos, meses, mesFiltrado) {
+function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCategoria = null, agruparPorCategoria = false) {
     const contentArea = document.getElementById('content-area');
+    
+    // Verificar se Components está disponível
+    if (!window.Components || typeof window.Components.renderizarTabelaPedidos !== 'function') {
+        console.error('Components não está disponível. Aguardando carregamento...');
+        // Tentar novamente após um pequeno delay
+        setTimeout(() => {
+            if (window.Components && typeof window.Components.renderizarTabelaPedidos === 'function') {
+                renderizarTelaPedidos(pedidos, meses, filtroStatus, filtroCategoria, agruparPorCategoria);
+            } else {
+                contentArea.innerHTML = `
+                    <div class="content-section">
+                        <div style="padding: 20px; text-align: center; color: #dc3545;">
+                            <h3>Erro ao carregar componentes</h3>
+                            <p>Por favor, recarregue a página.</p>
+                        </div>
+                    </div>
+                `;
+            }
+        }, 100);
+        return;
+    }
     
     // Debug: verificar se pedidos está definido
     console.log('renderizarTelaPedidos chamado:', {
         totalPedidos: pedidos ? pedidos.length : 0,
-        mesFiltrado: mesFiltrado,
-        meses: meses ? meses.length : 0
+        meses: meses ? meses.length : 0,
+        filtroStatus,
+        filtroCategoria,
+        agruparPorCategoria
     });
     
     // Garantir que pedidos é um array
@@ -1017,52 +1187,258 @@ function renderizarTelaPedidos(pedidos, meses, mesFiltrado) {
         pedidos = [];
     }
     
-    // Filtrar pedidos por mês se houver filtro
-    let pedidosFiltrados = pedidos;
-    if (mesFiltrado) {
-        const [ano, mes] = mesFiltrado.split('-');
-        pedidosFiltrados = pedidos.filter(pedido => {
-            const dataPedido = new Date(pedido.date_created);
-            return dataPedido.getFullYear() === parseInt(ano) && 
-                   (dataPedido.getMonth() + 1) === parseInt(mes);
+    // Extrair todas as categorias únicas de TODOS os pedidos (para o filtro mostrar todas as opções)
+    const todasCategorias = new Set();
+    pedidos.forEach(pedido => {
+        const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
+        if (categorias.length > 0) {
+            categorias.forEach(cat => todasCategorias.add(cat));
+        } else {
+            todasCategorias.add('Sem categoria');
+        }
+    });
+    const categoriasOrdenadas = Array.from(todasCategorias).sort();
+    
+    // Aplicar filtros
+    let pedidosFiltrados = [...pedidos];
+    
+    if (filtroStatus && filtroStatus !== 'todos') {
+        pedidosFiltrados = pedidosFiltrados.filter(p => (p.status || 'pending') === filtroStatus);
+    }
+    
+    if (filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.length > 0) {
+        pedidosFiltrados = pedidosFiltrados.filter(pedido => {
+            const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
+            if (categorias.length === 0) {
+                return filtroCategoria.includes('sem-categoria');
+            }
+            // Verificar se alguma categoria do pedido está na lista de filtros
+            return categorias.some(cat => {
+                const categoriaNormalizada = cat.toLowerCase().replace(/\s+/g, '-');
+                return filtroCategoria.includes(categoriaNormalizada);
+            });
         });
     }
     
-    console.log('Pedidos filtrados:', pedidosFiltrados.length);
+    // Agrupar pedidos por mês
+    const pedidosPorMes = agruparPedidosPorMes(pedidosFiltrados);
+    const mesesOrdenados = meses.sort((a, b) => b.value.localeCompare(a.value));
     
-    // Calcular totais
-    const totalPedidos = pedidosFiltrados.length;
-    const valorTotal = pedidosFiltrados.reduce((sum, p) => sum + parseFloat(p.total || 0), 0);
+    // Opções de status
+    const statusOptions = [
+        { value: 'todos', label: 'Todos os status' },
+        { value: 'pending', label: 'Pendente' },
+        { value: 'processing', label: 'Processando' },
+        { value: 'on-hold', label: 'Em espera' },
+        { value: 'completed', label: 'Concluído' },
+        { value: 'cancelled', label: 'Cancelado' },
+        { value: 'refunded', label: 'Reembolsado' },
+        { value: 'failed', label: 'Falhou' }
+    ];
     
     const html = `
         <div class="content-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                 <h2 class="section-title" style="margin: 0;">Pedidos WooCommerce</h2>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <button 
+                        type="button" 
+                        class="btn btn-primary" 
+                        onclick="atualizarDadosWooCommerce()"
+                        id="btn-atualizar-woocommerce"
+                        style="padding: 8px 16px; font-size: 14px;">
+                        Recarregar do WooCommerce
+                    </button>
                 <div id="status-woocommerce" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
-                    <span style="color: #28a745; font-size: 12px;">✓ ${pedidos.length} pedidos carregados</span>
+                        <span style="color: #28a745; font-size: 12px;">✓ ${pedidosFiltrados.length} pedidos ${filtroStatus || filtroCategoria ? 'filtrados' : 'carregados'}</span>
+                    </div>
                 </div>
             </div>
             
-            <!-- Filtros de Mês -->
+            <!-- Filtros -->
+            <div style="background-color: var(--color-gray-light); padding: 16px; border-radius: 8px; margin-bottom: 24px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">Status:</label>
+                    <select 
+                        id="filtro-status-pedidos"
+                        onchange="aplicarFiltrosPedidos()"
+                        style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; min-width: 180px;">
+                        ${statusOptions.map(opt => `
+                            <option value="${opt.value}" ${filtroStatus === opt.value ? 'selected' : ''}>
+                                ${opt.label}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 8px; position: relative;">
+                    <label style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">Categoria:</label>
+                    <div style="position: relative;">
+                        <button 
+                            type="button"
+                            id="btn-filtro-categoria"
+                            onclick="toggleDropdownCategorias()"
+                            style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; min-width: 200px; background: white; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                            <span id="texto-filtro-categoria">${filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.length > 0 ? `${filtroCategoria.length} categoria(s) selecionada(s)` : 'Todas as categorias'}</span>
+                            <span style="margin-left: 8px;">▼</span>
+                        </button>
+                        <div 
+                            id="dropdown-categorias"
+                            style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; max-height: 300px; overflow-y: auto; min-width: 250px; padding: 8px;">
+                            <div style="padding: 8px; border-bottom: 1px solid #eee;">
+                                <label style="display: flex; align-items: center; cursor: pointer; font-weight: 600;">
+                                    <input 
+                                        type="checkbox" 
+                                        class="checkbox-categoria-todas"
+                                        onchange="toggleTodasCategorias(this)"
+                                        style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
+                                        ${!filtroCategoria || filtroCategoria.length === 0 ? 'checked' : ''}>
+                                    <span>Todas as categorias</span>
+                                </label>
+                            </div>
+                            ${categoriasOrdenadas.map(cat => {
+                                const catId = cat.toLowerCase().replace(/\s+/g, '-');
+                                const isSelected = filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.includes(catId);
+                                return `
+                                    <div style="padding: 8px; border-bottom: 1px solid #f0f0f0;">
+                                        <label style="display: flex; align-items: center; cursor: pointer;">
+                                            <input 
+                                                type="checkbox" 
+                                                class="checkbox-categoria"
+                                                value="${catId}"
+                                                data-categoria="${cat}"
+                                                onchange="atualizarFiltroCategorias()"
+                                                style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
+                                                ${isSelected ? 'checked' : ''}>
+                                            <span>${cat}</span>
+                                        </label>
+                                    </div>
+                                `;
+                            }).join('')}
+                            <div style="padding: 8px; border-top: 1px solid #eee;">
+                                <label style="display: flex; align-items: center; cursor: pointer;">
+                                    <input 
+                                        type="checkbox" 
+                                        class="checkbox-categoria"
+                                        value="sem-categoria"
+                                        data-categoria="Sem categoria"
+                                        onchange="atualizarFiltroCategorias()"
+                                        style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
+                                        ${filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.includes('sem-categoria') ? 'checked' : ''}>
+                                    <span>Sem categoria</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">
+                        <input 
+                            type="checkbox" 
+                            id="agrupar-por-categoria"
+                            ${agruparPorCategoria ? 'checked' : ''}
+                            onchange="aplicarFiltrosPedidos()"
+                            style="margin-right: 6px;">
+                        Agrupar por categoria
+                    </label>
+                </div>
+                
+                ${(filtroStatus || (filtroCategoria && filtroCategoria.length > 0) || agruparPorCategoria) ? `
+                    <button 
+                        type="button"
+                        class="btn btn-secondary"
+                        onclick="limparFiltrosPedidosTela()"
+                        style="padding: 6px 12px; font-size: 14px;">
+                        Limpar Filtros
+                    </button>
+                ` : ''}
+            </div>
+            
+            <!-- Accordion de Meses -->
             <div style="margin-bottom: 24px;">
-                <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+                ${mesesOrdenados.map(mes => {
+                    const grupo = pedidosPorMes[mes.value] || { pedidos: [], total: 0, quantidade: 0 };
+                    const mesId = `mes-${mes.value.replace('-', '')}`;
+                    return `
+                        <div style="border: 1px solid var(--color-border); border-radius: 8px; margin-bottom: 12px; overflow: hidden;">
                     <button 
                         type="button" 
-                        class="btn ${mesFiltrado === null ? 'btn-primary' : 'btn-secondary'}" 
-                        onclick="filtrarPorMes(null)"
-                        style="padding: 8px 16px; font-size: 14px;">
-                        Todos
+                                class="mes-accordion-header"
+                                onclick="toggleMes('${mesId}')"
+                                style="width: 100%; padding: 16px; background-color: var(--color-gray-light); border: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; text-align: left; font-size: 16px; font-weight: 600; color: var(--color-gray-dark);">
+                                <span>${mes.label}</span>
+                                <span id="icon-${mesId}" style="font-size: 20px; transition: transform 0.3s;">▼</span>
                     </button>
-                    ${meses.map(mes => `
+                            <div id="${mesId}" class="mes-accordion-content" style="display: none; padding: 0;">
+                                ${grupo.pedidos.length > 0 ? (window.Components && typeof window.Components.renderizarTabelaPedidos === 'function' ? window.Components.renderizarTabelaPedidos(grupo.pedidos, agruparPorCategoria) : '<div style="padding: 20px; text-align: center; color: #dc3545;">Erro: Components não disponível. Recarregue a página.</div>') : '<div style="padding: 20px; text-align: center; color: var(--color-gray-medium);">Nenhum pedido neste mês</div>'}
+                                ${grupo.pedidos.length > 0 ? `
+                                    <div style="padding: 16px; background-color: #f8f9fa; border-top: 1px solid var(--color-border);">
+                                        <div style="display: flex; gap: 12px; justify-content: center; margin-bottom: 8px;">
                         <button 
                             type="button" 
-                            class="btn ${mesFiltrado === mes.value ? 'btn-primary' : 'btn-secondary'}" 
-                            onclick="filtrarPorMes('${mes.value}')"
-                            style="padding: 8px 16px; font-size: 14px;">
-                            ${mes.label}
+                                                class="btn btn-primary"
+                                                onclick="emitirNFServicoMes('${mes.value}')"
+                                                style="padding: 10px 20px; font-size: 14px; font-weight: 600;">
+                                                Emitir NF Serviço
                         </button>
-                    `).join('')}
+                                            <button 
+                                                type="button"
+                                                class="btn btn-primary"
+                                                onclick="emitirNFProdutoMes('${mes.value}')"
+                                                style="padding: 10px 20px; font-size: 14px; font-weight: 600;">
+                                                Emitir NF Produto
+                                            </button>
                 </div>
+                                        <div style="display: flex; gap: 12px; justify-content: center; margin-bottom: 16px;">
+                                            <button 
+                                                type="button"
+                                                class="btn btn-secondary"
+                                                onclick="emitirNFTeste('servico')"
+                                                style="padding: 6px 12px; font-size: 12px; font-weight: 400; opacity: 0.7;">
+                                                Emitir NF Serviço (TESTE)
+                                            </button>
+                                            <button 
+                                                type="button"
+                                                class="btn btn-secondary"
+                                                onclick="emitirNFTeste('produto')"
+                                                style="padding: 6px 12px; font-size: 12px; font-weight: 400; opacity: 0.7;">
+                                                Emitir NF Produto (TESTE)
+                                            </button>
+                </div>
+                                        <!-- Área de Logs -->
+                                        <div id="logs-mes-${mes.value.replace('-', '')}" style="margin-top: 16px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;">
+                                            <div 
+                                                id="logs-header-${mes.value.replace('-', '')}"
+                                                onclick="toggleLogsMes('${mes.value}')"
+                                                style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #f8f9fa; cursor: pointer; border-bottom: 1px solid #ddd; user-select: none;"
+                                                onmouseover="this.style.background='#e9ecef'"
+                                                onmouseout="this.style.background='#f8f9fa'">
+                                                <div style="display: flex; align-items: center; gap: 8px;">
+                                                    <span id="logs-icon-${mes.value.replace('-', '')}" style="font-size: 12px; transition: transform 0.2s;">▼</span>
+                                                    <div style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">Log do Processo</div>
+                                                </div>
+                                                <button 
+                                                    type="button"
+                                                    onclick="event.stopPropagation(); carregarLogsMes('${mes.value}')"
+                                                    style="padding: 4px 12px; font-size: 12px; background: white; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
+                                                    onmouseover="this.style.background='#e9ecef'"
+                                                    onmouseout="this.style.background='white'">
+                                                    Atualizar
+                                                </button>
+                                            </div>
+                                            <div 
+                                                id="conteudo-logs-mes-${mes.value.replace('-', '')}" 
+                                                style="display: none; background-color: #1e1e1e; color: #d4d4d4; padding: 12px; font-family: 'Courier New', monospace; font-size: 12px; max-height: 300px; overflow-y: auto; min-height: 60px;">
+                                                <div style="color: #888;">Carregando logs...</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
             </div>
             
             <!-- Resumo -->
@@ -1070,31 +1446,14 @@ function renderizarTelaPedidos(pedidos, meses, mesFiltrado) {
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                     <div>
                         <div style="font-size: 14px; color: var(--color-gray-medium); margin-bottom: 4px;">Total de Pedidos</div>
-                        <div style="font-size: 24px; font-weight: 600; color: var(--color-gray-dark);">${totalPedidos}</div>
+                        <div style="font-size: 24px; font-weight: 600; color: var(--color-gray-dark);">${pedidos.length}</div>
                     </div>
                     <div>
                         <div style="font-size: 14px; color: var(--color-gray-medium); margin-bottom: 4px;">Valor Total</div>
-                        <div style="font-size: 24px; font-weight: 600; color: var(--color-orange);">${Components.formatarValor(valorTotal)}</div>
+                        <div style="font-size: 24px; font-weight: 600; color: var(--color-orange);">${window.Components ? window.Components.formatarValor(pedidos.reduce((sum, p) => sum + parseFloat(p.total || 0), 0)) : 'R$ 0,00'}</div>
                     </div>
                 </div>
             </div>
-            
-            <!-- Tabela de Pedidos -->
-            <div id="tabela-pedidos">
-                ${totalPedidos > 0 ? (() => {
-                    console.log('Renderizando tabela com', pedidosFiltrados.length, 'pedidos');
-                    return Components.renderizarTabelaPedidos(pedidosFiltrados);
-                })() : '<div class="empty-state"><p>Nenhum pedido encontrado.</p><p style="font-size: 12px; color: #999;">Total de pedidos carregados: ' + pedidos.length + '</p></div>'}
-            </div>
-            
-            <!-- Área de Emissão -->
-            ${totalPedidos > 0 ? `
-                <div id="area-emissao-lote" style="margin-top: 24px;">
-                    <button type="button" class="btn btn-primary" onclick="emitirLoteNFSe()" style="width: 100%; padding: 12px; font-size: 16px;">
-                        Emitir Todas as Notas ${mesFiltrado ? 'do Mês Selecionado' : ''} (${totalPedidos} pedidos)
-                    </button>
-                </div>
-            ` : ''}
         </div>
     `;
     
@@ -1102,15 +1461,72 @@ function renderizarTelaPedidos(pedidos, meses, mesFiltrado) {
 }
 
 /**
- * Filtra pedidos por mês
+ * Toggle expansão/colapso de mês no accordion
+ */
+function toggleMes(mesId) {
+    const content = document.getElementById(mesId);
+    const icon = document.getElementById(`icon-${mesId}`);
+    
+    if (!content || !icon) return;
+    
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        icon.textContent = '▲';
+        icon.style.transform = 'rotate(0deg)';
+        
+        // Carregar logs quando o mês for expandido
+        // Extrair o mês do mesId (formato: mes-202411)
+        const mesMatch = mesId.match(/mes-(\d{6})/);
+        if (mesMatch) {
+            const mesNum = mesMatch[1];
+            const mes = `${mesNum.substring(0, 4)}-${mesNum.substring(4)}`;
+            carregarLogsMes(mes);
+        }
+    } else {
+        content.style.display = 'none';
+        icon.textContent = '▼';
+        icon.style.transform = 'rotate(0deg)';
+    }
+}
+
+/**
+ * Atualiza dados do WooCommerce (recarrega pedidos diretamente do WooCommerce)
+ */
+async function atualizarDadosWooCommerce() {
+    const btnAtualizar = document.getElementById('btn-atualizar-woocommerce');
+    const statusBar = document.getElementById('status-woocommerce');
+    
+    if (!btnAtualizar) return;
+    
+    // Desabilitar botão e mostrar loading
+    btnAtualizar.disabled = true;
+    btnAtualizar.textContent = 'Recarregando...';
+    
+    if (statusBar) {
+        statusBar.innerHTML = '<span style="color: #666; font-size: 12px;">⏳ Recarregando pedidos do WooCommerce...</span>';
+    }
+    
+    try {
+        // Recarregar pedidos diretamente do WooCommerce (sem salvar no banco)
+        await carregarPedidos();
+    } catch (error) {
+        console.error('Erro ao atualizar dados WooCommerce:', error);
+        if (statusBar) {
+            statusBar.innerHTML = `<span style="color: #dc3545; font-size: 12px;">✗ Erro: ${error.message}</span>`;
+        }
+        alert(`Erro ao sincronizar: ${error.message}`);
+    } finally {
+        btnAtualizar.disabled = false;
+        btnAtualizar.textContent = 'Atualizar dados WooCommerce';
+    }
+}
+
+/**
+ * Filtra pedidos por mês (mantido para compatibilidade, mas não usado mais)
  */
 function filtrarPorMes(mes) {
-    const todosPedidos = estadoAtual.dados.todosPedidos || [];
-    const meses = estadoAtual.dados.meses || gerarListaMeses();
-    
-    estadoAtual.filtroMes = mes;
-    
-    renderizarTelaPedidos(todosPedidos, meses, mes);
+    // Esta função não é mais usada, mas mantida para compatibilidade
+    // Os meses agora são expansíveis via accordion
 }
 
 
@@ -1168,7 +1584,7 @@ async function buscarPedidosFiltrados() {
     }
     
     tabelaArea.style.display = 'block';
-    tabelaArea.innerHTML = Components.renderizarLoading();
+    tabelaArea.innerHTML = window.Components ? window.Components.renderizarLoading() : '<div class="loading-spinner"></div><p>Carregando...</p>';
     if (areaEmissao) areaEmissao.style.display = 'none';
     
     // Coletar filtros
@@ -1201,7 +1617,7 @@ async function buscarPedidosFiltrados() {
         }
         
         // Mostrar tabela de pedidos
-        tabelaArea.innerHTML = Components.renderizarTabelaPedidos(estadoAtual.dados.pedidos);
+        tabelaArea.innerHTML = window.Components ? window.Components.renderizarTabelaPedidos(estadoAtual.dados.pedidos) : '<div>Erro: Components não disponível</div>';
         
         // Mostrar botão de emissão em lote
         if (areaEmissao) {
@@ -1227,34 +1643,1199 @@ function limparFiltrosPedidos() {
 }
 
 /**
- * Ver detalhes de um pedido
+ * Atualiza o status de um pedido
  */
-async function verDetalhesPedido(pedidoId) {
-    const resultado = await API.WooCommerce.buscarPedidoPorId(pedidoId);
-    
-    if (resultado.sucesso) {
-        alert('Detalhes do pedido:\n\n' + JSON.stringify(resultado.dados.pedido, null, 2));
-    } else {
-        alert('Erro ao buscar detalhes: ' + resultado.erro);
+async function atualizarStatusPedido(pedidoId, novoStatus) {
+    try {
+        // Atualizar no banco de dados via API
+        const resultado = await API.Pedidos.atualizarStatus(pedidoId, novoStatus);
+        
+        if (resultado.sucesso || (resultado.dados && resultado.dados.sucesso)) {
+            // Atualizar na interface imediatamente
+            const pedido = estadoAtual.dados.todosPedidos.find(p => (p.id || p.number) == pedidoId);
+            if (pedido) {
+                pedido.status = novoStatus;
+            }
+            
+            console.log(`Status do pedido ${pedidoId} atualizado para: ${novoStatus}`);
+            
+            // Mostrar feedback visual
+            const select = document.querySelector(`select[data-pedido-id="${pedidoId}"]`);
+            if (select) {
+                select.style.backgroundColor = '#d4edda';
+                setTimeout(() => {
+                    select.style.backgroundColor = '';
+                }, 1000);
+            }
+        } else {
+            throw new Error(resultado.erro || 'Erro ao atualizar status');
+        }
+        
+    } catch (error) {
+        console.error('Erro ao atualizar status do pedido:', error);
+        alert('Erro ao atualizar status: ' + (error.message || error.erro || 'Erro desconhecido'));
+        
+        // Reverter o select para o valor anterior
+        const select = document.querySelector(`select[data-pedido-id="${pedidoId}"]`);
+        if (select) {
+            const pedido = estadoAtual.dados.todosPedidos.find(p => (p.id || p.number) == pedidoId);
+            if (pedido) {
+                select.value = pedido.status || 'pending';
+            }
+        }
     }
 }
 
 /**
- * Emite NFSe para um pedido
+ * Extrai categorias dos produtos do pedido (duplicado de components.js para uso em app.js)
  */
-async function emitirNFSePedido(pedidoId) {
-    if (!confirm('Deseja emitir NFSe para este pedido?')) return;
+function extrairCategoriasPedido(pedido) {
+    if (!pedido.line_items || !Array.isArray(pedido.line_items)) {
+        return [];
+    }
     
-    const resultado = await API.WooCommerce.buscarPedidoPorId(pedidoId);
+    const categorias = new Set();
+    pedido.line_items.forEach(item => {
+        // Tentar obter categorias de diferentes formas
+        if (item.categories && Array.isArray(item.categories)) {
+            item.categories.forEach(cat => {
+                if (cat.name) categorias.add(cat.name);
+            });
+        }
+        if (item.category && typeof item.category === 'string') {
+            categorias.add(item.category);
+        }
+        // Se não tiver categoria direta, usar o nome do produto como fallback
+        if (categorias.size === 0 && item.name) {
+            categorias.add(item.name);
+        }
+    });
     
-    if (!resultado.sucesso) {
-        alert('Erro ao buscar pedido: ' + resultado.erro);
+    return Array.from(categorias);
+}
+
+/**
+ * Aplica filtros de status e categoria
+ */
+function aplicarFiltrosPedidos() {
+    if (!estadoAtual.dados.todosPedidos || !estadoAtual.dados.meses) {
         return;
     }
     
-    // Aqui você precisaria mapear os dados do pedido WooCommerce para o formato esperado
-    // Por enquanto, apenas mostra uma mensagem
-    alert('Funcionalidade de emissão será implementada. Pedido ID: ' + pedidoId);
+    const statusSelect = document.getElementById('filtro-status-pedidos');
+    const agruparCheckbox = document.getElementById('agrupar-por-categoria');
+    
+    const filtroStatus = statusSelect ? statusSelect.value : null;
+    const agruparPorCategoria = agruparCheckbox ? agruparCheckbox.checked : false;
+    
+    // Obter categorias selecionadas
+    const categoriasSelecionadas = obterCategoriasSelecionadas();
+    
+    // Salvar no estado
+    estadoAtual.filtroStatus = filtroStatus === 'todos' ? null : filtroStatus;
+    estadoAtual.filtroCategoria = categoriasSelecionadas.length > 0 ? categoriasSelecionadas : null;
+    estadoAtual.agruparPorCategoria = agruparPorCategoria;
+    
+    // Renderizar com filtros
+    renderizarTelaPedidos(
+        estadoAtual.dados.todosPedidos, 
+        estadoAtual.dados.meses,
+        estadoAtual.filtroStatus,
+        estadoAtual.filtroCategoria,
+        estadoAtual.agruparPorCategoria
+    );
+}
+
+/**
+ * Obtém as categorias selecionadas dos checkboxes
+ */
+function obterCategoriasSelecionadas() {
+    const checkboxes = document.querySelectorAll('.checkbox-categoria:checked');
+    return Array.from(checkboxes).map(cb => cb.value);
+}
+
+/**
+ * Atualiza o filtro de categorias quando um checkbox é alterado
+ */
+function atualizarFiltroCategorias() {
+    const categoriasSelecionadas = obterCategoriasSelecionadas();
+    const checkboxTodas = document.querySelector('.checkbox-categoria-todas');
+    
+    // Se nenhuma categoria está selecionada, marcar "Todas"
+    if (categoriasSelecionadas.length === 0) {
+        if (checkboxTodas) checkboxTodas.checked = true;
+    } else {
+        if (checkboxTodas) checkboxTodas.checked = false;
+    }
+    
+    // Atualizar texto do botão
+    const textoFiltro = document.getElementById('texto-filtro-categoria');
+    if (textoFiltro) {
+        textoFiltro.textContent = categoriasSelecionadas.length > 0 
+            ? `${categoriasSelecionadas.length} categoria(s) selecionada(s)`
+            : 'Todas as categorias';
+    }
+    
+    // Aplicar filtros
+    aplicarFiltrosPedidos();
+}
+
+/**
+ * Seleciona ou desseleciona todas as categorias
+ */
+function toggleTodasCategorias(checkbox) {
+    const checkboxes = document.querySelectorAll('.checkbox-categoria');
+    
+    if (checkbox.checked) {
+        // Se "Todas" foi marcada, desmarcar todas as categorias específicas
+        checkboxes.forEach(cb => {
+            cb.checked = false;
+        });
+    }
+    // Se "Todas" foi desmarcada, não fazer nada (manter seleções atuais)
+    
+    // Atualizar texto do botão
+    const textoFiltro = document.getElementById('texto-filtro-categoria');
+    if (textoFiltro) {
+        if (checkbox.checked) {
+            textoFiltro.textContent = 'Todas as categorias';
+        } else {
+            const categoriasSelecionadas = obterCategoriasSelecionadas();
+            textoFiltro.textContent = categoriasSelecionadas.length > 0 
+                ? `${categoriasSelecionadas.length} categoria(s) selecionada(s)`
+                : 'Todas as categorias';
+        }
+    }
+    
+    // Aplicar filtros
+    aplicarFiltrosPedidos();
+}
+
+/**
+ * Abre/fecha o dropdown de categorias
+ */
+function toggleDropdownCategorias() {
+    const dropdown = document.getElementById('dropdown-categorias');
+    if (dropdown) {
+        const isVisible = dropdown.style.display !== 'none';
+        dropdown.style.display = isVisible ? 'none' : 'block';
+        
+        // Fechar ao clicar fora
+        if (!isVisible) {
+            setTimeout(() => {
+                document.addEventListener('click', function fecharDropdown(e) {
+                    if (!dropdown.contains(e.target) && e.target.id !== 'btn-filtro-categoria') {
+                        dropdown.style.display = 'none';
+                        document.removeEventListener('click', fecharDropdown);
+                    }
+                });
+            }, 100);
+        }
+    }
+}
+
+/**
+ * Limpa filtros e recarrega a tela
+ */
+function limparFiltrosPedidosTela() {
+    estadoAtual.filtroStatus = null;
+    estadoAtual.filtroCategoria = null;
+    estadoAtual.agruparPorCategoria = false;
+    
+    // Desmarcar todos os checkboxes de categoria
+    const checkboxes = document.querySelectorAll('.checkbox-categoria');
+    checkboxes.forEach(cb => cb.checked = false);
+    
+    // Marcar "Todas as categorias"
+    const checkboxTodas = document.querySelector('.checkbox-categoria-todas');
+    if (checkboxTodas) checkboxTodas.checked = true;
+    
+    renderizarTelaPedidos(
+        estadoAtual.dados.todosPedidos, 
+        estadoAtual.dados.meses
+    );
+}
+
+/**
+ * Ver detalhes de um pedido
+ */
+async function verDetalhesPedido(pedidoId) {
+    try {
+    const resultado = await API.WooCommerce.buscarPedidoPorId(pedidoId);
+    
+        if (!resultado || !resultado.sucesso) {
+            alert('Erro ao buscar detalhes: ' + (resultado?.erro || 'Erro desconhecido'));
+            return;
+        }
+        
+        const pedido = resultado.dados?.pedido || resultado.pedido || resultado;
+        
+        // Criar popup/modal com os detalhes
+        mostrarPopupDetalhesPedido(pedido);
+        
+    } catch (error) {
+        console.error('Erro ao buscar detalhes do pedido:', error);
+        alert('Erro ao buscar detalhes: ' + error.message);
+    }
+}
+
+/**
+ * Mostra popup com detalhes do pedido WooCommerce
+ */
+function mostrarPopupDetalhesPedido(pedido) {
+    // Criar overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'popup-detalhes-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 10000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+    `;
+    
+    // Criar modal
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        background: white;
+        border-radius: 8px;
+        max-width: 800px;
+        width: 100%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    `;
+    
+    // Header do modal
+    const header = document.createElement('div');
+    header.style.cssText = `
+        padding: 20px;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: var(--color-gray-light);
+    `;
+    
+    const titulo = document.createElement('h2');
+    titulo.textContent = `Pedido #${pedido.id || pedido.number || 'N/A'}`;
+    titulo.style.cssText = 'margin: 0; font-size: 20px; font-weight: 600; color: var(--color-gray-dark);';
+    
+    const btnFechar = document.createElement('button');
+    btnFechar.textContent = '✕';
+    btnFechar.style.cssText = `
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: var(--color-gray-medium);
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    `;
+    btnFechar.onclick = () => overlay.remove();
+    
+    header.appendChild(titulo);
+    header.appendChild(btnFechar);
+    
+    // Body do modal
+    const body = document.createElement('div');
+    body.style.cssText = 'padding: 20px;';
+    
+    // Função auxiliar para formatar dados de forma mais legível
+    const formatarDados = (obj, nivel = 0, chave = '') => {
+        const indent = '  '.repeat(nivel);
+        
+        if (obj === null || obj === undefined) {
+            return `<span style="color: #999;">null</span>`;
+        }
+        
+        if (typeof obj === 'string') {
+            const valor = obj.length > 100 ? obj.substring(0, 100) + '...' : obj;
+            return `<span style="color: #28a745;">"${valor}"</span>`;
+        }
+        
+        if (typeof obj === 'number') {
+            return `<span style="color: #0066cc; font-weight: 600;">${obj}</span>`;
+        }
+        
+        if (typeof obj === 'boolean') {
+            return `<span style="color: #cc0066; font-weight: 600;">${obj}</span>`;
+        }
+        
+        if (Array.isArray(obj)) {
+            if (obj.length === 0) {
+                return `<span style="color: #999;">[]</span>`;
+            }
+            return `<div style="margin-left: ${nivel * 20}px; border-left: 2px solid #e0e0e0; padding-left: 10px;">
+                ${obj.map((item, idx) => `
+                    <div style="margin-bottom: 6px;">
+                        <span style="color: #666; font-weight: 600;">[${idx}]</span>: ${formatarDados(item, nivel + 1)}
+                    </div>
+                `).join('')}
+            </div>`;
+        }
+        
+        if (typeof obj === 'object') {
+            const keys = Object.keys(obj);
+            if (keys.length === 0) {
+                return `<span style="color: #999;">{}</span>`;
+            }
+            return `<div style="margin-left: ${nivel * 20}px; border-left: 2px solid #e0e0e0; padding-left: 10px;">
+                ${keys.map(key => {
+                    const valor = obj[key];
+                    const isComplex = (typeof valor === 'object' && valor !== null) || Array.isArray(valor);
+                    return `
+                        <div style="margin-bottom: ${isComplex ? '12px' : '6px'};">
+                            <span style="color: #0066cc; font-weight: 600;">${key}</span>: ${formatarDados(valor, nivel + 1, key)}
+                        </div>
+                    `;
+                }).join('')}
+            </div>`;
+        }
+        
+        return String(obj);
+    };
+    
+    // Criar conteúdo formatado
+    const conteudo = document.createElement('div');
+    conteudo.style.cssText = `
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        line-height: 1.8;
+        background-color: #f8f9fa;
+        padding: 16px;
+        border-radius: 4px;
+        overflow-x: auto;
+        max-height: 60vh;
+        overflow-y: auto;
+    `;
+    conteudo.innerHTML = formatarDados(pedido);
+    
+    body.appendChild(conteudo);
+    
+    // Footer do modal
+    const footer = document.createElement('div');
+    footer.style.cssText = `
+        padding: 16px 20px;
+        border-top: 1px solid #dee2e6;
+        display: flex;
+        justify-content: flex-end;
+        background-color: var(--color-gray-light);
+    `;
+    
+    const btnFecharFooter = document.createElement('button');
+    btnFecharFooter.textContent = 'Fechar';
+    btnFecharFooter.className = 'btn btn-secondary';
+    btnFecharFooter.style.cssText = 'padding: 8px 16px;';
+    btnFecharFooter.onclick = () => overlay.remove();
+    
+    footer.appendChild(btnFecharFooter);
+    
+    // Montar modal
+    modal.appendChild(header);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    
+    // Fechar ao clicar no overlay (fora do modal)
+    overlay.onclick = (e) => {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    };
+    
+    // Adicionar ao body
+    document.body.appendChild(overlay);
+}
+
+/**
+ * Adiciona log à área de logs do mês
+ */
+function adicionarLogMes(mes, tipo, mensagem, dados = null) {
+    const mesId = mes.replace('-', '');
+    const logsContainer = document.getElementById(`conteudo-logs-mes-${mesId}`);
+    if (!logsContainer) return;
+    
+    // Expandir automaticamente quando adicionar log
+    logsContainer.style.display = 'block';
+    const icon = document.getElementById(`logs-icon-${mesId}`);
+    if (icon) {
+        icon.textContent = '▲';
+    }
+    
+    const timestamp = new Date().toLocaleString('pt-BR');
+    let cor = '#d4d4d4';
+    let prefixo = '';
+    
+    switch(tipo) {
+        case 'enviado':
+            cor = '#4ec9b0';
+            prefixo = '→ ENVIADO';
+            break;
+        case 'recebido':
+            cor = '#569cd6';
+            prefixo = '← RECEBIDO';
+            break;
+        case 'erro':
+            cor = '#f48771';
+            prefixo = '✗ ERRO';
+            break;
+        case 'info':
+            cor = '#ce9178';
+            prefixo = 'ℹ INFO';
+            break;
+        case 'sucesso':
+            cor = '#6a9955';
+            prefixo = '✓ SUCESSO';
+            break;
+        default:
+            prefixo = '•';
+    }
+    
+    const logEntry = document.createElement('div');
+    logEntry.style.cssText = 'margin-bottom: 8px; line-height: 1.6;';
+    logEntry.innerHTML = `
+        <span style="color: #808080;">[${timestamp}]</span>
+        <span style="color: ${cor}; font-weight: 600; margin-left: 8px;">${prefixo}</span>
+        <span style="color: #d4d4d4; margin-left: 8px;">${mensagem}</span>
+        ${dados ? `
+            <div style="margin-left: 20px; margin-top: 4px; color: #888; font-size: 11px; white-space: pre-wrap; word-break: break-word;">
+                ${typeof dados === 'string' ? dados : JSON.stringify(dados, null, 2)}
+            </div>
+        ` : ''}
+    `;
+    
+    // Se for o primeiro log, limpar mensagem inicial
+    if (logsContainer.querySelector('div[style*="color: #888"]') && logsContainer.children.length === 1) {
+        logsContainer.innerHTML = '';
+    }
+    
+    logsContainer.appendChild(logEntry);
+    
+    // Scroll para o final
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+}
+
+/**
+ * Carrega logs do mês
+ */
+async function carregarLogsMes(mes) {
+    try {
+        const resultado = await API.Pedidos.listarLogs({ mes, limite: 50 });
+        
+        const logs = Array.isArray(resultado) ? resultado : (resultado.dados || []);
+        
+        // Limpar logs anteriores
+        const mesId = mes.replace('-', '');
+        const logsContainer = document.getElementById(`conteudo-logs-mes-${mesId}`);
+        if (!logsContainer) return;
+        
+        // Garantir que o container está visível ao carregar logs
+        logsContainer.style.display = 'block';
+        const icon = document.getElementById(`logs-icon-${mesId}`);
+        if (icon) {
+            icon.textContent = '▲';
+        }
+        
+        if (logs.length === 0) {
+            logsContainer.innerHTML = '<div style="color: #888;">Nenhum log disponível ainda. Os logs aparecerão aqui após iniciar a emissão.</div>';
+            return;
+        }
+        
+        logsContainer.innerHTML = '';
+        
+        // Ordenar logs por data (mais antigo primeiro para melhor leitura)
+        logs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        
+        logs.forEach(log => {
+            let tipo = 'info';
+            let mensagem = log.message || '';
+            
+            // Determinar tipo baseado no level e action
+            if (log.level === 'ERROR' || log.level === 'error') {
+                tipo = 'erro';
+            } else if (log.action === 'emitir_nfse' || log.service === 'focusNFe') {
+                if (log.message && log.message.toLowerCase().includes('enviando')) {
+                    tipo = 'enviado';
+                } else if (log.message && log.message.toLowerCase().includes('resposta') || log.message.toLowerCase().includes('recebido')) {
+                    tipo = 'recebido';
+                } else if (log.message && log.message.toLowerCase().includes('sucesso') || log.message.toLowerCase().includes('emitida')) {
+                    tipo = 'sucesso';
+                }
+            }
+            
+            // Extrair dados relevantes
+            let dados = null;
+            if (log.data) {
+                try {
+                    const dataObj = typeof log.data === 'string' ? JSON.parse(log.data) : log.data;
+                    
+                    // Para logs de erro, mostrar o erro completo
+                    if (tipo === 'erro' && (dataObj.erro || dataObj.error || dataObj.message)) {
+                        dados = dataObj.erro || dataObj.error || dataObj.message;
+                    }
+                    // Para logs enviados, mostrar payload resumido
+                    else if (tipo === 'enviado' && dataObj.payload) {
+                        const payload = dataObj.payload;
+                        dados = {
+                            referencia: payload.ref || payload.referencia,
+                            prestador: payload.prestador?.cnpj || payload.cnpj_emitente,
+                            tomador: payload.tomador?.cpf || payload.tomador?.cnpj || payload.cpf_destinatario || payload.cnpj_destinatario,
+                            valor: payload.servico?.valor_servicos || payload.valor_total
+                        };
+                    }
+                    // Para logs recebidos, mostrar resposta resumida
+                    else if (tipo === 'recebido' && dataObj.response) {
+                        const response = dataObj.response;
+                        dados = {
+                            status: response.status || response.status_sefaz,
+                            mensagem: response.mensagem_sefaz || response.message,
+                            chave: response.chave_nfse || response.chave_nfe
+                        };
+                    }
+                    // Para outros casos, mostrar dados relevantes
+                    else if (dataObj.payload || dataObj.response || dataObj.erro || dataObj.error) {
+                        dados = {
+                            ...(dataObj.payload && { payload: dataObj.payload }),
+                            ...(dataObj.response && { response: dataObj.response }),
+                            ...(dataObj.erro && { erro: dataObj.erro }),
+                            ...(dataObj.error && { error: dataObj.error })
+                        };
+                    }
+                } catch (e) {
+                    // Se não conseguir parsear, mostrar como string
+                    dados = String(log.data).substring(0, 200);
+                }
+            }
+            
+            adicionarLogMes(mes, tipo, mensagem, dados);
+        });
+        
+    } catch (error) {
+        console.error('Erro ao carregar logs do mês:', error);
+        const mesId = mes.replace('-', '');
+        adicionarLogMes(mes, 'erro', `Erro ao carregar logs: ${error.message}`);
+    }
+}
+
+/**
+ * Emite NF Serviço para pedidos selecionados do mês
+ */
+async function emitirNFServicoMes(mes) {
+    console.log('Emitir NF Serviço para mês:', mes);
+    
+    // Garantir que o mês está expandido para ver os logs
+    const mesId = `mes-${mes.replace('-', '')}`;
+    const content = document.getElementById(mesId);
+    if (content && content.style.display === 'none') {
+        toggleMes(mesId);
+    }
+    
+    // Mostrar modal de progresso
+    mostrarProgressoEmissao('servico');
+    atualizarProgressoEmissao(1, 'Preparando pedidos para emissão...');
+    
+    // Adicionar log inicial
+    adicionarLogMes(mes, 'info', 'Iniciando emissão de NF Serviço...');
+    
+    try {
+        // Obter pedidos selecionados primeiro
+        let pedidoIds = obterPedidosSelecionados();
+        
+        // Se não houver pedidos selecionados, usar todos do mês
+        if (!pedidoIds || pedidoIds.length === 0) {
+            const pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
+                const dataPedido = new Date(pedido.date_created);
+                const [ano, mesNum] = mes.split('-');
+                return dataPedido.getFullYear() === parseInt(ano) && 
+                       (dataPedido.getMonth() + 1) === parseInt(mesNum);
+            });
+            
+            if (pedidosMes.length === 0) {
+                adicionarLogMes(mes, 'erro', 'Nenhum pedido encontrado para este mês.');
+                finalizarProgressoEmissao(false, '✗ Nenhum pedido encontrado para este mês.');
+                return;
+            }
+            
+            pedidoIds = pedidosMes.map(p => String(p.id || p.number));
+            adicionarLogMes(mes, 'info', `Nenhum pedido selecionado. Processando todos os ${pedidoIds.length} pedido(s) do mês.`);
+        } else {
+            // Filtrar apenas os pedidos selecionados que pertencem ao mês
+            const pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
+                const dataPedido = new Date(pedido.date_created);
+                const [ano, mesNum] = mes.split('-');
+                const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) && 
+                                     (dataPedido.getMonth() + 1) === parseInt(mesNum);
+                const estaSelecionado = pedidoIds.includes(String(pedido.id || pedido.number));
+                return pertenceAoMes && estaSelecionado;
+            });
+            
+            pedidoIds = pedidosMes.map(p => String(p.id || p.number));
+            
+            if (pedidoIds.length === 0) {
+                adicionarLogMes(mes, 'erro', 'Nenhum pedido selecionado pertence a este mês.');
+                finalizarProgressoEmissao(false, '✗ Nenhum pedido selecionado pertence a este mês.');
+                return;
+            }
+            
+            adicionarLogMes(mes, 'info', `${pedidoIds.length} pedido(s) selecionado(s) para processar.`);
+        }
+        
+        atualizarProgressoEmissao(2, `Enviando ${pedidoIds.length} pedido(s) para emissão de NFSe...`);
+        
+        // Chamar API de emissão em lote
+        adicionarLogMes(mes, 'enviado', `Enviando ${pedidoIds.length} pedido(s) para emissão...`, { 
+            total_pedidos: pedidoIds.length,
+            pedido_ids: pedidoIds.slice(0, 5) // Mostrar apenas os primeiros 5 IDs
+        });
+        
+        const resultado = await API.NFSe.emitirLote(pedidoIds, 'servico');
+        
+        atualizarProgressoEmissao(3, 'Processando resposta do servidor...');
+    
+        if (resultado && resultado.sucesso) {
+            adicionarLogMes(mes, 'recebido', `Resposta recebida: ${resultado.sucesso || 0} sucesso, ${resultado.erros || 0} erros`, {
+                total: resultado.total,
+                sucesso: resultado.sucesso,
+                erros: resultado.erros
+            });
+            
+            // Adicionar logs individuais dos resultados
+            if (resultado.resultados && Array.isArray(resultado.resultados)) {
+                resultado.resultados.forEach((res, idx) => {
+                    if (res.sucesso) {
+                        adicionarLogMes(mes, 'sucesso', `Pedido #${res.pedido_id}: NFSe emitida com sucesso`, {
+                            pedido_id: res.pedido_id,
+                            referencia: res.referencia,
+                            status: res.status
+                        });
+                    } else {
+                        adicionarLogMes(mes, 'erro', `Pedido #${res.pedido_id}: ${res.erro || 'Erro desconhecido'}`, {
+                            pedido_id: res.pedido_id,
+                            erro: res.erro
+                        });
+                    }
+                });
+            }
+            
+            const mensagemSucesso = `✓ Emissão concluída: ${resultado.sucesso || 0} de ${resultado.total || pedidoIds.length} pedido(s) processado(s) com sucesso.`;
+            adicionarLogMes(mes, 'sucesso', `Emissão concluída: ${resultado.sucesso || 0} de ${resultado.total || pedidoIds.length} pedido(s) processado(s) com sucesso.`);
+            finalizarProgressoEmissao(true, mensagemSucesso);
+        } else {
+            const erroMsg = resultado?.erro || resultado?.mensagem || 'Erro desconhecido';
+            adicionarLogMes(mes, 'erro', `Erro ao emitir NFSe: ${erroMsg}`, {
+                erro: erroMsg
+            });
+            finalizarProgressoEmissao(false, `✗ Erro ao emitir NFSe: ${erroMsg}`);
+        }
+        
+        // Carregar logs atualizados do banco após um delay
+        setTimeout(() => {
+            carregarLogsMes(mes);
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Erro ao emitir NF Serviço:', error);
+        adicionarLogMes(mes, 'erro', `Erro ao emitir NF Serviço: ${error.message}`, { error: error.message });
+        finalizarProgressoEmissao(false, `✗ Erro ao emitir NF Serviço: ${error.message}`);
+    }
+}
+
+/**
+ * Emite NF Produto para pedidos selecionados do mês
+ */
+async function emitirNFProdutoMes(mes) {
+    console.log('Emitir NF Produto para mês:', mes);
+    
+    // Garantir que o mês está expandido para ver os logs
+    const mesId = `mes-${mes.replace('-', '')}`;
+    const content = document.getElementById(mesId);
+    if (content && content.style.display === 'none') {
+        toggleMes(mesId);
+    }
+    
+    // Garantir que o container de logs existe
+    const mesIdLogs = mes.replace('-', '');
+    const logsContainer = document.getElementById(`conteudo-logs-mes-${mesIdLogs}`);
+    if (!logsContainer) {
+        console.error('Container de logs não encontrado:', `conteudo-logs-mes-${mesIdLogs}`);
+        alert('Erro: Container de logs não encontrado. Recarregue a página.');
+        return;
+    }
+    
+    // Mostrar modal de progresso
+    mostrarProgressoEmissao('produto');
+    atualizarProgressoEmissao(1, 'Preparando pedidos de produto para emissão...');
+    
+    // Adicionar log inicial
+    adicionarLogMes(mes, 'info', 'Iniciando emissão de NF Produto...');
+    
+    try {
+        // Verificar se há dados carregados
+        if (!estadoAtual.dados || !estadoAtual.dados.todosPedidos) {
+            adicionarLogMes(mes, 'erro', 'Erro: Dados dos pedidos não carregados. Clique em "Recarregar do WooCommerce" primeiro.');
+            finalizarProgressoEmissao(false, '✗ Dados dos pedidos não carregados. Recarregue do WooCommerce primeiro.');
+            return;
+        }
+        
+        // Obter pedidos selecionados primeiro
+        let pedidoIds = obterPedidosSelecionados();
+        
+        // Se não houver pedidos selecionados, usar todos do mês que são produtos
+        if (!pedidoIds || pedidoIds.length === 0) {
+            const pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
+                const dataPedido = new Date(pedido.date_created);
+                const [ano, mesNum] = mes.split('-');
+                const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) && 
+                                     (dataPedido.getMonth() + 1) === parseInt(mesNum);
+                
+                // Filtrar apenas pedidos com categoria "Livro Faíscas" (produtos)
+                const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
+                const temLivroFaiscas = categorias.some(cat => {
+                    const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    return (catLower.includes('livro') && catLower.includes('faiscas')) ||
+                           catLower === 'livro faiscas' ||
+                           catLower.includes('livro faiscas');
+                });
+                
+                return pertenceAoMes && temLivroFaiscas;
+            });
+            
+            if (pedidosMes.length === 0) {
+                adicionarLogMes(mes, 'erro', 'Nenhum pedido de PRODUTO (Livro Faíscas) encontrado para este mês.');
+                finalizarProgressoEmissao(false, '✗ Nenhum pedido de PRODUTO (Livro Faíscas) encontrado para este mês.');
+                return;
+            }
+            
+            pedidoIds = pedidosMes.map(p => String(p.id || p.number));
+            adicionarLogMes(mes, 'info', `Nenhum pedido selecionado. Processando ${pedidoIds.length} pedido(s) de PRODUTO do mês.`);
+        } else {
+            // Filtrar apenas os pedidos selecionados que pertencem ao mês E são produtos
+            const pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
+                const dataPedido = new Date(pedido.date_created);
+                const [ano, mesNum] = mes.split('-');
+                const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) && 
+                                     (dataPedido.getMonth() + 1) === parseInt(mesNum);
+                const estaSelecionado = pedidoIds.includes(String(pedido.id || pedido.number));
+                
+                // Verificar se é produto
+                const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
+                const temLivroFaiscas = categorias.some(cat => {
+                    const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    return (catLower.includes('livro') && catLower.includes('faiscas')) ||
+                           catLower === 'livro faiscas' ||
+                           catLower.includes('livro faiscas');
+                });
+                
+                return pertenceAoMes && estaSelecionado && temLivroFaiscas;
+            });
+            
+            pedidoIds = pedidosMes.map(p => String(p.id || p.number));
+            
+            if (pedidoIds.length === 0) {
+                adicionarLogMes(mes, 'erro', 'Nenhum pedido selecionado é de PRODUTO (Livro Faíscas) ou pertence a este mês.');
+                finalizarProgressoEmissao(false, '✗ Nenhum pedido selecionado é de PRODUTO (Livro Faíscas) ou pertence a este mês.');
+                return;
+            }
+            
+            adicionarLogMes(mes, 'info', `${pedidoIds.length} pedido(s) de PRODUTO selecionado(s) para processar.`);
+        }
+        
+        atualizarProgressoEmissao(2, `Enviando ${pedidoIds.length} pedido(s) para emissão de NFe...`);
+        
+        // Chamar API de emissão em lote (tipo produto)
+        adicionarLogMes(mes, 'enviado', `Enviando ${pedidoIds.length} pedido(s) para emissão de NF Produto...`, { 
+            total_pedidos: pedidoIds.length,
+            pedido_ids: pedidoIds.slice(0, 5),
+            tipo: 'produto'
+        });
+        
+        console.log('Chamando API.emitirLote com:', { pedidoIds, tipo: 'produto' });
+        const resultado = await API.NFSe.emitirLote(pedidoIds, 'produto');
+        console.log('Resultado da API:', resultado);
+        
+        atualizarProgressoEmissao(3, 'Processando resposta do servidor...');
+        
+        if (resultado && resultado.sucesso) {
+            adicionarLogMes(mes, 'recebido', `Resposta recebida: ${resultado.sucesso || 0} sucesso, ${resultado.erros || 0} erros`, {
+                total: resultado.total,
+                sucesso: resultado.sucesso,
+                erros: resultado.erros
+            });
+            
+            // Adicionar logs individuais dos resultados
+            if (resultado.resultados && Array.isArray(resultado.resultados)) {
+                resultado.resultados.forEach((res, idx) => {
+                    if (res.sucesso) {
+                        adicionarLogMes(mes, 'sucesso', `Pedido #${res.pedido_id}: NF Produto emitida com sucesso`, {
+                            pedido_id: res.pedido_id,
+                            referencia: res.referencia,
+                            status: res.status
+                        });
+                    } else {
+                        adicionarLogMes(mes, 'erro', `Pedido #${res.pedido_id}: ${res.erro || res.mensagem || 'Erro desconhecido'}`, {
+                            pedido_id: res.pedido_id,
+                            erro: res.erro || res.mensagem
+                        });
+                    }
+                });
+            }
+            
+            const mensagemSucesso = `✓ Emissão concluída: ${resultado.sucesso || 0} de ${resultado.total || pedidoIds.length} pedido(s) processado(s) com sucesso.`;
+            adicionarLogMes(mes, 'sucesso', `Emissão concluída: ${resultado.sucesso || 0} de ${resultado.total || pedidoIds.length} pedido(s) processado(s) com sucesso.`);
+            finalizarProgressoEmissao(true, mensagemSucesso);
+        } else {
+            const erroMsg = resultado?.erro || resultado?.mensagem || JSON.stringify(resultado) || 'Erro desconhecido';
+            console.error('Erro na resposta da API:', resultado);
+            adicionarLogMes(mes, 'erro', `Erro ao emitir NF Produto: ${erroMsg}`, {
+                erro: erroMsg,
+                resposta_completa: resultado
+            });
+            finalizarProgressoEmissao(false, `✗ Erro ao emitir NF Produto: ${erroMsg}`);
+        }
+        
+        // Carregar logs atualizados do banco após um delay
+        setTimeout(() => {
+            carregarLogsMes(mes);
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Erro ao emitir NF Produto:', error);
+        adicionarLogMes(mes, 'erro', `Erro ao emitir NF Produto: ${error.message}`, { 
+            error: error.message,
+            stack: error.stack,
+            tipo: error.name
+        });
+        finalizarProgressoEmissao(false, `✗ Erro ao emitir NF Produto: ${error.message}`);
+    }
+}
+
+/**
+ * Emite NF de teste (serviço ou produto)
+ */
+/**
+ * Mostra modal de progresso da emissão
+ */
+function mostrarProgressoEmissao(tipoNF, isTeste = false) {
+    const modalId = 'modal-progresso-emissao';
+    let modal = document.getElementById(modalId);
+    
+    let titulo;
+    if (tipoNF === 'sincronizacao') {
+        titulo = 'Sincronizando Notas da Focus NFe';
+    } else {
+        titulo = isTeste 
+            ? `Emitindo ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} de Teste`
+            : `Emitindo ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} em Lote`;
+    }
+    
+    const step1Text = tipoNF === 'sincronizacao' ? 'Buscando notas da Focus NFe...' : 'Preparando dados...';
+    const step2Text = tipoNF === 'sincronizacao' ? 'Sincronizando com banco local...' : 'Enviando para Focus NFe...';
+    const step3Text = tipoNF === 'sincronizacao' ? 'Finalizando sincronização...' : 'Processando resposta...';
+    
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'modal-progresso';
+        modal.innerHTML = `
+            <div class="modal-progresso-content">
+                <h3>${titulo}</h3>
+                <div class="progresso-steps">
+                    <div class="step" id="step-1">
+                        <div class="step-icon">1</div>
+                        <div class="step-text">${step1Text}</div>
+                    </div>
+                    <div class="step" id="step-2">
+                        <div class="step-icon">2</div>
+                        <div class="step-text">${step2Text}</div>
+                    </div>
+                    <div class="step" id="step-3">
+                        <div class="step-icon">3</div>
+                        <div class="step-text">${step3Text}</div>
+                    </div>
+                </div>
+                <div class="progresso-mensagem" id="progresso-mensagem"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    } else {
+        // Atualizar título e textos dos steps se modal já existe
+        const h3 = modal.querySelector('h3');
+        if (h3) h3.textContent = titulo;
+        
+        const step1 = modal.querySelector('#step-1 .step-text');
+        if (step1) step1.textContent = step1Text;
+        const step2 = modal.querySelector('#step-2 .step-text');
+        if (step2) step2.textContent = step2Text;
+        const step3 = modal.querySelector('#step-3 .step-text');
+        if (step3) step3.textContent = step3Text;
+    }
+    
+    // Resetar estados
+    for (let i = 1; i <= 3; i++) {
+        const step = document.getElementById(`step-${i}`);
+        if (step) {
+            step.classList.remove('active', 'completed', 'error');
+        }
+    }
+    const mensagem = document.getElementById('progresso-mensagem');
+    if (mensagem) {
+        mensagem.textContent = '';
+        mensagem.className = 'progresso-mensagem';
+    }
+    
+    modal.style.display = 'flex';
+    return modal;
+}
+
+/**
+ * Atualiza o progresso da emissão
+ */
+function atualizarProgressoEmissao(passo, mensagem = '') {
+    // Marcar passos anteriores como completos
+    for (let i = 1; i < passo; i++) {
+        const step = document.getElementById(`step-${i}`);
+        if (step) {
+            step.classList.remove('active');
+            step.classList.add('completed');
+        }
+    }
+    
+    // Marcar passo atual como ativo
+    const stepAtual = document.getElementById(`step-${passo}`);
+    if (stepAtual) {
+        stepAtual.classList.add('active');
+    }
+    
+    // Atualizar mensagem
+    const mensagemEl = document.getElementById('progresso-mensagem');
+    if (mensagemEl && mensagem) {
+        mensagemEl.textContent = mensagem;
+    }
+}
+
+/**
+ * Finaliza o progresso (sucesso ou erro)
+ */
+function finalizarProgressoEmissao(sucesso, mensagem) {
+    // Marcar todos os passos como completos ou erro
+    for (let i = 1; i <= 3; i++) {
+        const step = document.getElementById(`step-${i}`);
+        if (step) {
+            step.classList.remove('active');
+            if (sucesso) {
+                step.classList.add('completed');
+            } else if (i === 3) {
+                step.classList.add('error');
+            } else {
+                step.classList.add('completed');
+            }
+        }
+    }
+    
+    const mensagemEl = document.getElementById('progresso-mensagem');
+    if (mensagemEl) {
+        mensagemEl.textContent = mensagem;
+        mensagemEl.className = 'progresso-mensagem ' + (sucesso ? 'sucesso' : 'erro');
+    }
+    
+    // Fechar modal após 3 segundos
+    setTimeout(() => {
+        const modal = document.getElementById('modal-progresso-emissao');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }, 3000);
+}
+
+/**
+ * Emite NF de teste com feedback visual de progresso
+ */
+async function emitirNFTeste(tipoNF) {
+    if (!confirm(`Deseja emitir uma ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} de TESTE com dados aleatórios?`)) {
+        return;
+    }
+    
+    // Mostrar modal de progresso
+    mostrarProgressoEmissao(tipoNF, true);
+    atualizarProgressoEmissao(1, 'Preparando dados do pedido de teste...');
+    
+    try {
+        // Simular pequeno delay para mostrar o passo 1
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        atualizarProgressoEmissao(2, 'Enviando requisição para Focus NFe...');
+        
+        // Fazer a requisição
+        const resultado = await API.NFSe.emitirTeste(tipoNF);
+        
+        atualizarProgressoEmissao(3, 'Processando resposta do servidor...');
+        
+        // Simular pequeno delay para mostrar o passo 3
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        if (resultado.sucesso) {
+            finalizarProgressoEmissao(
+                true,
+                `✓ ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} enviada com sucesso! Referência: ${resultado.referencia} | Status: ${resultado.status}`
+            );
+        } else {
+            const erroMsg = resultado.mensagem || resultado.erro || 'Erro desconhecido';
+            finalizarProgressoEmissao(
+                false,
+                `✗ Erro: ${erroMsg}`
+            );
+        }
+    } catch (error) {
+        atualizarProgressoEmissao(3, 'Erro na requisição...');
+        finalizarProgressoEmissao(
+            false,
+            `✗ Erro ao emitir ${tipoNF === 'produto' ? 'NFe' : 'NFSe'}: ${error.message}`
+        );
+    }
+}
+
+/**
+ * Seleciona ou desseleciona todos os pedidos da tabela
+ */
+function selecionarTodosPedidos(checkbox, tabelaId) {
+    const tabela = document.getElementById(tabelaId);
+    if (!tabela) return;
+    
+    const checkboxes = tabela.querySelectorAll('.checkbox-pedido');
+    checkboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+    
+    atualizarSelecaoPedidos();
+}
+
+/**
+ * Atualiza o estado do checkbox "Selecionar todos" baseado nos checkboxes individuais
+ */
+function atualizarSelecaoPedidos() {
+    // Encontrar todas as tabelas de pedidos na página
+    const tabelas = document.querySelectorAll('.table');
+    
+    tabelas.forEach(tabela => {
+        const checkboxTodos = tabela.querySelector('.checkbox-selecionar-todos');
+        if (!checkboxTodos) return;
+        
+        const checkboxes = tabela.querySelectorAll('.checkbox-pedido');
+        const total = checkboxes.length;
+        const selecionados = Array.from(checkboxes).filter(cb => cb.checked).length;
+        
+        // Atualizar estado do checkbox "Selecionar todos"
+        if (total === 0) {
+            checkboxTodos.checked = false;
+            checkboxTodos.indeterminate = false;
+        } else if (selecionados === total) {
+            checkboxTodos.checked = true;
+            checkboxTodos.indeterminate = false;
+        } else if (selecionados > 0) {
+            checkboxTodos.checked = false;
+            checkboxTodos.indeterminate = true;
+    } else {
+            checkboxTodos.checked = false;
+            checkboxTodos.indeterminate = false;
+        }
+    });
+}
+
+/**
+ * Obtém os IDs dos pedidos selecionados
+ */
+function obterPedidosSelecionados() {
+    const checkboxes = document.querySelectorAll('.checkbox-pedido:checked');
+    return Array.from(checkboxes).map(cb => cb.getAttribute('data-pedido-id'));
+}
+
+/**
+ * Emite NF (NFe ou NFSe) para um pedido individual
+ * Detecta automaticamente o tipo baseado na categoria do pedido
+ */
+async function emitirNFSePedido(pedidoId) {
+    try {
+        // Buscar pedido completo do WooCommerce
+        const resultado = await API.WooCommerce.buscarPedidoPorId(pedidoId);
+        
+        if (!resultado.sucesso) {
+            alert('Erro ao buscar pedido: ' + resultado.erro);
+            return;
+        }
+        
+        const pedido = resultado.pedido;
+        
+        // Extrair categorias do pedido
+        const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
+        
+        // Verificar se tem categoria "Livro Faíscas" (produto)
+        // Busca flexível: "livro" + "faíscas" ou "faiscas" (com ou sem acento)
+        const temLivroFaiscas = categorias.some(cat => {
+            const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // Remove acentos
+            return (catLower.includes('livro') && catLower.includes('faiscas')) ||
+                   catLower === 'livro faiscas' ||
+                   catLower.includes('livro faiscas');
+        });
+        
+        // Determinar tipo de NF
+        const tipoNF = temLivroFaiscas ? 'produto' : 'servico';
+        const tipoNFLabel = tipoNF === 'produto' ? 'NFe (Produto)' : 'NFSe (Serviço)';
+        
+        if (!confirm(`Deseja emitir ${tipoNFLabel} para este pedido?\n\nPedido: #${pedidoId}\nCategorias: ${categorias.length > 0 ? categorias.join(', ') : 'Sem categoria'}`)) {
+            return;
+        }
+        
+        // Mostrar feedback visual - buscar botão pelo pedidoId
+        const btnOriginal = document.querySelector(`button[onclick*="emitirNFSePedido(${pedidoId})"]`);
+        if (btnOriginal) {
+            btnOriginal.disabled = true;
+            btnOriginal.textContent = 'Emitindo...';
+        }
+        
+        // Emitir usando a API de lote (com apenas 1 pedido)
+        const resultadoEmissao = await API.NFSe.emitirLote([pedidoId], tipoNF);
+        
+        if (btnOriginal) {
+            btnOriginal.disabled = false;
+            btnOriginal.textContent = 'Emitir NF';
+        }
+        
+        if (resultadoEmissao.sucesso) {
+            const resultadoPedido = resultadoEmissao.resultados && resultadoEmissao.resultados[0];
+            if (resultadoPedido && resultadoPedido.sucesso) {
+                alert(`✓ ${tipoNFLabel} emitida com sucesso!\n\nReferência: ${resultadoPedido.referencia}\nStatus: ${resultadoPedido.status || 'Processando'}`);
+                // Recarregar dados para atualizar a tabela
+                atualizarDadosWooCommerce();
+            } else {
+                const erro = resultadoPedido?.erro || 'Erro desconhecido';
+                alert(`✗ Erro ao emitir ${tipoNFLabel}:\n\n${erro}`);
+            }
+        } else {
+            alert(`✗ Erro ao emitir ${tipoNFLabel}:\n\n${resultadoEmissao.erro || 'Erro desconhecido'}`);
+        }
+        
+    } catch (error) {
+        console.error('Erro ao emitir NF:', error);
+        alert('Erro ao emitir NF: ' + error.message);
+        
+        // Restaurar botão em caso de erro
+        const btnOriginal = document.querySelector(`button[onclick*="emitirNFSePedido(${pedidoId})"]`);
+        if (btnOriginal) {
+            btnOriginal.disabled = false;
+            btnOriginal.textContent = 'Emitir NF';
+        }
+    }
 }
 
 /**
@@ -1290,7 +2871,7 @@ async function emitirLoteNFSe() {
     const pedidoIds = pedidos.map(p => p.id || p.number);
     
     // Criar modal de progresso
-    const modalHtml = Components.renderizarProgressoEmissao(pedidoIds.length, 0, 0, 0, []);
+    const modalHtml = window.Components ? window.Components.renderizarProgressoEmissao(pedidoIds.length, 0, 0, 0, []) : '<div>Erro: Components não disponível</div>';
     document.body.insertAdjacentHTML('beforeend', modalHtml);
     
     const modal = document.getElementById('modal-progresso');
@@ -1301,13 +2882,13 @@ async function emitirLoteNFSe() {
     
     // Função para atualizar modal
     const atualizarModal = () => {
-        const novoHtml = Components.renderizarProgressoEmissao(
+        const novoHtml = window.Components ? window.Components.renderizarProgressoEmissao(
             pedidoIds.length,
             processados,
             sucesso,
             erros,
             resultados
-        );
+        ) : '<div>Erro: Components não disponível</div>';
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = novoHtml;
         const novoModal = tempDiv.firstElementChild;
@@ -1376,6 +2957,911 @@ function fecharModalProgresso() {
 
 
 /**
+ * Carrega seção de Notas Enviadas
+ */
+async function carregarNotasEnviadas() {
+    try {
+        const contentArea = document.getElementById('content-area');
+        if (!contentArea) {
+            console.error('content-area não encontrado');
+            return;
+        }
+        
+        // Verificar se Components está disponível
+        if (!window.Components || !window.Components.renderizarFiltrosNotasEnviadas) {
+            console.error('Components não está disponível ou renderizarFiltrosNotasEnviadas não existe');
+            contentArea.innerHTML = '<div class="content-section"><p>Erro: Componentes não carregados</p></div>';
+            return;
+        }
+        
+        const html = `
+            <div class="content-section">
+                <h2 class="section-title">Notas Enviadas</h2>
+                ${window.Components.renderizarFiltrosNotasEnviadas()}
+            </div>
+            <div class="content-section">
+                <div id="tabela-notas-enviadas">
+                    ${window.Components.renderizarLoading()}
+                </div>
+                <div id="paginacao-notas-enviadas"></div>
+            </div>
+        `;
+        
+        contentArea.innerHTML = html;
+        
+        // Inicializar estado
+        if (!estadoAtual.filtrosNotas) {
+            estadoAtual.filtrosNotas = {};
+        }
+        if (!estadoAtual.paginaNotas) {
+            estadoAtual.paginaNotas = 1;
+        }
+        
+        // Carregar dados iniciais
+        await buscarNotasEnviadas();
+    } catch (error) {
+        console.error('Erro ao carregar notas enviadas:', error);
+        const contentArea = document.getElementById('content-area');
+        if (contentArea) {
+            contentArea.innerHTML = `<div class="content-section"><p>Erro ao carregar: ${error.message}</p></div>`;
+        }
+    }
+}
+
+/**
+ * Busca notas enviadas com filtros
+ */
+async function buscarNotasEnviadas() {
+    const tabelaArea = document.getElementById('tabela-notas-enviadas');
+    const paginacaoArea = document.getElementById('paginacao-notas-enviadas');
+    
+    if (!tabelaArea) return;
+    
+    tabelaArea.innerHTML = window.Components.renderizarLoading();
+    
+    const limite = 50;
+    const offset = (estadoAtual.paginaNotas - 1) * limite;
+    
+    const filtros = {
+        limite: limite,
+        offset: offset,
+        ...estadoAtual.filtrosNotas
+    };
+    
+    try {
+        const resultado = await API.NFSe.listar(filtros);
+        
+        if (resultado.sucesso) {
+            const notas = resultado.dados || [];
+            const total = resultado.total || 0;
+            
+            estadoAtual.dados.notasEnviadas = notas;
+            tabelaArea.innerHTML = window.Components.renderizarTabelaNotasEnviadas(notas);
+            
+            // Calcular paginação
+            const totalPaginas = Math.ceil(total / limite) || 1;
+            paginacaoArea.innerHTML = window.Components.renderizarPaginacao(
+                estadoAtual.paginaNotas,
+                totalPaginas,
+                'mudarPaginaNotasEnviadas'
+            );
+        } else {
+            tabelaArea.innerHTML = `<div class="empty-state"><p>Erro ao carregar notas: ${resultado.erro || 'Erro desconhecido'}</p></div>`;
+        }
+    } catch (error) {
+        console.error('Erro ao buscar notas enviadas:', error);
+        tabelaArea.innerHTML = `<div class="empty-state"><p>Erro ao carregar notas: ${error.message}</p></div>`;
+    }
+}
+
+/**
+ * Sincroniza notas da Focus NFe
+ */
+async function sincronizarNotasFocus() {
+    if (!confirm('Deseja sincronizar todas as notas da Focus NFe com o banco local?\n\nIsso irá buscar todas as notas (NFSe e NFe) da Focus NFe e atualizar/criar registros no banco local.')) {
+        return;
+    }
+    
+    // Mostrar modal de progresso
+    mostrarProgressoEmissao('sincronizacao', false);
+    atualizarProgressoEmissao(1, 'Buscando notas da Focus NFe...');
+    
+    try {
+        const resultado = await API.NFSe.sincronizar();
+        
+        atualizarProgressoEmissao(2, 'Sincronizando com banco local...');
+        
+        if (resultado.sucesso) {
+            const resumo = resultado.resumo || {};
+            const nfse = resumo.nfse || {};
+            const nfe = resumo.nfe || {};
+            
+            let mensagem = '✓ Sincronização concluída!\n\n';
+            mensagem += `NFSe: ${nfse.criadas || 0} criadas, ${nfse.atualizadas || 0} atualizadas\n`;
+            mensagem += `NFe: ${nfe.criadas || 0} criadas, ${nfe.atualizadas || 0} atualizadas\n`;
+            
+            if (resumo.total_erros > 0) {
+                mensagem += `\n⚠️ ${resumo.total_erros} erro(s) durante a sincronização`;
+            }
+            
+            finalizarProgressoEmissao(true, mensagem);
+            
+            // Recarregar a lista de notas após sincronização
+            setTimeout(() => {
+                buscarNotasEnviadas();
+            }, 1000);
+        } else {
+            const erroMsg = resultado.erro || resultado.mensagem || 'Erro desconhecido';
+            finalizarProgressoEmissao(false, `✗ Erro ao sincronizar: ${erroMsg}`);
+        }
+    } catch (error) {
+        console.error('Erro ao sincronizar notas:', error);
+        finalizarProgressoEmissao(false, `✗ Erro ao sincronizar: ${error.message}`);
+    }
+}
+
+/**
+ * Carrega seção de Buscar Notas
+ */
+async function carregarBuscarNotas() {
+    try {
+        const contentArea = document.getElementById('content-area');
+        if (!contentArea) {
+            console.error('content-area não encontrado');
+            return;
+        }
+        
+        // Verificar se Components está disponível
+        if (!window.Components || !window.Components.renderizarFiltrosBuscarNotas) {
+            console.error('Components não está disponível ou renderizarFiltrosBuscarNotas não existe');
+            contentArea.innerHTML = '<div class="content-section"><p>Erro: Componentes não carregados</p></div>';
+            return;
+        }
+        
+        const html = `
+            <div class="content-section">
+                <h2 class="section-title">Excluir notas enviadas</h2>
+                ${window.Components.renderizarFiltrosBuscarNotas()}
+            </div>
+        `;
+        
+        contentArea.innerHTML = html;
+        
+        // Inicializar estado
+        if (!estadoAtual.filtrosBuscarNotas) {
+            estadoAtual.filtrosBuscarNotas = {};
+        }
+    } catch (error) {
+        console.error('Erro ao carregar buscar notas:', error);
+        const contentArea = document.getElementById('content-area');
+        if (contentArea) {
+            contentArea.innerHTML = `<div class="content-section"><p>Erro ao carregar: ${error.message}</p></div>`;
+        }
+    }
+}
+
+/**
+ * Busca notas na Focus NFe e banco local
+ */
+async function buscarNotasFocus() {
+    console.log('🔍 [FRONTEND] Buscar Notas - Iniciando busca...');
+    
+    const tabelaArea = document.getElementById('tabela-buscar-notas');
+    
+    if (!tabelaArea) {
+        console.error('🔍 [FRONTEND] Buscar Notas - Área da tabela não encontrada');
+        return;
+    }
+    
+    tabelaArea.innerHTML = window.Components.renderizarLoading();
+    
+    const form = document.getElementById('form-filtros-buscar-notas');
+    if (!form) {
+        console.error('🔍 [FRONTEND] Buscar Notas - Formulário de filtros não encontrado');
+        return;
+    }
+    
+    const formData = new FormData(form);
+    const apenasBancoLocal = formData.get('apenas_banco_local') === 'on';
+    
+    const filtros = {
+        referencia: formData.get('referencia') || undefined,
+        chave: formData.get('chave') || undefined,
+        data_inicio: formData.get('data_inicio') || undefined,
+        data_fim: formData.get('data_fim') || undefined,
+        status: formData.get('status') || undefined,
+        tipo_nota: formData.get('tipo_nota') || undefined,
+        apenas_banco_local: apenasBancoLocal // Sempre enviar (true ou false)
+    };
+    
+    // Remover campos vazios (exceto apenas_banco_local que é boolean)
+    Object.keys(filtros).forEach(key => {
+        if (key === 'apenas_banco_local') {
+            // Manter apenas_banco_local sempre (true ou false)
+            return;
+        }
+        if (!filtros[key]) delete filtros[key];
+    });
+    
+    console.log('🔍 [FRONTEND] Buscar Notas - Filtros finais:', {
+        ...filtros,
+        apenas_banco_local: filtros.apenas_banco_local,
+        buscar_na_focus: !filtros.apenas_banco_local
+    });
+    
+    console.log('🔍 [FRONTEND] Buscar Notas - Filtros aplicados:', filtros);
+    const inicioBusca = Date.now();
+    
+    try {
+        const resultado = await API.NFSe.buscar(filtros);
+        const tempoDecorrido = Date.now() - inicioBusca;
+        
+        if (resultado.sucesso) {
+            const notas = resultado.dados || [];
+            console.log('✅ [FRONTEND] Buscar Notas - Busca concluída com sucesso', {
+                total_encontradas: notas.length,
+                tempo_decorrido_ms: tempoDecorrido,
+                filtros_aplicados: filtros,
+                notas: notas.map(n => ({
+                    referencia: n.referencia || n.ref,
+                    tipo: n.tipo_nota,
+                    origem: n.origem,
+                    status: n.status || n.status_focus
+                }))
+            });
+            
+            tabelaArea.innerHTML = window.Components.renderizarTabelaBuscarNotas(notas);
+        } else {
+            console.error('❌ [FRONTEND] Buscar Notas - Erro na busca', {
+                erro: resultado.erro,
+                mensagem: resultado.mensagem,
+                tempo_decorrido_ms: tempoDecorrido,
+                filtros_aplicados: filtros
+            });
+            tabelaArea.innerHTML = `<div class="empty-state"><p>Erro ao buscar notas: ${resultado.erro || 'Erro desconhecido'}</p></div>`;
+        }
+    } catch (error) {
+        const tempoDecorrido = Date.now() - inicioBusca;
+        console.error('❌ [FRONTEND] Buscar Notas - Exceção ao buscar notas', {
+            error: error.message,
+            stack: error.stack,
+            tempo_decorrido_ms: tempoDecorrido,
+            filtros_aplicados: filtros
+        });
+        tabelaArea.innerHTML = `<div class="empty-state"><p>Erro ao buscar notas: ${error.message}</p></div>`;
+    }
+}
+
+/**
+ * Visualiza uma nota (abre DANFe/PDF ou página da NFSe)
+ */
+function visualizarNota(url, tipoNota, ambiente) {
+    console.log('👁️ [FRONTEND] Visualizar Nota', {
+        url,
+        tipo_nota: tipoNota,
+        ambiente
+    });
+    
+    // Abrir em nova aba
+    window.open(url, '_blank');
+}
+
+/**
+ * Cancela uma nota por chave (quando não tem referência)
+ */
+async function cancelarNotaPorChave(chave, tipoNota, ambiente, justificativaPreenchida = null) {
+    console.log('🚫 [FRONTEND] Cancelar Nota por Chave - Iniciando processo de cancelamento', {
+        chave,
+        tipoNota,
+        ambiente,
+        justificativaPreenchida: justificativaPreenchida ? 'sim' : 'não',
+        timestamp: new Date().toISOString()
+    });
+    
+    // Justificativa padrão de 30 caracteres
+    const justificativaPadrao = justificativaPreenchida || 'Erro na ordem das notas, cance';
+    
+    // Criar modal para justificativa
+    const modalId = 'modal-cancelar-nota-chave';
+    let modal = document.getElementById(modalId);
+    
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Cancelar Nota por Chave</h3>
+                    <button class="modal-close" onclick="fecharModalCancelarChave()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Chave:</strong> ${chave}</p>
+                    <p><strong>Tipo:</strong> ${tipoNota === 'nfe' ? 'NFe (Produto)' : 'NFSe (Serviço)'}</p>
+                    <p><strong>Ambiente:</strong> ${ambiente === 'producao' ? 'Produção' : 'Homologação'}</p>
+                    <div class="form-group">
+                        <label for="justificativa-cancelar-chave">Justificativa do Cancelamento *</label>
+                        <textarea 
+                            id="justificativa-cancelar-chave" 
+                            class="form-input" 
+                            rows="4" 
+                            placeholder="Digite a justificativa para cancelar a nota (mínimo 15 caracteres, máximo 255)"
+                            maxlength="255"
+                        >${justificativaPadrao}</textarea>
+                        <small class="form-help">Mínimo 15 caracteres, máximo 255 caracteres</small>
+                        <div id="contador-justificativa-chave" class="form-help"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="fecharModalCancelarChave()">Cancelar</button>
+                    <button class="btn btn-danger" onclick="confirmarCancelarNotaPorChave('${chave}', '${tipoNota}', '${ambiente || 'producao'}')">Confirmar Cancelamento</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    } else {
+        // Atualizar conteúdo do modal
+        const pElements = modal.querySelectorAll('p');
+        if (pElements.length >= 3) {
+            pElements[0].innerHTML = `<strong>Chave:</strong> ${chave}`;
+            pElements[1].innerHTML = `<strong>Tipo:</strong> ${tipoNota === 'nfe' ? 'NFe (Produto)' : 'NFSe (Serviço)'}`;
+            pElements[2].innerHTML = `<strong>Ambiente:</strong> ${ambiente === 'producao' ? 'Produção' : 'Homologação'}`;
+        }
+        modal.querySelector('#justificativa-cancelar-chave').value = justificativaPadrao;
+        const btnConfirmar = modal.querySelector('.btn-danger');
+        if (btnConfirmar) {
+            btnConfirmar.setAttribute('onclick', `confirmarCancelarNotaPorChave('${chave}', '${tipoNota}', '${ambiente || 'producao'}')`);
+        }
+    }
+    
+    // Atualizar contador de caracteres
+    const textarea = modal.querySelector('#justificativa-cancelar-chave');
+    const contador = modal.querySelector('#contador-justificativa-chave');
+    
+    const updateCounter = () => {
+        const length = textarea.value.length;
+        contador.textContent = `${length}/255 caracteres`;
+        if (length < 15) {
+            contador.style.color = '#dc3545';
+        } else {
+            contador.style.color = '#28a745';
+        }
+    };
+    
+    // Remover listeners anteriores e adicionar novo
+    const newTextarea = textarea.cloneNode(true);
+    textarea.parentNode.replaceChild(newTextarea, textarea);
+    newTextarea.addEventListener('input', updateCounter);
+    
+    // Atualizar contador inicial
+    const length = newTextarea.value.length;
+    contador.textContent = `${length}/255 caracteres`;
+    if (length < 15) {
+        contador.style.color = '#dc3545';
+    } else {
+        contador.style.color = '#28a745';
+    }
+    
+    // Mostrar modal
+    modal.style.display = 'flex';
+    newTextarea.focus();
+}
+
+/**
+ * Fecha modal de cancelamento por chave
+ */
+function fecharModalCancelarChave() {
+    const modal = document.getElementById('modal-cancelar-nota-chave');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Confirma cancelamento da nota por chave
+ */
+async function confirmarCancelarNotaPorChave(chave, tipoNota, ambiente = null) {
+    console.log('🚫 [FRONTEND] Confirmando cancelamento por chave', {
+        chave,
+        tipo_nota: tipoNota,
+        ambiente: ambiente || 'não especificado',
+        timestamp: new Date().toISOString()
+    });
+    
+    const modal = document.getElementById('modal-cancelar-nota-chave');
+    if (!modal) {
+        console.error('Modal não encontrado');
+        return;
+    }
+    
+    const justificativa = modal.querySelector('#justificativa-cancelar-chave').value.trim();
+    
+    if (!justificativa) {
+        alert('Por favor, informe a justificativa do cancelamento.');
+        return;
+    }
+    
+    if (justificativa.length < 15) {
+        alert('A justificativa deve ter no mínimo 15 caracteres.');
+        return;
+    }
+    
+    if (justificativa.length > 255) {
+        alert('A justificativa deve ter no máximo 255 caracteres.');
+        return;
+    }
+    
+    // Desabilitar botões durante o processamento
+    const btnConfirmar = modal.querySelector('.btn-danger');
+    const btnCancelar = modal.querySelector('.btn-secondary');
+    if (btnConfirmar) btnConfirmar.disabled = true;
+    if (btnCancelar) btnCancelar.disabled = true;
+    
+    try {
+        const resultado = await API.NFSe.cancelarPorChave(chave, justificativa, ambiente);
+        
+        if (resultado.sucesso) {
+            alert('✅ Nota cancelada com sucesso!');
+            fecharModalCancelarChave();
+            
+            // Recarregar a lista de notas
+            await buscarNotasFocus();
+            
+            console.log('✅ [FRONTEND] Processo de cancelamento por chave concluído com sucesso');
+        } else {
+            const erroMsg = resultado.erro?.mensagem || resultado.erro || resultado.mensagem || 'Erro desconhecido';
+            alert(`❌ Erro ao cancelar nota: ${erroMsg}`);
+            console.error('❌ [FRONTEND] Erro ao cancelar nota por chave', {
+                chave,
+                tipo_nota: tipoNota,
+                erro: resultado.erro,
+                mensagem: resultado.mensagem
+            });
+        }
+    } catch (error) {
+        console.error('❌ [FRONTEND] Exceção ao cancelar nota por chave', {
+            error: error.message,
+            stack: error.stack
+        });
+        alert(`❌ Erro ao cancelar nota: ${error.message}`);
+    } finally {
+        // Reabilitar botões
+        if (btnConfirmar) btnConfirmar.disabled = false;
+        if (btnCancelar) btnCancelar.disabled = false;
+    }
+}
+
+/**
+ * Cancela uma nota (NFe ou NFSe)
+ */
+async function cancelarNota(referencia, tipoNota, ambiente) {
+    console.log('🚫 [FRONTEND] Cancelar Nota - Iniciando processo de cancelamento', {
+        referencia,
+        tipoNota,
+        timestamp: new Date().toISOString()
+    });
+    
+    // Criar modal para justificativa
+    const modalId = 'modal-cancelar-nota';
+    let modal = document.getElementById(modalId);
+    
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Cancelar Nota</h3>
+                    <button class="modal-close" onclick="fecharModalCancelar()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Referência:</strong> ${referencia}</p>
+                    <p><strong>Tipo:</strong> ${tipoNota === 'nfe' ? 'NFe (Produto)' : 'NFSe (Serviço)'}</p>
+                    <div class="form-group">
+                        <label for="justificativa-cancelar">Justificativa do Cancelamento *</label>
+                        <textarea 
+                            id="justificativa-cancelar" 
+                            class="form-input" 
+                            rows="4" 
+                            placeholder="Digite a justificativa para cancelar a nota (mínimo 15 caracteres, máximo 255)"
+                            maxlength="255"
+                        ></textarea>
+                        <small class="form-help">Mínimo 15 caracteres, máximo 255 caracteres</small>
+                        <div id="contador-justificativa" class="form-help"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="fecharModalCancelar()">Cancelar</button>
+                    <button class="btn btn-danger" onclick="confirmarCancelarNota('${referencia}', '${tipoNota}', '${ambiente || 'homologacao'}')">Confirmar Cancelamento</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    } else {
+        // Atualizar conteúdo do modal
+        const pElements = modal.querySelectorAll('p');
+        if (pElements.length >= 2) {
+            pElements[0].innerHTML = `<strong>Referência:</strong> ${referencia}`;
+            pElements[1].innerHTML = `<strong>Tipo:</strong> ${tipoNota === 'nfe' ? 'NFe (Produto)' : 'NFSe (Serviço)'}`;
+        }
+        modal.querySelector('#justificativa-cancelar').value = '';
+        const btnConfirmar = modal.querySelector('.btn-danger');
+        if (btnConfirmar) {
+            btnConfirmar.setAttribute('onclick', `confirmarCancelarNota('${referencia}', '${tipoNota}', '${ambiente || 'homologacao'}')`);
+        }
+    }
+    
+    // Atualizar contador de caracteres
+    const textarea = modal.querySelector('#justificativa-cancelar');
+    const contador = modal.querySelector('#contador-justificativa');
+    
+    const updateCounter = () => {
+        const length = textarea.value.length;
+        contador.textContent = `${length}/255 caracteres`;
+        if (length < 15) {
+            contador.style.color = '#dc3545';
+        } else {
+            contador.style.color = '#28a745';
+        }
+    };
+    
+    // Remover listeners anteriores e adicionar novo
+    const newTextarea = textarea.cloneNode(true);
+    textarea.parentNode.replaceChild(newTextarea, textarea);
+    newTextarea.addEventListener('input', updateCounter);
+    
+    // Mostrar modal
+    modal.style.display = 'flex';
+    newTextarea.focus();
+}
+
+/**
+ * Fecha modal de cancelamento
+ */
+function fecharModalCancelar() {
+    const modal = document.getElementById('modal-cancelar-nota');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Confirma cancelamento da nota
+ */
+async function confirmarCancelarNota(referencia, tipoNota, ambiente = null) {
+    console.log('🚫 [FRONTEND] Iniciando processo de cancelamento', {
+        referencia,
+        tipo_nota: tipoNota,
+        ambiente: ambiente || 'não especificado',
+        timestamp: new Date().toISOString()
+    });
+    
+    const textarea = document.getElementById('justificativa-cancelar');
+    const justificativa = textarea.value.trim();
+    
+    if (!justificativa) {
+        console.warn('⚠️ [FRONTEND] Justificativa não fornecida');
+        alert('Por favor, digite a justificativa do cancelamento.');
+        textarea.focus();
+        return;
+    }
+    
+    if (justificativa.length < 15) {
+        console.warn('⚠️ [FRONTEND] Justificativa muito curta', {
+            referencia,
+            tipo_nota: tipoNota,
+            justificativa_length: justificativa.length
+        });
+        alert('A justificativa deve ter no mínimo 15 caracteres.');
+        textarea.focus();
+        return;
+    }
+    
+    if (justificativa.length > 255) {
+        console.warn('⚠️ [FRONTEND] Justificativa muito longa', {
+            referencia,
+            tipo_nota: tipoNota,
+            justificativa_length: justificativa.length
+        });
+        alert('A justificativa deve ter no máximo 255 caracteres.');
+        textarea.focus();
+        return;
+    }
+    
+    console.log('📝 [FRONTEND] Justificativa validada', {
+        referencia,
+        tipo_nota: tipoNota,
+        justificativa_length: justificativa.length,
+        justificativa_preview: justificativa.substring(0, 50) + (justificativa.length > 50 ? '...' : '')
+    });
+    
+    if (!confirm(`Deseja realmente cancelar a nota ${referencia}?\n\nJustificativa: ${justificativa}`)) {
+        console.log('❌ [FRONTEND] Usuário cancelou a confirmação');
+        return;
+    }
+    
+    // Desabilitar botão durante processamento
+    const btnConfirmar = document.querySelector('#modal-cancelar-nota .btn-danger');
+    if (btnConfirmar) {
+        btnConfirmar.disabled = true;
+        btnConfirmar.textContent = 'Cancelando...';
+    }
+    
+    const inicioCancelamento = Date.now();
+    console.log('📤 [FRONTEND] Enviando requisição de cancelamento para o backend', {
+        referencia,
+        tipo_nota: tipoNota,
+        timestamp: new Date().toISOString()
+    });
+    
+    try {
+        const resultado = await API.NFSe.cancelar(referencia, tipoNota, justificativa, ambiente);
+        const tempoDecorrido = Date.now() - inicioCancelamento;
+        
+        if (resultado.sucesso) {
+            console.log('✅ [FRONTEND] Nota cancelada com sucesso', {
+                referencia,
+                tipo_nota: tipoNota,
+                status_focus: resultado.status,
+                status_sefaz: resultado.status_sefaz,
+                mensagem_sefaz: resultado.mensagem_sefaz,
+                caminho_xml_cancelamento: resultado.caminho_xml_cancelamento,
+                tempo_decorrido_ms: tempoDecorrido,
+                timestamp: new Date().toISOString(),
+                detalhes_completos: resultado
+            });
+            
+            alert(`✓ Nota ${referencia} cancelada com sucesso!`);
+            fecharModalCancelar();
+            
+            console.log('🔄 [FRONTEND] Recarregando lista de notas após cancelamento...');
+            // Recarregar busca
+            await buscarNotasFocus();
+            
+            console.log('✅ [FRONTEND] Processo de cancelamento concluído com sucesso');
+        } else {
+            console.error('❌ [FRONTEND] Erro ao cancelar nota', {
+                referencia,
+                tipo_nota: tipoNota,
+                erro: resultado.erro,
+                mensagem: resultado.mensagem,
+                status_code: resultado.status_code,
+                tempo_decorrido_ms: tempoDecorrido,
+                timestamp: new Date().toISOString(),
+                resposta_completa: resultado
+            });
+            
+            alert(`✗ Erro ao cancelar nota: ${resultado.erro || resultado.mensagem || 'Erro desconhecido'}`);
+            if (btnConfirmar) {
+                btnConfirmar.disabled = false;
+                btnConfirmar.textContent = 'Confirmar Cancelamento';
+            }
+        }
+    } catch (error) {
+        const tempoDecorrido = Date.now() - inicioCancelamento;
+        console.error('❌ [FRONTEND] Exceção ao cancelar nota', {
+            referencia,
+            tipo_nota: tipoNota,
+            error: error.message,
+            stack: error.stack,
+            tempo_decorrido_ms: tempoDecorrido,
+            timestamp: new Date().toISOString()
+        });
+        
+        alert(`✗ Erro ao cancelar nota: ${error.message}`);
+        if (btnConfirmar) {
+            btnConfirmar.disabled = false;
+            btnConfirmar.textContent = 'Confirmar Cancelamento';
+        }
+    }
+}
+
+/**
+ * Filtra notas enviadas
+ */
+function filtrarNotasEnviadas() {
+    const form = document.getElementById('form-filtros-notas');
+    if (!form) return;
+    
+    const formData = new FormData(form);
+    estadoAtual.filtrosNotas = {};
+    
+    for (const [key, value] of formData.entries()) {
+        if (value && value.trim() !== '') {
+            estadoAtual.filtrosNotas[key] = value.trim();
+        }
+    }
+    
+    estadoAtual.paginaNotas = 1;
+    buscarNotasEnviadas();
+}
+
+/**
+ * Limpa filtros de notas enviadas
+ */
+function limparFiltrosNotasEnviadas() {
+    estadoAtual.filtrosNotas = {};
+    estadoAtual.paginaNotas = 1;
+    
+    const form = document.getElementById('form-filtros-notas');
+    if (form) {
+        form.reset();
+    }
+    
+    buscarNotasEnviadas();
+}
+
+/**
+ * Muda página de notas enviadas
+ */
+function mudarPaginaNotasEnviadas(pagina) {
+    estadoAtual.paginaNotas = pagina;
+    buscarNotasEnviadas();
+}
+
+/**
+ * Ver logs de uma nota específica
+ */
+async function verLogsNota(referencia) {
+    try {
+        const resultado = await API.Pedidos.listarLogs({ referencia, limite: 100 });
+        
+        const logs = Array.isArray(resultado) ? resultado : (resultado.dados || []);
+        
+        // Ordenar logs por data (mais antigo primeiro)
+        logs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        
+        // Criar modal similar ao de detalhes do pedido
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        `;
+        
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            background: white;
+            border-radius: 8px;
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        `;
+        
+        // Header
+        const header = document.createElement('div');
+        header.style.cssText = `
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        `;
+        
+        const titulo = document.createElement('h3');
+        titulo.textContent = `Logs da Nota: ${referencia}`;
+        titulo.style.cssText = 'margin: 0; font-size: 18px; font-weight: 600;';
+        
+        const btnFechar = document.createElement('button');
+        btnFechar.textContent = '✕';
+        btnFechar.style.cssText = `
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        btnFechar.onclick = () => overlay.remove();
+        
+        header.appendChild(titulo);
+        header.appendChild(btnFechar);
+        
+        // Body
+        const body = document.createElement('div');
+        body.style.cssText = `
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        `;
+        
+        if (logs.length === 0) {
+            body.innerHTML = '<p style="color: #888; text-align: center;">Nenhum log encontrado para esta nota.</p>';
+        } else {
+            const logsHtml = logs.map(log => {
+                const data = new Date(log.created_at).toLocaleString('pt-BR');
+                const level = (log.level || 'INFO').toUpperCase();
+                const message = log.message || '';
+                const service = log.service || '';
+                const action = log.action || '';
+                
+                let cor = '#666';
+                if (level === 'ERROR') cor = '#dc3545';
+                else if (level === 'WARN') cor = '#ffc107';
+                else if (level === 'INFO') cor = '#17a2b8';
+                
+                let dadosHtml = '';
+                if (log.data) {
+                    try {
+                        const dados = typeof log.data === 'string' ? JSON.parse(log.data) : log.data;
+                        dadosHtml = `<pre style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px; overflow-x: auto; margin-top: 8px;">${JSON.stringify(dados, null, 2)}</pre>`;
+                    } catch (e) {
+                        dadosHtml = `<div style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px; margin-top: 8px;">${log.data}</div>`;
+                    }
+                }
+                
+                return `
+                    <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #eee;">
+                        <div style="display: flex; gap: 12px; margin-bottom: 4px;">
+                            <span style="color: #888; font-size: 12px;">[${data}]</span>
+                            <span style="color: ${cor}; font-weight: 600; font-size: 12px;">[${level}]</span>
+                            ${service ? `<span style="color: #17a2b8; font-size: 12px;">[${service}]</span>` : ''}
+                            ${action ? `<span style="color: #6c757d; font-size: 12px;">[${action}]</span>` : ''}
+                        </div>
+                        <div style="color: #333; margin-top: 4px;">${message}</div>
+                        ${dadosHtml}
+                    </div>
+                `;
+            }).join('');
+            
+            body.innerHTML = logsHtml;
+        }
+        
+        // Footer
+        const footer = document.createElement('div');
+        footer.style.cssText = `
+            padding: 16px 20px;
+            border-top: 1px solid #dee2e6;
+            display: flex;
+            justify-content: flex-end;
+        `;
+        
+        const btnFecharFooter = document.createElement('button');
+        btnFecharFooter.textContent = 'Fechar';
+        btnFecharFooter.className = 'btn btn-secondary';
+        btnFecharFooter.onclick = () => overlay.remove();
+        
+        footer.appendChild(btnFecharFooter);
+        
+        // Montar modal
+        modal.appendChild(header);
+        modal.appendChild(body);
+        modal.appendChild(footer);
+        overlay.appendChild(modal);
+        
+        // Fechar ao clicar fora
+        overlay.onclick = (e) => {
+            if (e.target === overlay) {
+                overlay.remove();
+            }
+        };
+        
+        document.body.appendChild(overlay);
+        
+    } catch (error) {
+        console.error('Erro ao carregar logs da nota:', error);
+        alert(`Erro ao carregar logs: ${error.message}`);
+    }
+}
+
+/**
  * Carrega seção de Municípios (placeholder)
  */
 function carregarMunicipios() {
@@ -1407,23 +3893,301 @@ function carregarWebhooks() {
     `;
 }
 
+/**
+ * Toggle para mostrar/ocultar logs do servidor
+ */
+let logsServidorVisivel = false;
+let logsServidorExpandido = false;
+
+function toggleLogsServidor() {
+    let logsContainer = document.getElementById('logs-servidor-container');
+    
+    if (!logsContainer) {
+        // Criar container de logs se não existir (inicialmente minimizado)
+        logsContainer = document.createElement('div');
+        logsContainer.id = 'logs-servidor-container';
+        logsContainer.style.cssText = `
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background: #1e1e1e;
+            border-top: 2px solid var(--color-orange);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 -4px 6px rgba(0,0,0,0.3);
+            transition: height 0.3s ease;
+        `;
+        
+        // Header do container (sempre visível)
+        const header = document.createElement('div');
+        header.id = 'logs-servidor-header';
+        header.style.cssText = `
+            padding: 8px 16px;
+            background: #2d2d2d;
+            border-bottom: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            min-height: 40px;
+        `;
+        header.onclick = () => {
+            logsServidorExpandido = !logsServidorExpandido;
+            atualizarEstadoLogsServidor();
+        };
+        
+        const titulo = document.createElement('div');
+        titulo.style.cssText = 'color: #d4d4d4; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;';
+        titulo.innerHTML = `
+            <span id="logs-servidor-icon" style="transition: transform 0.3s;">▼</span>
+            <span>Logs do Servidor</span>
+        `;
+        
+        const botoes = document.createElement('div');
+        botoes.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+        botoes.onclick = (e) => e.stopPropagation(); // Prevenir toggle ao clicar nos botões
+        
+        const btnAtualizar = document.createElement('button');
+        btnAtualizar.textContent = 'Atualizar';
+        btnAtualizar.style.cssText = `
+            padding: 4px 12px;
+            font-size: 12px;
+            background: var(--color-orange);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        `;
+        btnAtualizar.onclick = (e) => {
+            e.stopPropagation();
+            carregarLogsServidor();
+        };
+        
+        const btnFechar = document.createElement('button');
+        btnFechar.textContent = '✕';
+        btnFechar.style.cssText = `
+            padding: 4px 12px;
+            font-size: 16px;
+            background: #444;
+            color: #d4d4d4;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        btnFechar.onclick = (e) => {
+            e.stopPropagation();
+            logsServidorVisivel = false;
+            logsServidorExpandido = false;
+            logsContainer.style.display = 'none';
+            document.getElementById('btn-mostrar-logs').style.opacity = '1';
+        };
+        
+        botoes.appendChild(btnAtualizar);
+        botoes.appendChild(btnFechar);
+        header.appendChild(titulo);
+        header.appendChild(botoes);
+        
+        // Body do container (inicialmente oculto)
+        const body = document.createElement('div');
+        body.id = 'logs-servidor-conteudo';
+        body.style.cssText = `
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #d4d4d4;
+            line-height: 1.6;
+            display: none;
+        `;
+        
+        logsContainer.appendChild(header);
+        logsContainer.appendChild(body);
+        document.body.appendChild(logsContainer);
+        
+        logsServidorVisivel = true;
+        logsServidorExpandido = false;
+    } else {
+        // Se já existe, apenas toggle visibilidade
+        logsServidorVisivel = !logsServidorVisivel;
+        if (!logsServidorVisivel) {
+            logsServidorExpandido = false;
+        }
+    }
+    
+    atualizarEstadoLogsServidor();
+}
+
+/**
+ * Atualiza o estado visual do painel de logs
+ */
+function atualizarEstadoLogsServidor() {
+    const logsContainer = document.getElementById('logs-servidor-container');
+    const conteudo = document.getElementById('logs-servidor-conteudo');
+    const icon = document.getElementById('logs-servidor-icon');
+    const btnMostrar = document.getElementById('btn-mostrar-logs');
+    
+    if (!logsContainer) return;
+    
+    if (logsServidorVisivel) {
+        logsContainer.style.display = 'flex';
+        if (btnMostrar) btnMostrar.style.opacity = '0.6';
+        
+        if (logsServidorExpandido) {
+            logsContainer.style.height = '400px';
+            if (conteudo) conteudo.style.display = 'block';
+            if (icon) icon.textContent = '▲';
+            if (!conteudo.innerHTML || conteudo.innerHTML.includes('Carregando')) {
+                carregarLogsServidor();
+            }
+        } else {
+            logsContainer.style.height = '40px';
+            if (conteudo) conteudo.style.display = 'none';
+            if (icon) icon.textContent = '▼';
+        }
+    } else {
+        logsContainer.style.display = 'none';
+        if (btnMostrar) btnMostrar.style.opacity = '1';
+    }
+}
+
+/**
+ * Carrega logs do servidor
+ */
+async function carregarLogsServidor() {
+    const conteudo = document.getElementById('logs-servidor-conteudo');
+    if (!conteudo) return;
+    
+    // Verificar se já existe mensagem de status, senão criar
+    let loadingMsg = document.getElementById('logs-loading-msg');
+    if (!loadingMsg) {
+        loadingMsg = document.createElement('div');
+        loadingMsg.id = 'logs-loading-msg';
+        loadingMsg.style.cssText = 'color: #888; padding: 8px; border-bottom: 1px solid #333;';
+        conteudo.innerHTML = '';
+        conteudo.appendChild(loadingMsg);
+    }
+    loadingMsg.innerHTML = '<span style="color: #4ec9b0;">⏳</span> Carregando logs...';
+    
+    try {
+        const resultado = await API.Config.buscarLogs({ limite: 200 });
+        
+        const logs = resultado.logs || resultado.dados?.logs || (Array.isArray(resultado) ? resultado : []);
+        
+        // Atualizar mensagem de status
+        if (logs.length === 0) {
+            loadingMsg.innerHTML = '<span style="color: #888;">✓</span> <span style="color: #888;">Nenhum log disponível.</span>';
+            return;
+        }
+        
+        // Ordenar por data (mais recente primeiro)
+        logs.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+        
+        // Atualizar mensagem de status com sucesso
+        loadingMsg.innerHTML = `<span style="color: #6a9955;">✓</span> <span style="color: #6a9955;">${logs.length} log(s) carregado(s) com sucesso</span>`;
+        
+        // Formatar logs
+        const logsFormatados = logs.map(log => {
+            const data = new Date(log.created_at || Date.now()).toLocaleString('pt-BR');
+            const level = (log.level || 'INFO').toUpperCase();
+            const service = log.service || '';
+            const action = log.action || '';
+            const message = log.message || '';
+            
+            let cor = '#d4d4d4';
+            if (level === 'ERROR') cor = '#f48771';
+            else if (level === 'WARN') cor = '#dcdcaa';
+            else if (level === 'INFO') cor = '#4ec9b0';
+            else if (level === 'DEBUG') cor = '#808080';
+            
+            return `
+                <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid #333;">
+                    <span style="color: #808080;">[${data}]</span>
+                    <span style="color: ${cor}; font-weight: 600; margin-left: 8px;">[${level}]</span>
+                    ${service ? `<span style="color: #569cd6; margin-left: 8px;">[${service}]</span>` : ''}
+                    ${action ? `<span style="color: #ce9178; margin-left: 8px;">[${action}]</span>` : ''}
+                    <span style="color: #d4d4d4; margin-left: 8px;">${message}</span>
+                </div>
+            `;
+        }).join('');
+        
+        // Remover logs antigos (se existirem) mas manter a mensagem de status
+        const existingLogsDiv = conteudo.querySelector('#logs-servidor-lista');
+        if (existingLogsDiv) {
+            existingLogsDiv.remove();
+        }
+        
+        // Adicionar logs após a mensagem de status
+        const logsDiv = document.createElement('div');
+        logsDiv.id = 'logs-servidor-lista';
+        logsDiv.innerHTML = logsFormatados;
+        conteudo.appendChild(logsDiv);
+        
+        // Scroll para o topo (logs mais recentes)
+        conteudo.scrollTop = 0;
+        
+    } catch (error) {
+        console.error('Erro ao carregar logs:', error);
+        loadingMsg.innerHTML = `<span style="color: #f48771;">✗</span> <span style="color: #f48771;">Erro ao carregar logs: ${error.message}</span>`;
+    }
+}
+
+/**
+ * Toggle para expandir/colapsar logs do mês
+ */
+function toggleLogsMes(mes) {
+    const mesId = mes.replace('-', '');
+    const conteudo = document.getElementById(`conteudo-logs-mes-${mesId}`);
+    const icon = document.getElementById(`logs-icon-${mesId}`);
+    
+    if (!conteudo || !icon) return;
+    
+    const isExpanded = conteudo.style.display !== 'none';
+    
+    if (isExpanded) {
+        conteudo.style.display = 'none';
+        icon.textContent = '▼';
+        icon.style.transform = 'rotate(0deg)';
+    } else {
+        conteudo.style.display = 'block';
+        icon.textContent = '▲';
+        icon.style.transform = 'rotate(180deg)';
+        
+        // Se não tiver logs carregados ainda, carregar
+        if (conteudo.innerHTML.includes('Carregando logs...') || conteudo.innerHTML.trim() === '') {
+            carregarLogsMes(mes);
+        }
+    }
+}
+
 // Exportar funções globalmente
 window.carregarSecao = carregarSecao;
-window.carregarSubsecao = carregarSubsecao;
-window.voltarConexaoFocus = voltarConexaoFocus;
+window.toggleLogsServidor = toggleLogsServidor;
+window.carregarLogsServidor = carregarLogsServidor;
+window.toggleLogsMes = toggleLogsMes;
 window.salvarMeusDados = salvarMeusDados;
 window.resetarMeusDados = resetarMeusDados;
 window.toggleWooCommerceVisibility = toggleWooCommerceVisibility;
 window.salvarWooCommerce = salvarWooCommerce;
 window.resetarWooCommerce = resetarWooCommerce;
 window.toggleTokenVisibility = toggleTokenVisibility;
-window.salvarTokens = salvarTokens;
-window.resetarTokens = resetarTokens;
-window.salvarAmbiente = salvarAmbiente;
-window.resetarAmbiente = resetarAmbiente;
-window.pesquisarRequisicoes = pesquisarRequisicoes;
-window.limparFiltrosRequisicoes = limparFiltrosRequisicoes;
-window.mudarPaginaRequisicoes = mudarPaginaRequisicoes;
+window.salvarFocusConfig = salvarFocusConfig;
+window.resetarFocusConfig = resetarFocusConfig;
+window.testarConexaoFocus = testarConexaoFocus;
+window.toggleMes = toggleMes;
+window.atualizarDadosWooCommerce = atualizarDadosWooCommerce;
+window.filtrarNotasEnviadas = filtrarNotasEnviadas;
+window.limparFiltrosNotasEnviadas = limparFiltrosNotasEnviadas;
+window.mudarPaginaNotasEnviadas = mudarPaginaNotasEnviadas;
+window.verLogsNota = verLogsNota;
 window.abrirFiltrosMes = abrirFiltrosMes;
 window.voltarParaListaMeses = voltarParaListaMeses;
 window.filtrarPorMes = filtrarPorMes;
@@ -1431,7 +4195,62 @@ window.buscarPedidosFiltrados = buscarPedidosFiltrados;
 window.testarConexaoWooCommerce = testarConexaoWooCommerce;
 window.limparFiltrosPedidos = limparFiltrosPedidos;
 window.verDetalhesPedido = verDetalhesPedido;
+window.emitirNFServicoMes = emitirNFServicoMes;
+window.emitirNFProdutoMes = emitirNFProdutoMes;
 window.emitirNFSePedido = emitirNFSePedido;
 window.emitirLoteNFSe = emitirLoteNFSe;
+window.selecionarTodosPedidos = selecionarTodosPedidos;
+window.atualizarSelecaoPedidos = atualizarSelecaoPedidos;
+window.obterPedidosSelecionados = obterPedidosSelecionados;
+window.toggleDropdownCategorias = toggleDropdownCategorias;
+window.atualizarFiltroCategorias = atualizarFiltroCategorias;
+window.toggleTodasCategorias = toggleTodasCategorias;
+window.carregarLogsMes = carregarLogsMes;
 window.fecharModalProgresso = fecharModalProgresso;
+window.limparReferencia = limparReferencia;
+
+
+/**
+ * Limpa o campo de referência
+ */
+function limparReferencia() {
+    const referenciaInput = document.getElementById('referencia-cancelar');
+    
+    if (referenciaInput) {
+        referenciaInput.value = '';
+        referenciaInput.focus();
+    }
+}
+
+/**
+ * Cancela nota por referência diretamente
+ */
+async function cancelarPorReferencia() {
+    const referenciaInput = document.getElementById('referencia-cancelar');
+    
+    if (!referenciaInput) {
+        alert('Erro: Campo de referência não encontrado');
+        return;
+    }
+    
+    const referencia = referenciaInput.value.trim();
+    
+    if (!referencia) {
+        alert('Por favor, informe a referência da nota (ex: PED-6454)');
+        referenciaInput.focus();
+        return;
+    }
+    
+    // Abrir modal de cancelamento com a referência
+    // Tentar detectar ambiente baseado na referência ou usar produção como padrão
+    const ambiente = 'producao'; // Padrão produção, pode ser alterado se necessário
+    await cancelarNota(referencia, 'nfe', ambiente);
+    
+    // Limpar campo após abrir modal
+    referenciaInput.value = '';
+}
+
+window.cancelarPorReferencia = cancelarPorReferencia;
+
+
 

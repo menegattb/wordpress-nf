@@ -959,9 +959,14 @@ async function verificarStatus() {
 async function testarConexao() {
   console.clear();
   console.log(chalk.blue.bold('\n═══════════ Testar Conexão Focus NFe ═══════════\n'));
-  console.log(chalk.yellow('Este teste usa dados reais de CPF/nome com endereço falso para debugar erros.\n'));
+  console.log(chalk.yellow(`Este teste usa dados reais de CPF/nome com endereço falso para debugar erros.\n`));
+  console.log(chalk.gray(`Tipo de nota: ${chalk.yellow(tipoNota.toUpperCase())}\n`));
   
   try {
+    // Importar serviço correto baseado no tipo
+    const { emitirNFe } = require('./src/services/focusNFe');
+    const { emitirNFSe } = require('./src/services/focusNFSe');
+    
     // Dados de teste reais (padrão)
     const dadosTeste = {
       pedido_id: `TEST-${Date.now()}`,
@@ -969,8 +974,8 @@ async function testarConexao() {
       data_emissao: new Date().toISOString().split('T')[0],
       
       // Dados reais do cliente
-      nome: 'Bruno Menegat',
-      razao_social: 'Bruno Menegat',
+      nome: 'Bruno Henrique',
+      razao_social: 'Bruno Henrique',
       cpf_cnpj: '09762992911',
       email: 'teste@exemplo.com',
       telefone: '11999999999',
@@ -987,25 +992,38 @@ async function testarConexao() {
         pais: 'Brasil'
       },
       
-      // Serviço de teste
-      servicos: [
+      // Serviços/Produtos de teste
+      servicos: tipoNota === 'nfe' ? [
+        {
+          nome: 'Produto de Teste',
+          codigo: 'PROD001',
+          quantidade: 1,
+          valor_unitario: 100.00,
+          total: 100.00,
+          meta_data: [
+            { key: 'ncm', value: '49019900' },
+            { key: 'cfop', value: '5102' }
+          ]
+        }
+      ] : [
         {
           nome: 'Serviço de Teste',
           codigo: 'TEST001',
           quantidade: 1,
           valor_unitario: 100.00,
-          valor_total: 100.00,
+          total: 100.00,
           ncm: null,
           cfop: null,
           cst: null,
-          item_lista_servico: '70101', // Removido zero à esquerda (5 caracteres)
+          item_lista_servico: '70101',
           codigo_tributario_municipio: '101',
           discriminacao: 'Serviço de Teste para Debug'
         }
       ],
       
       valor_total: 100.00,
-      valor_frete: 0,
+      valor_servicos: tipoNota === 'servico' ? 100.00 : undefined,
+      frete: 0,
       valor_desconto: 0,
       metodo_pagamento: 'teste'
     };
@@ -1111,19 +1129,27 @@ async function testarConexao() {
     // Mostrar configuração atual
     console.log(chalk.blue('\n═══════════ Configuração Atual ═══════════\n'));
     console.log(chalk.gray(`Ambiente: ${chalk.yellow(ambienteAtual)}`));
-    console.log(chalk.gray(`CNPJ Prestador: ${chalk.yellow(config.emitente.cnpj)}`));
-    console.log(chalk.gray(`IM: ${chalk.yellow(config.emitente.inscricao_municipal || 'N/A')}`));
+    console.log(chalk.gray(`Tipo de Nota: ${chalk.yellow(tipoNota.toUpperCase())}`));
+    console.log(chalk.gray(`CNPJ Emitente: ${chalk.yellow(config.emitente.cnpj)}`));
     console.log(chalk.gray(`Razão Social: ${chalk.yellow(config.emitente.razao_social)}`));
+    
+    if (tipoNota === 'nfse') {
+      console.log(chalk.gray(`IM: ${chalk.yellow(config.emitente.inscricao_municipal || 'N/A')}`));
     console.log(chalk.gray(`Município: ${chalk.yellow(config.emitente.codigo_municipio)}`));
     console.log(chalk.gray(`Item Lista Serviço: ${chalk.yellow(config.fiscal.item_lista_servico)}`));
     console.log(chalk.gray(`Código Tributário: ${chalk.yellow(config.fiscal.codigo_tributario_municipio)}`));
     console.log(chalk.gray(`Alíquota: ${chalk.yellow(config.fiscal.aliquota)}%`));
+    } else {
+      console.log(chalk.gray(`Inscrição Estadual: ${chalk.yellow(config.emitente.inscricao_estadual || 'N/A')}`));
+      console.log(chalk.gray(`CFOP Padrão: ${chalk.yellow(config.fiscal.cfop_padrao)}`));
+      console.log(chalk.gray(`NCM Padrão: ${chalk.yellow(config.fiscal.ncm_padrao)}`));
+    }
     
     const { confirmar } = await inquirer.prompt([
       {
         type: 'confirm',
         name: 'confirmar',
-        message: '\nDeseja enviar para Focus NFe? (todos os logs serão exibidos)',
+        message: `\nDeseja enviar ${tipoNota.toUpperCase()} para Focus NFe? (todos os logs serão exibidos)`,
         default: true
       }
     ]);
@@ -1135,20 +1161,27 @@ async function testarConexao() {
     }
     
     // Enviar com logs detalhados
-    console.log(chalk.yellow('\n═══════════ Enviando para Focus NFe ═══════════\n'));
+    console.log(chalk.yellow(`\n═══════════ Enviando ${tipoNota.toUpperCase()} para Focus NFe ═══════════\n`));
     console.log(chalk.gray('Aguarde... Logs detalhados serão exibidos abaixo.\n'));
     
     logger.info('Iniciando teste de conexão', {
       service: 'cli',
       action: 'testar_conexao',
+      tipo_nota: tipoNota,
       pedido_id: dadosTeste.pedido_id,
       dados: dadosTeste
     });
     
     // Mostrar dados que serão enviados
-    console.log(chalk.cyan('\n📤 Dados que serão enviados:\n'));
+    console.log(chalk.cyan(`\n📤 Dados que serão enviados (${tipoNota.toUpperCase()}):\n`));
     
-    const resultado = await emitirNFSe(dadosTeste, config.emitente, config.fiscal);
+    // Chamar função correta baseada no tipo
+    let resultado;
+    if (tipoNota === 'nfe') {
+      resultado = await emitirNFe(dadosTeste, config.emitente, config.fiscal);
+    } else {
+      resultado = await emitirNFSe(dadosTeste, config.emitente, config.fiscal);
+    }
     
     // Mostrar resultado completo
     console.log(chalk.blue('\n═══════════ Resultado da Requisição ═══════════\n'));
@@ -1158,16 +1191,26 @@ async function testarConexao() {
       console.log(chalk.gray(`Referência: ${chalk.yellow(resultado.referencia)}`));
       console.log(chalk.gray(`Status: ${chalk.yellow(resultado.status)}`));
       
+      if (tipoNota === 'nfe') {
+        if (resultado.chave_nfe) {
+          console.log(chalk.gray(`Chave NFe: ${chalk.yellow(resultado.chave_nfe)}`));
+        }
+        if (resultado.caminho_xml_nota_fiscal) {
+          console.log(chalk.gray(`XML: ${chalk.yellow(resultado.caminho_xml_nota_fiscal)}`));
+        }
+        if (resultado.caminho_danfe) {
+          console.log(chalk.gray(`DANFe: ${chalk.yellow(resultado.caminho_danfe)}`));
+        }
+      } else {
       if (resultado.chave_nfse) {
         console.log(chalk.gray(`Chave NFSe: ${chalk.yellow(resultado.chave_nfse)}`));
       }
-      
       if (resultado.caminho_xml) {
         console.log(chalk.gray(`XML: ${chalk.yellow(resultado.caminho_xml)}`));
       }
-      
       if (resultado.caminho_pdf) {
         console.log(chalk.gray(`PDF: ${chalk.yellow(resultado.caminho_pdf)}`));
+        }
       }
       
       if (resultado.dados) {
@@ -1203,6 +1246,7 @@ async function testarConexao() {
     logger.info('Teste de conexão concluído', {
       service: 'cli',
       action: 'testar_conexao',
+      tipo_nota: tipoNota,
       pedido_id: dadosTeste.pedido_id,
       sucesso: resultado.sucesso,
       status: resultado.status,
@@ -1215,6 +1259,7 @@ async function testarConexao() {
     logger.error('Erro ao testar conexão', {
       service: 'cli',
       action: 'testar_conexao',
+      tipo_nota: tipoNota,
       error: error.message,
       stack: error.stack
     });
