@@ -358,35 +358,78 @@ async function salvarNFSe(nfse) {
   } = nfse;
   
   if (hasDatabase) {
-    const result = await query(
-      `INSERT INTO nfse (pedido_id, referencia, chave_nfse, status_focus, status_sefaz, mensagem_sefaz, caminho_xml, caminho_pdf, dados_completos, ambiente)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       ON CONFLICT (referencia) DO UPDATE SET
-         chave_nfse = $3,
-         status_focus = $4,
-         status_sefaz = $5,
-         mensagem_sefaz = $6,
-         caminho_xml = $7,
-         caminho_pdf = $8,
-         dados_completos = $9,
-         ambiente = $10,
-         updated_at = CURRENT_TIMESTAMP
-       RETURNING *`,
-      [
-        pedido_id,
-        referencia,
-        chave_nfse,
-        status_focus,
-        status_sefaz,
-        mensagem_sefaz,
-        caminho_xml,
-        caminho_pdf,
-        dados_completos ? JSON.stringify(dados_completos) : null,
-        ambiente || null
-      ]
-    );
-    
-    return result.rows[0];
+    try {
+      const result = await query(
+        `INSERT INTO nfse (pedido_id, referencia, chave_nfse, status_focus, status_sefaz, mensagem_sefaz, caminho_xml, caminho_pdf, dados_completos, ambiente)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (referencia) DO UPDATE SET
+           chave_nfse = $3,
+           status_focus = $4,
+           status_sefaz = $5,
+           mensagem_sefaz = $6,
+           caminho_xml = $7,
+           caminho_pdf = $8,
+           dados_completos = $9,
+           ambiente = $10,
+           updated_at = CURRENT_TIMESTAMP
+         RETURNING *`,
+        [
+          pedido_id,
+          referencia,
+          chave_nfse,
+          status_focus,
+          status_sefaz,
+          mensagem_sefaz,
+          caminho_xml,
+          caminho_pdf,
+          dados_completos ? JSON.stringify(dados_completos) : null,
+          ambiente || null
+        ]
+      );
+      
+      return result.rows[0];
+    } catch (error) {
+      // Se a tabela não existir, tentar criar executando migrations
+      if (error.message && error.message.includes('does not exist')) {
+        console.log('⚠ Tabela nfse não encontrada, executando migrations...');
+        try {
+          await migrate();
+          // Tentar novamente após migrations
+          const result = await query(
+            `INSERT INTO nfse (pedido_id, referencia, chave_nfse, status_focus, status_sefaz, mensagem_sefaz, caminho_xml, caminho_pdf, dados_completos, ambiente)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             ON CONFLICT (referencia) DO UPDATE SET
+               chave_nfse = $3,
+               status_focus = $4,
+               status_sefaz = $5,
+               mensagem_sefaz = $6,
+               caminho_xml = $7,
+               caminho_pdf = $8,
+               dados_completos = $9,
+               ambiente = $10,
+               updated_at = CURRENT_TIMESTAMP
+             RETURNING *`,
+            [
+              pedido_id,
+              referencia,
+              chave_nfse,
+              status_focus,
+              status_sefaz,
+              mensagem_sefaz,
+              caminho_xml,
+              caminho_pdf,
+              dados_completos ? JSON.stringify(dados_completos) : null,
+              ambiente || null
+            ]
+          );
+          return result.rows[0];
+        } catch (retryError) {
+          console.error('Erro ao executar migrations e salvar NFSe:', retryError.message);
+          throw retryError;
+        }
+      }
+      throw error;
+    }
   } else {
     // Armazenamento em memória
     const existingIndex = memoryStorage.nfse.findIndex(n => n.referencia === referencia);
@@ -755,35 +798,78 @@ async function salvarNFe(nfe) {
   } = nfe;
   
   if (hasDatabase) {
-    const result = await query(
-      `INSERT INTO nfe (pedido_id, referencia, chave_nfe, status_focus, status_sefaz, mensagem_sefaz, caminho_xml_nota_fiscal, caminho_danfe, dados_completos, ambiente)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       ON CONFLICT (referencia) DO UPDATE SET
-         chave_nfe = $3,
-         status_focus = $4,
-         status_sefaz = $5,
-         mensagem_sefaz = $6,
-         caminho_xml_nota_fiscal = $7,
-         caminho_danfe = $8,
-         dados_completos = $9,
-         ambiente = $10,
-         updated_at = CURRENT_TIMESTAMP
-       RETURNING *`,
-      [
-        pedido_id,
-        referencia,
-        chave_nfe,
-        status_focus,
-        status_sefaz,
-        mensagem_sefaz,
-        caminho_xml_nota_fiscal,
-        caminho_danfe,
-        dados_completos ? JSON.stringify(dados_completos) : null,
-        ambiente || null
-      ]
-    );
-    
-    return result.rows[0];
+    try {
+      const result = await query(
+        `INSERT INTO nfe (pedido_id, referencia, chave_nfe, status_focus, status_sefaz, mensagem_sefaz, caminho_xml_nota_fiscal, caminho_danfe, dados_completos, ambiente)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (referencia) DO UPDATE SET
+           chave_nfe = $3,
+           status_focus = $4,
+           status_sefaz = $5,
+           mensagem_sefaz = $6,
+           caminho_xml_nota_fiscal = $7,
+           caminho_danfe = $8,
+           dados_completos = $9,
+           ambiente = $10,
+           updated_at = CURRENT_TIMESTAMP
+         RETURNING *`,
+        [
+          pedido_id,
+          referencia,
+          chave_nfe,
+          status_focus,
+          status_sefaz,
+          mensagem_sefaz,
+          caminho_xml_nota_fiscal,
+          caminho_danfe,
+          dados_completos ? JSON.stringify(dados_completos) : null,
+          ambiente || null
+        ]
+      );
+      
+      return result.rows[0];
+    } catch (error) {
+      // Se a tabela não existir, tentar criar executando migrations
+      if (error.message && error.message.includes('does not exist')) {
+        console.log('⚠ Tabela nfe não encontrada, executando migrations...');
+        try {
+          await migrate();
+          // Tentar novamente após migrations
+          const result = await query(
+            `INSERT INTO nfe (pedido_id, referencia, chave_nfe, status_focus, status_sefaz, mensagem_sefaz, caminho_xml_nota_fiscal, caminho_danfe, dados_completos, ambiente)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             ON CONFLICT (referencia) DO UPDATE SET
+               chave_nfe = $3,
+               status_focus = $4,
+               status_sefaz = $5,
+               mensagem_sefaz = $6,
+               caminho_xml_nota_fiscal = $7,
+               caminho_danfe = $8,
+               dados_completos = $9,
+               ambiente = $10,
+               updated_at = CURRENT_TIMESTAMP
+             RETURNING *`,
+            [
+              pedido_id,
+              referencia,
+              chave_nfe,
+              status_focus,
+              status_sefaz,
+              mensagem_sefaz,
+              caminho_xml_nota_fiscal,
+              caminho_danfe,
+              dados_completos ? JSON.stringify(dados_completos) : null,
+              ambiente || null
+            ]
+          );
+          return result.rows[0];
+        } catch (retryError) {
+          console.error('Erro ao executar migrations e salvar NFe:', retryError.message);
+          throw retryError;
+        }
+      }
+      throw error;
+    }
   } else {
     // Armazenamento em memória
     const existingIndex = memoryStorage.nfe.findIndex(n => n.referencia === referencia);

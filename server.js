@@ -14,6 +14,16 @@ const configRoutes = require('./src/routes/config');
 
 const app = express();
 
+// Executar migrations automaticamente no startup (apenas se houver banco)
+(async () => {
+  try {
+    const { migrate } = require('./src/config/database');
+    await migrate();
+  } catch (error) {
+    console.log('⚠ Erro ao executar migrations no startup:', error.message);
+  }
+})();
+
 // Middlewares
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
