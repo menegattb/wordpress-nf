@@ -1,7 +1,10 @@
 const winston = require('winston');
-const DailyRotateFile = require('winston-daily-rotate-file');
 const path = require('path');
 const fs = require('fs');
+
+// Detectar se está rodando na Vercel (serverless)
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
+
 // Importação lazy para evitar dependência circular
 let salvarLog = null;
 try {
@@ -9,12 +12,6 @@ try {
   salvarLog = db.salvarLog;
 } catch (error) {
   // Ignorar se database não estiver disponível
-}
-
-// Criar diretório de logs se não existir
-const logsDir = path.join(process.cwd(), 'logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
 }
 
 // Formato customizado para logs
@@ -48,44 +45,63 @@ const consoleFormat = winston.format.combine(
 
 // Configuração de transports
 const transports = [
-  // Console - apenas erros e warnings (logs ocultos por padrão)
+  // Console - sempre usar
   new winston.transports.Console({
     format: consoleFormat,
-    level: process.env.LOG_LEVEL || 'warn' // Apenas warnings e erros no console
-  }),
+    level: process.env.LOG_LEVEL || (isVercel ? 'info' : 'warn')
+  })
+];
+
+// Adicionar file transports apenas se NÃO estiver na Vercel
+if (!isVercel) {
+  const DailyRotateFile = require('winston-daily-rotate-file');
+  const logsDir = path.join(process.cwd(), 'logs');
+  
+  // Criar diretório de logs se não existir
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+  }
   
   // Arquivo de erro
-  new DailyRotateFile({
+  transports.push(new DailyRotateFile({
     filename: path.join(logsDir, 'error-%DATE%.log'),
     datePattern: 'YYYY-MM-DD',
     level: 'error',
     format: logFormat,
     maxSize: '20m',
     maxFiles: '14d'
-  }),
+  }));
   
   // Arquivo geral
-  new DailyRotateFile({
+  transports.push(new DailyRotateFile({
     filename: path.join(logsDir, 'combined-%DATE%.log'),
     datePattern: 'YYYY-MM-DD',
     format: logFormat,
     maxSize: '20m',
     maxFiles: '14d'
-  })
-];
+  }));
+}
 
-// Criar logger
-const logger = winston.createLogger({
+// Configuração do logger
+const loggerConfig = {
   level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
   format: logFormat,
-  transports,
-  exceptionHandlers: [
+  transports
+};
+
+// Adicionar exception/rejection handlers apenas se NÃO estiver na Vercel
+if (!isVercel) {
+  const logsDir = path.join(process.cwd(), 'logs');
+  loggerConfig.exceptionHandlers = [
     new winston.transports.File({ filename: path.join(logsDir, 'exceptions.log') })
-  ],
-  rejectionHandlers: [
+  ];
+  loggerConfig.rejectionHandlers = [
     new winston.transports.File({ filename: path.join(logsDir, 'rejections.log') })
-  ]
-});
+  ];
+}
+
+// Criar logger
+const logger = winston.createLogger(loggerConfig);
 
 /**
  * Log helper que também salva no banco de dados
