@@ -50,7 +50,7 @@ module.exports = {
     // Configurações para NFe (produto)
     cfop_padrao: process.env.CFOP_PADRAO || '5102', // CFOP padrão para venda de produto
     ncm_padrao: process.env.NCM_PADRAO || '49019900', // NCM padrão (livros, impressos, etc)
-    icms_situacao_tributaria: process.env.ICMS_SITUACAO_TRIBUTARIA || '400', // 400 = Isenta (Simples Nacional)
+    icms_situacao_tributaria: process.env.ICMS_SITUACAO_TRIBUTARIA || '0300', // 0300 = Imune (Simples Nacional)
     icms_origem: process.env.ICMS_ORIGEM || '0', // 0 = Nacional
     pis_situacao_tributaria: process.env.PIS_SITUACAO_TRIBUTARIA || '07', // 07 = Isenta
     cofins_situacao_tributaria: process.env.COFINS_SITUACAO_TRIBUTARIA || '07', // 07 = Isenta
