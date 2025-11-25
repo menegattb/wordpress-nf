@@ -14,6 +14,20 @@ async function processarWebhook(req, res) {
   try {
     const pedidoWC = req.body;
     
+    // Verificar se é um ping/teste do WooCommerce
+    const webhookTopic = req.headers['x-wc-webhook-topic'];
+    if (webhookTopic === 'ping' || webhookTopic === 'test' || Object.keys(pedidoWC).length === 0) {
+      logger.webhook('Ping/teste recebido do WooCommerce', {
+        topic: webhookTopic,
+        headers: req.headers
+      });
+      return res.status(200).json({
+        status: 'ok',
+        mensagem: 'Webhook configurado com sucesso',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     logger.webhook('Webhook recebido do WooCommerce', {
       pedido_id: pedidoWC.id || pedidoWC.number,
       status: pedidoWC.status,
@@ -25,8 +39,9 @@ async function processarWebhook(req, res) {
       logger.webhook('Webhook inválido: sem ID de pedido', {
         payload: pedidoWC
       });
-      return res.status(400).json({
-        erro: 'Pedido inválido: ID não encontrado'
+      return res.status(200).json({
+        status: 'ignorado',
+        mensagem: 'Payload sem ID de pedido'
       });
     }
     
