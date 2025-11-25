@@ -74,6 +74,7 @@ app.get('/health', async (req, res) => {
   // Verificar conexão com banco
   let dbStatus = 'desconectado';
   let dbInfo = {};
+  let tabelas = [];
   
   try {
     const { sql } = require('@vercel/postgres');
@@ -83,6 +84,15 @@ app.get('/health', async (req, res) => {
       database: result.rows[0]?.db,
       time: result.rows[0]?.time
     };
+    
+    // Listar tabelas existentes
+    const tabelasResult = await sql`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public'
+      ORDER BY table_name
+    `;
+    tabelas = tabelasResult.rows.map(r => r.table_name);
   } catch (err) {
     dbStatus = 'erro: ' + err.message;
   }
@@ -94,6 +104,7 @@ app.get('/health', async (req, res) => {
     banco: {
       status: dbStatus,
       ...dbInfo,
+      tabelas: tabelas,
       variaveis: {
         POSTGRES_URL: process.env.POSTGRES_URL ? '✓ configurado' : '✗ não configurado',
         POSTGRES_PRISMA_URL: process.env.POSTGRES_PRISMA_URL ? '✓ configurado' : '✗ não configurado'
