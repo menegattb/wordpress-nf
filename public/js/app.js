@@ -1474,13 +1474,20 @@ function toggleMes(mesId) {
         icon.textContent = '▲';
         icon.style.transform = 'rotate(0deg)';
         
-        // Carregar logs quando o mês for expandido
+        // Carregar logs do banco APENAS se não houver logs locais já na tela
         // Extrair o mês do mesId (formato: mes-202411)
         const mesMatch = mesId.match(/mes-(\d{6})/);
         if (mesMatch) {
             const mesNum = mesMatch[1];
             const mes = `${mesNum.substring(0, 4)}-${mesNum.substring(4)}`;
-            carregarLogsMes(mes);
+            const logsContainer = document.getElementById(`conteudo-logs-mes-${mesNum}`);
+            // Só carregar do banco se o container estiver vazio ou só tiver a mensagem inicial
+            const temApenasInicial = logsContainer && logsContainer.children.length <= 1 && 
+                                      logsContainer.innerHTML.includes('Carregando logs') || 
+                                      logsContainer.innerHTML.includes('Nenhum log');
+            if (temApenasInicial) {
+                carregarLogsMes(mes);
+            }
         }
     } else {
         content.style.display = 'none';
@@ -2397,10 +2404,7 @@ async function emitirNFServicoMes(mes) {
             });
         }
         
-        // Carregar logs atualizados do banco após um delay
-        setTimeout(() => {
-            carregarLogsMes(mes);
-        }, 2000);
+        // Logs permanecem na tela até o usuário atualizar a página
         
     } catch (error) {
         console.error('Erro ao emitir NF Serviço:', error);
@@ -2579,10 +2583,7 @@ async function emitirNFProdutoMes(mes) {
             });
         }
         
-        // Carregar logs atualizados do banco após um delay
-        setTimeout(() => {
-            carregarLogsMes(mes);
-        }, 2000);
+        // Logs permanecem na tela até o usuário atualizar a página
         
     } catch (error) {
         console.error('Erro ao emitir NF Produto:', error);
