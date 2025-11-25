@@ -1503,38 +1503,22 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
                                 ${grupo.pedidos.length > 0 ? (window.Components && typeof window.Components.renderizarTabelaPedidos === 'function' ? window.Components.renderizarTabelaPedidos(grupo.pedidos, agruparPorCategoria) : '<div style="padding: 20px; text-align: center; color: #dc3545;">Erro: Components não disponível. Recarregue a página.</div>') : '<div style="padding: 20px; text-align: center; color: var(--color-gray-medium);">Nenhum pedido neste mês</div>'}
                                 ${grupo.pedidos.length > 0 ? `
                                     <div style="padding: 16px; background-color: #f8f9fa; border-top: 1px solid var(--color-border);">
-                                        <div style="display: flex; gap: 12px; justify-content: center; margin-bottom: 8px;">
-                        <button 
-                            type="button" 
-                                                class="btn btn-primary"
-                                                onclick="emitirNFServicoMes('${mes.value}')"
-                                                style="padding: 10px 20px; font-size: 14px; font-weight: 600;">
-                                                Emitir NF Serviço
-                        </button>
+                                        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; margin-bottom: 16px;">
                                             <button 
-                                                type="button"
+                                                type="button" 
                                                 class="btn btn-primary"
-                                                onclick="emitirNFProdutoMes('${mes.value}')"
-                                                style="padding: 10px 20px; font-size: 14px; font-weight: 600;">
-                                                Emitir NF Produto
-                                            </button>
-                </div>
-                                        <div style="display: flex; gap: 12px; justify-content: center; margin-bottom: 16px;">
-                                            <button 
-                                                type="button"
-                                                class="btn btn-secondary"
-                                                onclick="emitirNFTeste('servico')"
-                                                style="padding: 6px 12px; font-size: 12px; font-weight: 400; opacity: 0.7;">
-                                                Emitir NF Serviço (TESTE)
+                                                onclick="emitirNotasMes('${mes.value}')"
+                                                style="padding: 12px 32px; font-size: 16px; font-weight: 600;">
+                                                📄 Emitir Nota
                                             </button>
                                             <button 
                                                 type="button"
                                                 class="btn btn-secondary"
-                                                onclick="emitirNFTeste('produto')"
-                                                style="padding: 6px 12px; font-size: 12px; font-weight: 400; opacity: 0.7;">
-                                                Emitir NF Produto (TESTE)
+                                                onclick="emitirNFTeste('auto')"
+                                                style="padding: 8px 16px; font-size: 12px; font-weight: 400; opacity: 0.7;">
+                                                🧪 Emitir Teste
                                             </button>
-                </div>
+                                        </div>
                                         <!-- Área de Logs -->
                                         <div id="logs-mes-${mes.value.replace('-', '')}" style="margin-top: 16px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;">
                                             <div 
@@ -2406,6 +2390,167 @@ async function carregarLogsMes(mes) {
 /**
  * Emite NF Serviço para pedidos selecionados do mês
  */
+/**
+ * Emite notas para pedidos do mês - detecta automaticamente o tipo (produto ou serviço)
+ */
+async function emitirNotasMes(mes) {
+    console.log('Emitir Notas para mês:', mes);
+    
+    // Garantir que o mês está expandido para ver os logs
+    const mesId = `mes-${mes.replace('-', '')}`;
+    const content = document.getElementById(mesId);
+    if (content && content.style.display === 'none') {
+        toggleMes(mesId);
+    }
+    
+    // Adicionar log inicial
+    adicionarLogMes(mes, 'info', '🚀 Iniciando emissão de notas...');
+    
+    try {
+        // Obter pedidos selecionados ou todos do mês
+        let pedidoIds = obterPedidosSelecionados();
+        
+        // Se não houver pedidos selecionados, usar todos do mês
+        let pedidosMes = [];
+        if (!pedidoIds || pedidoIds.length === 0) {
+            pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
+                const dataPedido = new Date(pedido.date_created);
+                const [ano, mesNum] = mes.split('-');
+                return dataPedido.getFullYear() === parseInt(ano) && 
+                       (dataPedido.getMonth() + 1) === parseInt(mesNum);
+            });
+            
+            if (pedidosMes.length === 0) {
+                adicionarLogMes(mes, 'erro', 'Nenhum pedido encontrado para este mês.');
+                return;
+            }
+            
+            adicionarLogMes(mes, 'info', `Processando todos os ${pedidosMes.length} pedido(s) do mês.`);
+        } else {
+            // Filtrar pedidos selecionados que pertencem ao mês
+            pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
+                const dataPedido = new Date(pedido.date_created);
+                const [ano, mesNum] = mes.split('-');
+                const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) && 
+                                     (dataPedido.getMonth() + 1) === parseInt(mesNum);
+                const estaSelecionado = pedidoIds.includes(String(pedido.id || pedido.number));
+                return pertenceAoMes && estaSelecionado;
+            });
+            
+            if (pedidosMes.length === 0) {
+                adicionarLogMes(mes, 'erro', 'Nenhum pedido selecionado pertence a este mês.');
+                return;
+            }
+            
+            adicionarLogMes(mes, 'info', `${pedidosMes.length} pedido(s) selecionado(s) para processar.`);
+        }
+        
+        // Separar pedidos por tipo (produto vs serviço)
+        const pedidosProduto = [];
+        const pedidosServico = [];
+        
+        for (const pedido of pedidosMes) {
+            const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
+            const temLivroFaiscas = categorias.some(cat => {
+                const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                return catLower.includes('livro') && catLower.includes('faiscas');
+            });
+            
+            if (temLivroFaiscas) {
+                pedidosProduto.push(pedido);
+            } else {
+                pedidosServico.push(pedido);
+            }
+        }
+        
+        adicionarLogMes(mes, 'info', `📊 Detectado: ${pedidosServico.length} serviço(s), ${pedidosProduto.length} produto(s)`);
+        
+        let totalSucesso = 0;
+        let totalErros = 0;
+        
+        // Emitir NFSe (serviços)
+        if (pedidosServico.length > 0) {
+            const idsServico = pedidosServico.map(p => String(p.id || p.number));
+            adicionarLogMes(mes, 'enviado', `📤 Emitindo ${idsServico.length} NFSe (serviço)...`);
+            
+            try {
+                const resultado = await API.NFSe.emitirLote(idsServico, 'servico');
+                processarResultadoEmissao(mes, resultado, 'NFSe', pedidosServico);
+                totalSucesso += resultado.sucesso || 0;
+                totalErros += resultado.erros || 0;
+            } catch (err) {
+                adicionarLogMes(mes, 'erro', `Erro ao emitir NFSe: ${err.message}`);
+                totalErros += idsServico.length;
+            }
+        }
+        
+        // Emitir NFe (produtos)
+        if (pedidosProduto.length > 0) {
+            const idsProduto = pedidosProduto.map(p => String(p.id || p.number));
+            adicionarLogMes(mes, 'enviado', `📤 Emitindo ${idsProduto.length} NFe (produto)...`);
+            
+            try {
+                const resultado = await API.NFSe.emitirLote(idsProduto, 'produto');
+                processarResultadoEmissao(mes, resultado, 'NFe', pedidosProduto);
+                totalSucesso += resultado.sucesso || 0;
+                totalErros += resultado.erros || 0;
+            } catch (err) {
+                adicionarLogMes(mes, 'erro', `Erro ao emitir NFe: ${err.message}`);
+                totalErros += idsProduto.length;
+            }
+        }
+        
+        // Mensagem final
+        const total = pedidosMes.length;
+        if (totalSucesso === total) {
+            adicionarLogMes(mes, 'sucesso', `✅ Emissão concluída: ${totalSucesso}/${total} nota(s) emitida(s) com sucesso!`);
+        } else if (totalSucesso > 0) {
+            adicionarLogMes(mes, 'info', `⚠️ Emissão parcial: ${totalSucesso}/${total} sucesso, ${totalErros} erro(s)`);
+        } else {
+            adicionarLogMes(mes, 'erro', `❌ Emissão falhou: ${totalErros} erro(s)`);
+        }
+        
+    } catch (error) {
+        console.error('Erro ao emitir notas:', error);
+        adicionarLogMes(mes, 'erro', `Erro: ${error.message}`);
+    }
+}
+
+/**
+ * Processa resultado da emissão e adiciona logs individuais
+ */
+function processarResultadoEmissao(mes, resultado, tipoNota, pedidos) {
+    if (resultado && resultado.resultados && Array.isArray(resultado.resultados)) {
+        resultado.resultados.forEach((res) => {
+            const pedidoCompleto = pedidos.find(p => 
+                String(p.id) === String(res.pedido_id) || String(p.number) === String(res.pedido_id)
+            );
+            const cliente = pedidoCompleto?.billing?.first_name ? 
+                `${pedidoCompleto.billing.first_name} ${pedidoCompleto.billing.last_name || ''}`.trim() : 'N/A';
+            const valor = pedidoCompleto?.total || 'N/A';
+            
+            if (res.sucesso) {
+                adicionarLogMes(mes, 'sucesso', `✓ #${res.pedido_id}: ${tipoNota} emitida`, {
+                    '👤 Cliente': cliente,
+                    '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
+                    '🏷️ Ref': res.referencia || 'N/A',
+                    '📊 Status': res.status || 'processando'
+                });
+            } else {
+                const erroDetalhe = typeof res.erro === 'object' 
+                    ? (res.erro.mensagem || res.erro.message || JSON.stringify(res.erro))
+                    : (res.erro || 'Erro desconhecido');
+                
+                adicionarLogMes(mes, 'erro', `✗ #${res.pedido_id}: Falha`, {
+                    '👤 Cliente': cliente,
+                    '❌ Erro': erroDetalhe
+                });
+            }
+        });
+    }
+}
+
+// Manter funções antigas por compatibilidade
 async function emitirNFServicoMes(mes) {
     console.log('Emitir NF Serviço para mês:', mes);
     
@@ -2876,7 +3021,19 @@ function finalizarProgressoEmissao(sucesso, mensagem) {
  * Emite NF de teste com feedback visual no console
  */
 async function emitirNFTeste(tipoNF) {
-    if (!confirm(`Deseja emitir uma ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} de TESTE com dados aleatórios?`)) {
+    // Se for 'auto', perguntar qual tipo
+    if (tipoNF === 'auto') {
+        const opcao = prompt('Qual tipo de nota de TESTE deseja emitir?\n\n1 = NFSe (Serviço)\n2 = NFe (Produto - Livro Faíscas)\n\nDigite 1 ou 2:');
+        if (opcao === '1') {
+            tipoNF = 'servico';
+        } else if (opcao === '2') {
+            tipoNF = 'produto';
+        } else {
+            return;
+        }
+    }
+    
+    if (!confirm(`Deseja emitir uma ${tipoNF === 'produto' ? 'NFe (Produto)' : 'NFSe (Serviço)'} de TESTE com dados aleatórios?`)) {
         return;
     }
     
@@ -2887,7 +3044,7 @@ async function emitirNFTeste(tipoNF) {
         const resultado = await API.NFSe.emitirTeste(tipoNF);
         
         if (resultado.sucesso) {
-            const msg = `✓ ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} enviada com sucesso!\n\nReferência: ${resultado.referencia}\nStatus: ${resultado.status}`;
+            const msg = `✓ ${tipoNF === 'produto' ? 'NFe (Produto)' : 'NFSe (Serviço)'} enviada com sucesso!\n\nReferência: ${resultado.referencia}\nStatus: ${resultado.status}`;
             console.log(msg);
             alert(msg);
         } else {
@@ -4392,6 +4549,7 @@ window.buscarPedidosFiltrados = buscarPedidosFiltrados;
 window.testarConexaoWooCommerce = testarConexaoWooCommerce;
 window.limparFiltrosPedidos = limparFiltrosPedidos;
 window.verDetalhesPedido = verDetalhesPedido;
+window.emitirNotasMes = emitirNotasMes;
 window.emitirNFServicoMes = emitirNFServicoMes;
 window.emitirNFProdutoMes = emitirNFProdutoMes;
 window.emitirNFSePedido = emitirNFSePedido;
