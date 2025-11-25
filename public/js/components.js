@@ -549,7 +549,7 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
             
             rows += `
                 <tr style="background-color: var(--color-gray-light);">
-                    <td colspan="8" style="padding: 12px; font-weight: 600; font-size: 16px;">
+                    <td colspan="7" style="padding: 12px; font-weight: 600; font-size: 16px;">
                         ${categoria} (${pedidosCategoria.length} pedido${pedidosCategoria.length !== 1 ? 's' : ''})
                     </td>
                 </tr>
@@ -581,10 +581,6 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                         <td>${total}</td>
                         <td>${statusLabel}</td>
                         <td>${categoria}</td>
-                        <td>
-                            <button class="btn btn-secondary" onclick="verDetalhesPedido(${id})">Ver Detalhes</button>
-                            ${!pedido.tem_nfse ? `<button class="btn btn-primary" onclick="emitirNFSePedido(${id})">Emitir NF</button>` : ''}
-                        </td>
                     </tr>
                 `;
             });
@@ -629,10 +625,6 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                     <td>${total}</td>
                     <td>${statusLabel}</td>
                     <td>${categoriaTexto}</td>
-                    <td>
-                        <button class="btn btn-secondary" onclick="verDetalhesPedido(${id})">Ver Detalhes</button>
-                        ${!pedido.tem_nfse ? `<button class="btn btn-primary" onclick="emitirNFSePedido(${id})">Emitir NFSe</button>` : ''}
-                    </td>
                 </tr>
             `;
         });
@@ -662,7 +654,6 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                         <th>Total</th>
                         <th>Status</th>
                         <th>Categoria</th>
-                        <th>Ações</th>
                     </tr>
                 </thead>
                 <tbody>
