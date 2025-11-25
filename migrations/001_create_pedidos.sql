@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS pedidos (
 -- Tabela de NFSe
 CREATE TABLE IF NOT EXISTS nfse (
   id SERIAL PRIMARY KEY,
-  pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+  pedido_id INTEGER,
+  pedido_wc_id TEXT,
   referencia TEXT NOT NULL UNIQUE,
   chave_nfse TEXT,
   status_focus TEXT,
@@ -21,6 +22,7 @@ CREATE TABLE IF NOT EXISTS nfse (
   caminho_xml TEXT,
   caminho_pdf TEXT,
   dados_completos JSONB,
+  ambiente TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
