@@ -2103,16 +2103,38 @@ function adicionarLogMes(mes, tipo, mensagem, dados = null) {
     }
     
     const logEntry = document.createElement('div');
-    logEntry.style.cssText = 'margin-bottom: 8px; line-height: 1.6;';
+    logEntry.style.cssText = 'margin-bottom: 12px; line-height: 1.6; padding: 8px; border-radius: 4px; background: rgba(255,255,255,0.02);';
+    
+    // Formatar dados de forma mais legível
+    let dadosHTML = '';
+    if (dados) {
+        if (typeof dados === 'string') {
+            dadosHTML = `<div style="margin-left: 20px; margin-top: 6px; color: #888; font-size: 12px; white-space: pre-wrap; word-break: break-word;">${dados}</div>`;
+        } else if (typeof dados === 'object') {
+            dadosHTML = '<div style="margin-left: 20px; margin-top: 6px; display: grid; gap: 4px;">';
+            for (const [chave, valor] of Object.entries(dados)) {
+                if (valor !== null && valor !== undefined && valor !== '') {
+                    const valorStr = typeof valor === 'object' ? JSON.stringify(valor) : String(valor);
+                    const valorCor = chave.includes('Erro') ? '#f48771' : (chave.includes('Sucesso') || chave.includes('autorizado') ? '#6a9955' : '#b5cea8');
+                    dadosHTML += `
+                        <div style="display: flex; gap: 8px; font-size: 12px;">
+                            <span style="color: #9cdcfe; min-width: 120px;">${chave}:</span>
+                            <span style="color: ${valorCor}; word-break: break-all;">${valorStr}</span>
+                        </div>
+                    `;
+                }
+            }
+            dadosHTML += '</div>';
+        }
+    }
+    
     logEntry.innerHTML = `
-        <span style="color: #808080;">[${timestamp}]</span>
-        <span style="color: ${cor}; font-weight: 600; margin-left: 8px;">${prefixo}</span>
-        <span style="color: #d4d4d4; margin-left: 8px;">${mensagem}</span>
-        ${dados ? `
-            <div style="margin-left: 20px; margin-top: 4px; color: #888; font-size: 11px; white-space: pre-wrap; word-break: break-word;">
-                ${typeof dados === 'string' ? dados : JSON.stringify(dados, null, 2)}
-            </div>
-        ` : ''}
+        <div style="display: flex; align-items: flex-start; gap: 8px;">
+            <span style="color: #808080; font-size: 11px; white-space: nowrap;">[${timestamp}]</span>
+            <span style="color: ${cor}; font-weight: 600; white-space: nowrap;">${prefixo}</span>
+            <span style="color: #d4d4d4; flex: 1;">${mensagem}</span>
+        </div>
+        ${dadosHTML}
     `;
     
     // Se for o primeiro log, limpar mensagem inicial
@@ -2164,57 +2186,74 @@ async function carregarLogsMes(mes) {
             // Determinar tipo baseado no level e action
             if (log.level === 'ERROR' || log.level === 'error') {
                 tipo = 'erro';
-            } else if (log.action === 'emitir_nfse' || log.service === 'focusNFe') {
+            } else if (log.action === 'emitir_nfse' || log.action === 'emitir_nfe' || log.service === 'focusNFe') {
                 if (log.message && log.message.toLowerCase().includes('enviando')) {
                     tipo = 'enviado';
-                } else if (log.message && log.message.toLowerCase().includes('resposta') || log.message.toLowerCase().includes('recebido')) {
+                } else if (log.message && (log.message.toLowerCase().includes('resposta') || log.message.toLowerCase().includes('recebido'))) {
                     tipo = 'recebido';
-                } else if (log.message && log.message.toLowerCase().includes('sucesso') || log.message.toLowerCase().includes('emitida')) {
+                } else if (log.message && (log.message.toLowerCase().includes('sucesso') || log.message.toLowerCase().includes('emitida') || log.message.toLowerCase().includes('autorizado'))) {
                     tipo = 'sucesso';
                 }
             }
             
-            // Extrair dados relevantes
+            // Extrair dados relevantes com mais detalhes
             let dados = null;
             if (log.data) {
                 try {
                     const dataObj = typeof log.data === 'string' ? JSON.parse(log.data) : log.data;
                     
-                    // Para logs de erro, mostrar o erro completo
-                    if (tipo === 'erro' && (dataObj.erro || dataObj.error || dataObj.message)) {
-                        dados = dataObj.erro || dataObj.error || dataObj.message;
+                    // Montar objeto com todos os dados úteis
+                    const detalhes = {};
+                    
+                    // Identificação
+                    if (dataObj.pedido_id) detalhes['📦 Pedido'] = `#${dataObj.pedido_id}`;
+                    if (dataObj.referencia) detalhes['🏷️ Referência'] = dataObj.referencia;
+                    if (dataObj.tipo_nota) detalhes['📄 Tipo'] = dataObj.tipo_nota === 'produto' ? 'NFe (Produto)' : 'NFSe (Serviço)';
+                    
+                    // Status
+                    if (dataObj.status) detalhes['📊 Status'] = dataObj.status;
+                    if (dataObj.status_sefaz) detalhes['🏛️ Status SEFAZ'] = dataObj.status_sefaz;
+                    if (dataObj.mensagem_sefaz) detalhes['💬 Mensagem SEFAZ'] = dataObj.mensagem_sefaz;
+                    
+                    // Chaves e URLs
+                    if (dataObj.chave_nfe) detalhes['🔑 Chave NFe'] = dataObj.chave_nfe;
+                    if (dataObj.chave_nfse) detalhes['🔑 Chave NFSe'] = dataObj.chave_nfse;
+                    if (dataObj.caminho_xml_nota_fiscal || dataObj.caminho_xml) detalhes['📁 XML'] = dataObj.caminho_xml_nota_fiscal || dataObj.caminho_xml;
+                    if (dataObj.caminho_danfe || dataObj.caminho_pdf) detalhes['📄 PDF'] = dataObj.caminho_danfe || dataObj.caminho_pdf;
+                    
+                    // Valores
+                    if (dataObj.valor_total) detalhes['💰 Valor'] = `R$ ${parseFloat(dataObj.valor_total).toFixed(2)}`;
+                    
+                    // Cliente
+                    if (dataObj.cliente) detalhes['👤 Cliente'] = dataObj.cliente;
+                    if (dataObj.nome) detalhes['👤 Cliente'] = dataObj.nome;
+                    if (dataObj.cpf || dataObj.cpf_destinatario) detalhes['🆔 CPF'] = dataObj.cpf || dataObj.cpf_destinatario;
+                    if (dataObj.cnpj || dataObj.cnpj_destinatario) detalhes['🆔 CNPJ'] = dataObj.cnpj || dataObj.cnpj_destinatario;
+                    
+                    // Erros
+                    if (dataObj.erro) detalhes['❌ Erro'] = typeof dataObj.erro === 'object' ? JSON.stringify(dataObj.erro) : dataObj.erro;
+                    if (dataObj.error) detalhes['❌ Erro'] = typeof dataObj.error === 'object' ? JSON.stringify(dataObj.error) : dataObj.error;
+                    if (dataObj.codigo_erro) detalhes['🔢 Código Erro'] = dataObj.codigo_erro;
+                    
+                    // Response da API
+                    if (dataObj.response_data) {
+                        if (dataObj.response_data.status) detalhes['📊 Status API'] = dataObj.response_data.status;
+                        if (dataObj.response_data.mensagem_sefaz) detalhes['💬 SEFAZ'] = dataObj.response_data.mensagem_sefaz;
+                        if (dataObj.response_data.chave_nfe) detalhes['🔑 Chave'] = dataObj.response_data.chave_nfe;
                     }
-                    // Para logs enviados, mostrar payload resumido
-                    else if (tipo === 'enviado' && dataObj.payload) {
-                        const payload = dataObj.payload;
-                        dados = {
-                            referencia: payload.ref || payload.referencia,
-                            prestador: payload.prestador?.cnpj || payload.cnpj_emitente,
-                            tomador: payload.tomador?.cpf || payload.tomador?.cnpj || payload.cpf_destinatario || payload.cnpj_destinatario,
-                            valor: payload.servico?.valor_servicos || payload.valor_total
-                        };
-                    }
-                    // Para logs recebidos, mostrar resposta resumida
-                    else if (tipo === 'recebido' && dataObj.response) {
-                        const response = dataObj.response;
-                        dados = {
-                            status: response.status || response.status_sefaz,
-                            mensagem: response.mensagem_sefaz || response.message,
-                            chave: response.chave_nfse || response.chave_nfe
-                        };
-                    }
-                    // Para outros casos, mostrar dados relevantes
-                    else if (dataObj.payload || dataObj.response || dataObj.erro || dataObj.error) {
-                        dados = {
-                            ...(dataObj.payload && { payload: dataObj.payload }),
-                            ...(dataObj.response && { response: dataObj.response }),
-                            ...(dataObj.erro && { erro: dataObj.erro }),
-                            ...(dataObj.error && { error: dataObj.error })
-                        };
+                    
+                    // Ambiente
+                    if (dataObj.ambiente) detalhes['🌐 Ambiente'] = dataObj.ambiente === 'producao' ? '🔴 PRODUÇÃO' : '🟡 Homologação';
+                    
+                    // Se tem detalhes, usar; senão mostrar dados brutos
+                    if (Object.keys(detalhes).length > 0) {
+                        dados = detalhes;
+                    } else if (dataObj.payload || dataObj.response || dataObj.erro || dataObj.error) {
+                        dados = dataObj;
                     }
                 } catch (e) {
                     // Se não conseguir parsear, mostrar como string
-                    dados = String(log.data).substring(0, 200);
+                    dados = String(log.data).substring(0, 500);
                 }
             }
             
@@ -2313,16 +2352,33 @@ async function emitirNFServicoMes(mes) {
             // Adicionar logs individuais dos resultados
             if (resultado.resultados && Array.isArray(resultado.resultados)) {
                 resultado.resultados.forEach((res, idx) => {
+                    // Buscar dados do pedido para mais detalhes
+                    const pedidoCompleto = estadoAtual.dados.todosPedidos?.find(p => 
+                        String(p.id) === String(res.pedido_id) || String(p.number) === String(res.pedido_id)
+                    );
+                    const cliente = pedidoCompleto?.billing?.first_name ? 
+                        `${pedidoCompleto.billing.first_name} ${pedidoCompleto.billing.last_name || ''}`.trim() : 
+                        (pedidoCompleto?.customer_name || 'N/A');
+                    const valor = pedidoCompleto?.total || res.valor_total || 'N/A';
+                    
                     if (res.sucesso) {
                         adicionarLogMes(mes, 'sucesso', `Pedido #${res.pedido_id}: NFSe emitida com sucesso`, {
-                            pedido_id: res.pedido_id,
-                            referencia: res.referencia,
-                            status: res.status
+                            '📦 Pedido': `#${res.pedido_id}`,
+                            '👤 Cliente': cliente,
+                            '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
+                            '🏷️ Referência': res.referencia || 'N/A',
+                            '📊 Status': res.status || 'autorizado',
+                            '🔑 Chave': res.chave_nfse || res.numero || 'Aguardando...',
+                            '📁 XML': res.caminho_xml ? '✓ Disponível' : 'Aguardando...',
+                            '📄 PDF': res.caminho_pdf ? '✓ Disponível' : 'Aguardando...'
                         });
                     } else {
-                        adicionarLogMes(mes, 'erro', `Pedido #${res.pedido_id}: ${res.erro || 'Erro desconhecido'}`, {
-                            pedido_id: res.pedido_id,
-                            erro: res.erro
+                        adicionarLogMes(mes, 'erro', `Pedido #${res.pedido_id}: Falha na emissão`, {
+                            '📦 Pedido': `#${res.pedido_id}`,
+                            '👤 Cliente': cliente,
+                            '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
+                            '❌ Erro': res.erro || res.mensagem || 'Erro desconhecido',
+                            '🔢 Código': res.codigo_erro || res.codigo || 'N/A'
                         });
                     }
                 });
@@ -2476,16 +2532,33 @@ async function emitirNFProdutoMes(mes) {
             // Adicionar logs individuais dos resultados
             if (resultado.resultados && Array.isArray(resultado.resultados)) {
                 resultado.resultados.forEach((res, idx) => {
+                    // Buscar dados do pedido para mais detalhes
+                    const pedidoCompleto = estadoAtual.dados.todosPedidos?.find(p => 
+                        String(p.id) === String(res.pedido_id) || String(p.number) === String(res.pedido_id)
+                    );
+                    const cliente = pedidoCompleto?.billing?.first_name ? 
+                        `${pedidoCompleto.billing.first_name} ${pedidoCompleto.billing.last_name || ''}`.trim() : 
+                        (pedidoCompleto?.customer_name || 'N/A');
+                    const valor = pedidoCompleto?.total || res.valor_total || 'N/A';
+                    
                     if (res.sucesso) {
-                        adicionarLogMes(mes, 'sucesso', `Pedido #${res.pedido_id}: NF Produto emitida com sucesso`, {
-                            pedido_id: res.pedido_id,
-                            referencia: res.referencia,
-                            status: res.status
+                        adicionarLogMes(mes, 'sucesso', `Pedido #${res.pedido_id}: NFe (Produto) emitida com sucesso`, {
+                            '📦 Pedido': `#${res.pedido_id}`,
+                            '👤 Cliente': cliente,
+                            '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
+                            '🏷️ Referência': res.referencia || 'N/A',
+                            '📊 Status': res.status || 'autorizado',
+                            '🔑 Chave NFe': res.chave_nfe || 'Aguardando...',
+                            '📁 XML': res.caminho_xml_nota_fiscal ? '✓ Disponível' : 'Aguardando...',
+                            '📄 DANFE': res.caminho_danfe ? '✓ Disponível' : 'Aguardando...'
                         });
                     } else {
-                        adicionarLogMes(mes, 'erro', `Pedido #${res.pedido_id}: ${res.erro || res.mensagem || 'Erro desconhecido'}`, {
-                            pedido_id: res.pedido_id,
-                            erro: res.erro || res.mensagem
+                        adicionarLogMes(mes, 'erro', `Pedido #${res.pedido_id}: Falha na emissão de NFe`, {
+                            '📦 Pedido': `#${res.pedido_id}`,
+                            '👤 Cliente': cliente,
+                            '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
+                            '❌ Erro': res.erro || res.mensagem || 'Erro desconhecido',
+                            '🔢 Código': res.codigo_erro || res.codigo || 'N/A'
                         });
                     }
                 });
