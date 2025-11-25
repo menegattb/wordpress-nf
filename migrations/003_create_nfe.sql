@@ -1,7 +1,8 @@
 -- Tabela de NFe (Nota Fiscal Eletrônica de Produto)
 CREATE TABLE IF NOT EXISTS nfe (
   id SERIAL PRIMARY KEY,
-  pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+  pedido_id INTEGER,
+  pedido_wc_id TEXT,
   referencia TEXT NOT NULL UNIQUE,
   chave_nfe TEXT,
   status_focus TEXT,
