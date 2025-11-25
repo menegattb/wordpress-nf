@@ -68,12 +68,37 @@ function lerAmbienteDoEnv() {
 }
 
 // Rota de health check
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
   const ambiente = lerAmbienteDoEnv();
+  
+  // Verificar conexão com banco
+  let dbStatus = 'desconectado';
+  let dbInfo = {};
+  
+  try {
+    const { sql } = require('@vercel/postgres');
+    const result = await sql`SELECT NOW() as time, current_database() as db`;
+    dbStatus = 'conectado';
+    dbInfo = {
+      database: result.rows[0]?.db,
+      time: result.rows[0]?.time
+    };
+  } catch (err) {
+    dbStatus = 'erro: ' + err.message;
+  }
+  
   res.json({
     status: 'ok',
     ambiente: ambiente,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    banco: {
+      status: dbStatus,
+      ...dbInfo,
+      variaveis: {
+        POSTGRES_URL: process.env.POSTGRES_URL ? '✓ configurado' : '✗ não configurado',
+        POSTGRES_PRISMA_URL: process.env.POSTGRES_PRISMA_URL ? '✓ configurado' : '✗ não configurado'
+      }
+    }
   });
 });
 
