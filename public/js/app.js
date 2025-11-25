@@ -2280,10 +2280,6 @@ async function emitirNFServicoMes(mes) {
         toggleMes(mesId);
     }
     
-    // Mostrar modal de progresso
-    mostrarProgressoEmissao('servico');
-    atualizarProgressoEmissao(1, 'Preparando pedidos para emissão...');
-    
     // Adicionar log inicial
     adicionarLogMes(mes, 'info', 'Iniciando emissão de NF Serviço...');
     
@@ -2302,7 +2298,6 @@ async function emitirNFServicoMes(mes) {
             
             if (pedidosMes.length === 0) {
                 adicionarLogMes(mes, 'erro', 'Nenhum pedido encontrado para este mês.');
-                finalizarProgressoEmissao(false, '✗ Nenhum pedido encontrado para este mês.');
                 return;
             }
             
@@ -2323,14 +2318,11 @@ async function emitirNFServicoMes(mes) {
             
             if (pedidoIds.length === 0) {
                 adicionarLogMes(mes, 'erro', 'Nenhum pedido selecionado pertence a este mês.');
-                finalizarProgressoEmissao(false, '✗ Nenhum pedido selecionado pertence a este mês.');
                 return;
             }
             
             adicionarLogMes(mes, 'info', `${pedidoIds.length} pedido(s) selecionado(s) para processar.`);
         }
-        
-        atualizarProgressoEmissao(2, `Enviando ${pedidoIds.length} pedido(s) para emissão de NFSe...`);
         
         // Chamar API de emissão em lote
         adicionarLogMes(mes, 'enviado', `Enviando ${pedidoIds.length} pedido(s) para emissão...`, { 
@@ -2339,8 +2331,6 @@ async function emitirNFServicoMes(mes) {
         });
         
         const resultado = await API.NFSe.emitirLote(pedidoIds, 'servico');
-        
-        atualizarProgressoEmissao(3, 'Processando resposta do servidor...');
     
         // Verificar se temos resultados para processar (sucesso pode ser 0 mas ainda ter resultados)
         if (resultado && resultado.resultados && Array.isArray(resultado.resultados)) {
@@ -2400,14 +2390,11 @@ async function emitirNFServicoMes(mes) {
             } else {
                 adicionarLogMes(mes, 'erro', mensagemFinal);
             }
-            
-            finalizarProgressoEmissao(temSucesso, mensagemFinal);
         } else {
             const erroMsg = resultado?.erro || resultado?.mensagem || 'Erro desconhecido';
             adicionarLogMes(mes, 'erro', `Erro ao emitir NFSe: ${erroMsg}`, {
                 erro: erroMsg
             });
-            finalizarProgressoEmissao(false, `✗ Erro ao emitir NFSe: ${erroMsg}`);
         }
         
         // Carregar logs atualizados do banco após um delay
@@ -2418,7 +2405,6 @@ async function emitirNFServicoMes(mes) {
     } catch (error) {
         console.error('Erro ao emitir NF Serviço:', error);
         adicionarLogMes(mes, 'erro', `Erro ao emitir NF Serviço: ${error.message}`, { error: error.message });
-        finalizarProgressoEmissao(false, `✗ Erro ao emitir NF Serviço: ${error.message}`);
     }
 }
 
@@ -2444,10 +2430,6 @@ async function emitirNFProdutoMes(mes) {
         return;
     }
     
-    // Mostrar modal de progresso
-    mostrarProgressoEmissao('produto');
-    atualizarProgressoEmissao(1, 'Preparando pedidos de produto para emissão...');
-    
     // Adicionar log inicial
     adicionarLogMes(mes, 'info', 'Iniciando emissão de NF Produto...');
     
@@ -2455,7 +2437,6 @@ async function emitirNFProdutoMes(mes) {
         // Verificar se há dados carregados
         if (!estadoAtual.dados || !estadoAtual.dados.todosPedidos) {
             adicionarLogMes(mes, 'erro', 'Erro: Dados dos pedidos não carregados. Clique em "Recarregar do WooCommerce" primeiro.');
-            finalizarProgressoEmissao(false, '✗ Dados dos pedidos não carregados. Recarregue do WooCommerce primeiro.');
             return;
         }
         
@@ -2484,7 +2465,6 @@ async function emitirNFProdutoMes(mes) {
             
             if (pedidosMes.length === 0) {
                 adicionarLogMes(mes, 'erro', 'Nenhum pedido de PRODUTO (Livro Faíscas) encontrado para este mês.');
-                finalizarProgressoEmissao(false, '✗ Nenhum pedido de PRODUTO (Livro Faíscas) encontrado para este mês.');
                 return;
             }
             
@@ -2515,14 +2495,11 @@ async function emitirNFProdutoMes(mes) {
             
             if (pedidoIds.length === 0) {
                 adicionarLogMes(mes, 'erro', 'Nenhum pedido selecionado é de PRODUTO (Livro Faíscas) ou pertence a este mês.');
-                finalizarProgressoEmissao(false, '✗ Nenhum pedido selecionado é de PRODUTO (Livro Faíscas) ou pertence a este mês.');
                 return;
             }
             
             adicionarLogMes(mes, 'info', `${pedidoIds.length} pedido(s) de PRODUTO selecionado(s) para processar.`);
         }
-        
-        atualizarProgressoEmissao(2, `Enviando ${pedidoIds.length} pedido(s) para emissão de NFe...`);
         
         // Chamar API de emissão em lote (tipo produto)
         adicionarLogMes(mes, 'enviado', `Enviando ${pedidoIds.length} pedido(s) para emissão de NF Produto...`, { 
@@ -2534,8 +2511,6 @@ async function emitirNFProdutoMes(mes) {
         console.log('Chamando API.emitirLote com:', { pedidoIds, tipo: 'produto' });
         const resultado = await API.NFSe.emitirLote(pedidoIds, 'produto');
         console.log('Resultado da API:', resultado);
-        
-        atualizarProgressoEmissao(3, 'Processando resposta do servidor...');
         
         // Verificar se temos resultados para processar (sucesso pode ser 0 mas ainda ter resultados)
         if (resultado && resultado.resultados && Array.isArray(resultado.resultados)) {
@@ -2595,8 +2570,6 @@ async function emitirNFProdutoMes(mes) {
             } else {
                 adicionarLogMes(mes, 'erro', mensagemFinal);
             }
-            
-            finalizarProgressoEmissao(temSucesso, mensagemFinal);
         } else {
             const erroMsg = resultado?.erro || resultado?.mensagem || JSON.stringify(resultado) || 'Erro desconhecido';
             console.error('Erro na resposta da API:', resultado);
@@ -2604,7 +2577,6 @@ async function emitirNFProdutoMes(mes) {
                 erro: erroMsg,
                 resposta_completa: resultado
             });
-            finalizarProgressoEmissao(false, `✗ Erro ao emitir NF Produto: ${erroMsg}`);
         }
         
         // Carregar logs atualizados do banco após um delay
@@ -2619,7 +2591,6 @@ async function emitirNFProdutoMes(mes) {
             stack: error.stack,
             tipo: error.name
         });
-        finalizarProgressoEmissao(false, `✗ Erro ao emitir NF Produto: ${error.message}`);
     }
 }
 
@@ -2772,49 +2743,33 @@ function finalizarProgressoEmissao(sucesso, mensagem) {
 }
 
 /**
- * Emite NF de teste com feedback visual de progresso
+ * Emite NF de teste com feedback visual no console
  */
 async function emitirNFTeste(tipoNF) {
     if (!confirm(`Deseja emitir uma ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} de TESTE com dados aleatórios?`)) {
         return;
     }
     
-    // Mostrar modal de progresso
-    mostrarProgressoEmissao(tipoNF, true);
-    atualizarProgressoEmissao(1, 'Preparando dados do pedido de teste...');
+    console.log(`Iniciando emissão de ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} de teste...`);
     
     try {
-        // Simular pequeno delay para mostrar o passo 1
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        atualizarProgressoEmissao(2, 'Enviando requisição para Focus NFe...');
-        
         // Fazer a requisição
         const resultado = await API.NFSe.emitirTeste(tipoNF);
         
-        atualizarProgressoEmissao(3, 'Processando resposta do servidor...');
-        
-        // Simular pequeno delay para mostrar o passo 3
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
         if (resultado.sucesso) {
-            finalizarProgressoEmissao(
-                true,
-                `✓ ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} enviada com sucesso! Referência: ${resultado.referencia} | Status: ${resultado.status}`
-            );
+            const msg = `✓ ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} enviada com sucesso!\n\nReferência: ${resultado.referencia}\nStatus: ${resultado.status}`;
+            console.log(msg);
+            alert(msg);
         } else {
             const erroMsg = resultado.mensagem || resultado.erro || 'Erro desconhecido';
-            finalizarProgressoEmissao(
-                false,
-                `✗ Erro: ${erroMsg}`
-            );
+            const msg = `✗ Erro: ${erroMsg}`;
+            console.error(msg);
+            alert(msg);
         }
     } catch (error) {
-        atualizarProgressoEmissao(3, 'Erro na requisição...');
-        finalizarProgressoEmissao(
-            false,
-            `✗ Erro ao emitir ${tipoNF === 'produto' ? 'NFe' : 'NFSe'}: ${error.message}`
-        );
+        const msg = `✗ Erro ao emitir ${tipoNF === 'produto' ? 'NFe' : 'NFSe'}: ${error.message}`;
+        console.error(msg);
+        alert(msg);
     }
 }
 
@@ -3175,14 +3130,10 @@ async function sincronizarNotasFocus() {
         return;
     }
     
-    // Mostrar modal de progresso
-    mostrarProgressoEmissao('sincronizacao', false);
-    atualizarProgressoEmissao(1, 'Buscando notas da Focus NFe...');
+    console.log('Iniciando sincronização com Focus NFe...');
     
     try {
         const resultado = await API.NFSe.sincronizar();
-        
-        atualizarProgressoEmissao(2, 'Sincronizando com banco local...');
         
         if (resultado.sucesso) {
             const resumo = resultado.resumo || {};
@@ -3197,7 +3148,8 @@ async function sincronizarNotasFocus() {
                 mensagem += `\n⚠️ ${resumo.total_erros} erro(s) durante a sincronização`;
             }
             
-            finalizarProgressoEmissao(true, mensagem);
+            console.log(mensagem);
+            alert(mensagem);
             
             // Recarregar a lista de notas após sincronização
             setTimeout(() => {
@@ -3205,11 +3157,13 @@ async function sincronizarNotasFocus() {
             }, 1000);
         } else {
             const erroMsg = resultado.erro || resultado.mensagem || 'Erro desconhecido';
-            finalizarProgressoEmissao(false, `✗ Erro ao sincronizar: ${erroMsg}`);
+            const msg = `✗ Erro ao sincronizar: ${erroMsg}`;
+            console.error(msg);
+            alert(msg);
         }
     } catch (error) {
         console.error('Erro ao sincronizar notas:', error);
-        finalizarProgressoEmissao(false, `✗ Erro ao sincronizar: ${error.message}`);
+        alert(`✗ Erro ao sincronizar: ${error.message}`);
     }
 }
 
