@@ -120,7 +120,7 @@ const NFSeAPI = {
      * Sincroniza todas as notas da Focus NFe com o banco local
      */
     async sincronizar(filtros = {}) {
-        return await apiRequest('/api/pedidos/notas/sincronizar', {
+        return await apiRequest('/api/nfse/sincronizar', {
             method: 'POST',
             body: filtros
         });
