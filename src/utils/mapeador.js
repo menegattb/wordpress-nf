@@ -99,7 +99,7 @@ function mapearWooCommerceParaPedido(pedidoWC) {
       cidade: billing.city || shipping.city || '',
       estado: billing.state || shipping.state || '',
       cep: (billing.postcode || shipping.postcode || '').replace(/\D/g, ''),
-      pais: billing.country || shipping.country || 'Brasil'
+      pais: (billing.country === 'BR' || shipping.country === 'BR') ? 'Brasil' : (billing.country || shipping.country || 'Brasil')
     },
     
     // Serviços
@@ -536,13 +536,19 @@ async function mapearPedidoParaNFe(dadosPedido, configEmitente, configFiscal) {
     inscricaoEstadualEmitente = undefined;
   }
   
+  // Determinar local_destino baseado no estado
+  // 1 = Operação interna (mesmo estado)
+  // 2 = Operação interestadual
+  // 3 = Operação com exterior
+  const localDestino = isVendaInterestadual ? 2 : 1;
+  
   // Estrutura NFe conforme documentação
   const nfe = {
-    natureza_operacao: dadosPedido.natureza_operacao || 'Remessa',
+    natureza_operacao: dadosPedido.natureza_operacao || 'Venda de mercadoria',
     data_emissao: dataEmissao,
     data_entrada_saida: dataEmissao,
     tipo_documento: 1, // 1 = Saída
-    local_destino: 1, // 1 = Operação interna (pode ser ajustado conforme necessário)
+    local_destino: localDestino, // 1 = Interna, 2 = Interestadual
     finalidade_emissao: 1, // 1 = Normal
     consumidor_final: consumidorFinal, // 0 = Normal, 1 = Consumidor final (1 se não contribuinte)
     presenca_comprador: 2, // 2 = Operação não presencial, pela Internet
@@ -567,7 +573,7 @@ async function mapearPedidoParaNFe(dadosPedido, configEmitente, configFiscal) {
     bairro_destinatario: dadosMunicipioDestinatario.bairro || dadosPedido.endereco?.bairro || undefined,
     municipio_destinatario: dadosMunicipioDestinatario.cidade || dadosPedido.endereco?.cidade || '',
     uf_destinatario: dadosMunicipioDestinatario.uf || dadosPedido.endereco?.estado || '',
-    pais_destinatario: dadosPedido.endereco?.pais || 'Brasil',
+    pais_destinatario: (dadosPedido.endereco?.pais === 'BR' ? 'Brasil' : dadosPedido.endereco?.pais) || 'Brasil',
     cep_destinatario: cepDestinatario, // Manter como string para preservar zeros à esquerda
     
     // Itens
