@@ -2,10 +2,51 @@ const logger = require('../services/logger');
 const { mapearWooCommerceParaPedido } = require('../utils/mapeador');
 const { salvarPedido, buscarPedidoPorPedidoId, atualizarPedido, salvarNFSe, atualizarNFSe, buscarNFSePorReferencia, salvarNFe, atualizarNFe, buscarNFePorReferencia } = require('../config/database');
 const { emitirNFSe } = require('../services/focusNFSe');
+const { emitirNFe } = require('../services/focusNFe');
 const config = require('../../config');
 
 // Passar config.fiscal também
 const configFiscal = config.fiscal;
+
+/**
+ * Verifica se o pedido contém produtos da categoria "Livro Faíscas"
+ * Se sim, deve emitir NFe (produto), caso contrário NFSe (serviço)
+ */
+function verificarTipoNota(pedidoWC) {
+  const categoriasLivro = ['livro faíscas', 'livro faiscas', 'livros faíscas', 'livros faiscas'];
+  
+  if (!pedidoWC.line_items || !Array.isArray(pedidoWC.line_items)) {
+    return 'servico'; // Padrão: serviço
+  }
+  
+  for (const item of pedidoWC.line_items) {
+    // Verificar categorias do item
+    if (item.categories && Array.isArray(item.categories)) {
+      for (const cat of item.categories) {
+        const nomeCategoria = (typeof cat === 'string' ? cat : cat.name || '').toLowerCase();
+        if (categoriasLivro.some(c => nomeCategoria.includes(c))) {
+          return 'produto'; // É livro, emitir NFe
+        }
+      }
+    }
+    // Verificar categoria direta
+    if (item.category) {
+      const nomeCategoria = (typeof item.category === 'string' ? item.category : item.category.name || '').toLowerCase();
+      if (categoriasLivro.some(c => nomeCategoria.includes(c))) {
+        return 'produto'; // É livro, emitir NFe
+      }
+    }
+    // Verificar nome do produto como fallback
+    if (item.name) {
+      const nomeProduto = item.name.toLowerCase();
+      if (categoriasLivro.some(c => nomeProduto.includes(c))) {
+        return 'produto'; // É livro, emitir NFe
+      }
+    }
+  }
+  
+  return 'servico'; // Padrão: serviço
+}
 
 /**
  * Processa webhook do WooCommerce
@@ -122,20 +163,32 @@ async function processarWebhook(req, res) {
       });
     }
     
-    // Emitir NFSe (SÍNCRONO - aguarda resultado antes de responder)
-    // Necessário para Vercel serverless onde a função termina após resposta
-    logger.webhook('Iniciando emissão de NFSe', {
-      pedido_id: dadosPedido.pedido_id
+    // Determinar tipo de nota baseado na categoria do produto
+    // Livro Faíscas = NFe (produto), resto = NFSe (serviço)
+    const tipoNota = verificarTipoNota(pedidoWC);
+    
+    logger.webhook(`Iniciando emissão de ${tipoNota === 'produto' ? 'NFe (Produto)' : 'NFSe (Serviço)'}`, {
+      pedido_id: dadosPedido.pedido_id,
+      tipo_nota: tipoNota
     });
     
     try {
-      const resultado = await emitirNFSe(dadosPedido, config.emitente, configFiscal);
+      let resultado;
+      
+      if (tipoNota === 'produto') {
+        // Emitir NFe (produto - Livro Faíscas)
+        resultado = await emitirNFe(dadosPedido, config.emitente, configFiscal);
+      } else {
+        // Emitir NFSe (serviço - padrão)
+        resultado = await emitirNFSe(dadosPedido, config.emitente, configFiscal);
+      }
       
       if (resultado.sucesso) {
-        logger.webhook('NFSe emitida com sucesso', {
+        logger.webhook(`${tipoNota === 'produto' ? 'NFe' : 'NFSe'} emitida com sucesso`, {
           pedido_id: dadosPedido.pedido_id,
           referencia: resultado.referencia,
-          status: resultado.status
+          status: resultado.status,
+          tipo_nota: tipoNota
         });
         
         // Atualizar status do pedido
@@ -144,15 +197,17 @@ async function processarWebhook(req, res) {
         });
         
         return res.status(200).json({
-          mensagem: 'Pedido processado e NFSe emitida',
+          mensagem: `Pedido processado e ${tipoNota === 'produto' ? 'NFe' : 'NFSe'} emitida`,
           pedido_id: dadosPedido.pedido_id,
           status: resultado.status,
-          referencia: resultado.referencia
+          referencia: resultado.referencia,
+          tipo_nota: tipoNota
         });
       } else {
-        logger.webhook('Erro ao emitir NFSe', {
+        logger.webhook(`Erro ao emitir ${tipoNota === 'produto' ? 'NFe' : 'NFSe'}`, {
           pedido_id: dadosPedido.pedido_id,
-          erro: resultado.erro
+          erro: resultado.erro,
+          tipo_nota: tipoNota
         });
         
         // Atualizar status do pedido para erro
@@ -164,13 +219,15 @@ async function processarWebhook(req, res) {
         return res.status(200).json({
           mensagem: 'Pedido recebido, erro na emissão',
           pedido_id: dadosPedido.pedido_id,
-          erro: resultado.erro
+          erro: resultado.erro,
+          tipo_nota: tipoNota
         });
       }
     } catch (err) {
-      logger.error('Erro ao processar emissão de NFSe', {
+      logger.error(`Erro ao processar emissão de ${tipoNota === 'produto' ? 'NFe' : 'NFSe'}`, {
         pedido_id: dadosPedido.pedido_id,
-        error: err.message
+        error: err.message,
+        tipo_nota: tipoNota
       });
       
       // Atualizar status do pedido para erro
@@ -182,7 +239,8 @@ async function processarWebhook(req, res) {
       return res.status(200).json({
         mensagem: 'Pedido recebido, erro no processamento',
         pedido_id: dadosPedido.pedido_id,
-        erro: err.message
+        erro: err.message,
+        tipo_nota: tipoNota
       });
     }
     
