@@ -331,6 +331,57 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
       });
     }
     
+    // Extrair detalhes do erro
+    const erroData = error.response?.data || {};
+    const codigoErro = erroData.Codigo || erroData.codigo || erroData.Cod || erroData.cod || null;
+    const mensagemErro = erroData.Descricao || erroData.descricao || erroData.Desc || erroData.desc || erroData.mensagem || error.message;
+    const mensagemSefaz = erroData.mensagem_sefaz || erroData.Mensagem || null;
+    
+    // Verificar se é erro "already_processed" (nota já foi autorizada)
+    if (codigoErro === 'already_processed' || mensagemErro?.includes('já foi autorizada')) {
+      logger.info('NFSe já foi autorizada anteriormente, consultando dados existentes', {
+        service: 'focusNFe',
+        action: 'emitir_nfse',
+        pedido_id: dadosPedido.pedido_id,
+        referencia
+      });
+      
+      // Consultar a nota existente e salvar no banco local
+      try {
+        const notaExistente = await consultarNFSe(referencia);
+        if (notaExistente.sucesso) {
+          // Salvar no banco local
+          await salvarNFSe({
+            pedido_id: dadosPedido.pedido_id_db || null,
+            referencia: referencia,
+            chave_nfse: notaExistente.chave_nfse,
+            status_focus: notaExistente.status || 'autorizado',
+            status_sefaz: notaExistente.status_sefaz,
+            mensagem_sefaz: notaExistente.mensagem_sefaz,
+            caminho_xml: notaExistente.caminho_xml,
+            caminho_pdf: notaExistente.caminho_pdf,
+            dados_completos: notaExistente.dados,
+            ambiente: apiConfig.ambiente || 'homologacao'
+          });
+          
+          return {
+            sucesso: true,
+            referencia: referencia,
+            status: notaExistente.status || 'autorizado',
+            status_sefaz: notaExistente.status_sefaz,
+            mensagem_sefaz: notaExistente.mensagem_sefaz,
+            chave_nfse: notaExistente.chave_nfse,
+            caminho_xml: notaExistente.caminho_xml,
+            caminho_pdf: notaExistente.caminho_pdf,
+            dados: notaExistente.dados,
+            ja_existia: true
+          };
+        }
+      } catch (consultaError) {
+        logger.error('Erro ao consultar NFSe existente', { error: consultaError.message });
+      }
+    }
+    
     // Salvar erro no banco se possível
     try {
       await salvarNFSe({
@@ -344,12 +395,6 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
     } catch (dbError) {
       logger.error('Erro ao salvar NFSe com erro no banco', { error: dbError.message });
     }
-    
-    // Extrair detalhes do erro
-    const erroData = error.response?.data || {};
-    const codigoErro = erroData.Codigo || erroData.codigo || erroData.Cod || erroData.cod || null;
-    const mensagemErro = erroData.Descricao || erroData.descricao || erroData.Desc || erroData.desc || erroData.mensagem || error.message;
-    const mensagemSefaz = erroData.mensagem_sefaz || erroData.Mensagem || null;
     
     return {
       sucesso: false,

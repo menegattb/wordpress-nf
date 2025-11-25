@@ -458,6 +458,55 @@ async function emitirNFe(dadosPedido, configEmitente, configFiscal = null) {
       });
     }
     
+    // Extrair detalhes do erro
+    const erroData = error.response?.data || {};
+    const codigoErro = erroData.Codigo || erroData.codigo || erroData.Cod || erroData.cod || null;
+    
+    // Verificar se é erro "already_processed" (nota já foi autorizada)
+    if (codigoErro === 'already_processed' || erroData.mensagem?.includes('já foi autorizada')) {
+      logger.info('NFe já foi autorizada anteriormente, consultando dados existentes', {
+        service: 'focusNFe',
+        action: 'emitir_nfe',
+        pedido_id: dadosPedido.pedido_id,
+        referencia
+      });
+      
+      // Consultar a nota existente e salvar no banco local
+      try {
+        const notaExistente = await consultarNFe(referencia);
+        if (notaExistente.sucesso) {
+          // Salvar no banco local
+          await salvarNFe({
+            pedido_id: dadosPedido.pedido_id_db || null,
+            referencia: referencia,
+            chave_nfe: notaExistente.chave_nfe,
+            status_focus: notaExistente.status || 'autorizado',
+            status_sefaz: notaExistente.status_sefaz,
+            mensagem_sefaz: notaExistente.mensagem_sefaz,
+            caminho_xml_nota_fiscal: notaExistente.caminho_xml_nota_fiscal,
+            caminho_danfe: notaExistente.caminho_danfe,
+            dados_completos: notaExistente.dados,
+            ambiente: apiConfig.ambiente || 'homologacao'
+          });
+          
+          return {
+            sucesso: true,
+            referencia: referencia,
+            status: notaExistente.status || 'autorizado',
+            status_sefaz: notaExistente.status_sefaz,
+            mensagem_sefaz: notaExistente.mensagem_sefaz,
+            chave_nfe: notaExistente.chave_nfe,
+            caminho_xml_nota_fiscal: notaExistente.caminho_xml_nota_fiscal,
+            caminho_danfe: notaExistente.caminho_danfe,
+            dados: notaExistente.dados,
+            ja_existia: true
+          };
+        }
+      } catch (consultaError) {
+        logger.error('Erro ao consultar NFe existente', { error: consultaError.message });
+      }
+    }
+    
     // Salvar erro no banco se possível
     try {
       await salvarNFe({
@@ -471,10 +520,6 @@ async function emitirNFe(dadosPedido, configEmitente, configFiscal = null) {
     } catch (dbError) {
       logger.error('Erro ao salvar NFe com erro no banco', { error: dbError.message });
     }
-    
-    // Extrair detalhes do erro
-    const erroData = error.response?.data || {};
-    const codigoErro = erroData.Codigo || erroData.codigo || erroData.Cod || erroData.cod || null;
     
     // Mensagem de erro mais descritiva
     let mensagemErro;
