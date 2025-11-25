@@ -50,5 +50,12 @@ router.delete('/cancelar/:referencia', nfseController.cancelarNota);
  */
 router.delete('/cancelar-por-chave/:chave_nfe', nfseController.cancelarNotaPorChave);
 
+/**
+ * POST /api/nfse/sincronizar
+ * Sincroniza notas da Focus NFe para o banco local
+ * Query params: tipo_nota (nfse, nfe ou vazio para ambos)
+ */
+router.post('/sincronizar', nfseController.sincronizarNotas);
+
 module.exports = router;
 

@@ -333,12 +333,25 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
     
     // Extrair detalhes do erro
     const erroData = error.response?.data || {};
-    const codigoErro = erroData.Codigo || erroData.codigo || erroData.Cod || erroData.cod || null;
+    const codigoErro = erroData.Codigo || erroData.codigo || erroData.Cod || erroData.cod || erroData.code || null;
     const mensagemErro = erroData.Descricao || erroData.descricao || erroData.Desc || erroData.desc || erroData.mensagem || error.message;
     const mensagemSefaz = erroData.mensagem_sefaz || erroData.Mensagem || null;
     
+    logger.debug('Detalhes do erro recebido', {
+      service: 'focusNFe',
+      action: 'emitir_nfse',
+      codigoErro,
+      mensagemErro,
+      erroData: JSON.stringify(erroData)
+    });
+    
     // Verificar se é erro "already_processed" (nota já foi autorizada)
-    if (codigoErro === 'already_processed' || mensagemErro?.includes('já foi autorizada')) {
+    const isAlreadyProcessed = codigoErro === 'already_processed' || 
+                               (mensagemErro && mensagemErro.toLowerCase().includes('já foi autorizada')) ||
+                               (mensagemErro && mensagemErro.toLowerCase().includes('already')) ||
+                               (mensagemErro && mensagemErro.toLowerCase().includes('referência já foi'));
+    
+    if (isAlreadyProcessed) {
       logger.info('NFSe já foi autorizada anteriormente, consultando dados existentes', {
         service: 'focusNFe',
         action: 'emitir_nfse',

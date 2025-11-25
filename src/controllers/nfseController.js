@@ -1209,6 +1209,123 @@ async function cancelarNotaPorChave(req, res) {
   }
 }
 
+/**
+ * Sincroniza notas da Focus NFe para o banco local
+ * Útil para importar notas já existentes que não estão no banco local
+ */
+async function sincronizarNotas(req, res) {
+  try {
+    const { tipo_nota } = req.query;
+    
+    logger.info('🔄 [SINCRONIZAR] Iniciando sincronização de notas da Focus NFe', {
+      tipo_nota: tipo_nota || 'ambos'
+    });
+    
+    const resultados = {
+      nfse: { importadas: 0, erros: 0 },
+      nfe: { importadas: 0, erros: 0 }
+    };
+    
+    // Sincronizar NFSe
+    if (!tipo_nota || tipo_nota === 'nfse') {
+      try {
+        const notasFocus = await listarTodasNFSe();
+        if (notasFocus.sucesso && notasFocus.dados) {
+          const { salvarNFSe, buscarNFSePorReferencia } = require('../config/database');
+          
+          for (const nota of notasFocus.dados) {
+            try {
+              // Verificar se já existe no banco local
+              const existente = await buscarNFSePorReferencia(nota.ref || nota.referencia);
+              if (!existente) {
+                // Salvar no banco local
+                await salvarNFSe({
+                  referencia: nota.ref || nota.referencia,
+                  chave_nfse: nota.numero || null,
+                  status_focus: nota.status || 'autorizado',
+                  status_sefaz: nota.status_sefaz || null,
+                  mensagem_sefaz: nota.mensagem_sefaz || null,
+                  caminho_xml: nota.caminho_xml_nota_fiscal || nota.url_xml || null,
+                  caminho_pdf: nota.caminho_pdf_nota_fiscal || nota.url_pdf || null,
+                  dados_completos: nota,
+                  ambiente: nota.ambiente || 'homologacao'
+                });
+                resultados.nfse.importadas++;
+              }
+            } catch (err) {
+              resultados.nfse.erros++;
+              logger.warn('🔄 [SINCRONIZAR] Erro ao importar NFSe', {
+                referencia: nota.ref || nota.referencia,
+                erro: err.message
+              });
+            }
+          }
+        }
+      } catch (err) {
+        logger.error('🔄 [SINCRONIZAR] Erro ao listar NFSe da Focus NFe', { erro: err.message });
+      }
+    }
+    
+    // Sincronizar NFe
+    if (!tipo_nota || tipo_nota === 'nfe') {
+      try {
+        const notasFocus = await listarTodasNFe();
+        if (notasFocus.sucesso && notasFocus.dados) {
+          const { salvarNFe, buscarNFePorReferencia } = require('../config/database');
+          
+          for (const nota of notasFocus.dados) {
+            try {
+              // Verificar se já existe no banco local
+              const existente = await buscarNFePorReferencia(nota.ref || nota.referencia);
+              if (!existente) {
+                // Salvar no banco local
+                await salvarNFe({
+                  referencia: nota.ref || nota.referencia,
+                  chave_nfe: nota.chave_nfe || null,
+                  status_focus: nota.status || 'autorizado',
+                  status_sefaz: nota.status_sefaz || null,
+                  mensagem_sefaz: nota.mensagem_sefaz || null,
+                  caminho_xml_nota_fiscal: nota.caminho_xml_nota_fiscal || nota.url_xml || null,
+                  caminho_danfe: nota.caminho_danfe || nota.url_danfe || null,
+                  dados_completos: nota,
+                  ambiente: nota.ambiente || 'homologacao'
+                });
+                resultados.nfe.importadas++;
+              }
+            } catch (err) {
+              resultados.nfe.erros++;
+              logger.warn('🔄 [SINCRONIZAR] Erro ao importar NFe', {
+                referencia: nota.ref || nota.referencia,
+                erro: err.message
+              });
+            }
+          }
+        }
+      } catch (err) {
+        logger.error('🔄 [SINCRONIZAR] Erro ao listar NFe da Focus NFe', { erro: err.message });
+      }
+    }
+    
+    logger.info('🔄 [SINCRONIZAR] Sincronização concluída', resultados);
+    
+    res.json({
+      sucesso: true,
+      mensagem: 'Sincronização concluída',
+      resultados
+    });
+    
+  } catch (error) {
+    logger.error('🔄 [SINCRONIZAR] Erro na sincronização', {
+      error: error.message
+    });
+    
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+}
+
 module.exports = {
   emitirNFSeManual,
   consultarStatus,
@@ -1217,6 +1334,7 @@ module.exports = {
   emitirTeste,
   buscarNotas,
   cancelarNota,
-  cancelarNotaPorChave
+  cancelarNotaPorChave,
+  sincronizarNotas
 };
 

@@ -460,10 +460,24 @@ async function emitirNFe(dadosPedido, configEmitente, configFiscal = null) {
     
     // Extrair detalhes do erro
     const erroData = error.response?.data || {};
-    const codigoErro = erroData.Codigo || erroData.codigo || erroData.Cod || erroData.cod || null;
+    const codigoErro = erroData.Codigo || erroData.codigo || erroData.Cod || erroData.cod || erroData.code || null;
+    const mensagemErroRaw = erroData.Descricao || erroData.descricao || erroData.mensagem || erroData.message || '';
+    
+    logger.debug('Detalhes do erro recebido', {
+      service: 'focusNFe',
+      action: 'emitir_nfe',
+      codigoErro,
+      mensagemErroRaw,
+      erroData: JSON.stringify(erroData)
+    });
     
     // Verificar se é erro "already_processed" (nota já foi autorizada)
-    if (codigoErro === 'already_processed' || erroData.mensagem?.includes('já foi autorizada')) {
+    const isAlreadyProcessed = codigoErro === 'already_processed' || 
+                               mensagemErroRaw.toLowerCase().includes('já foi autorizada') ||
+                               mensagemErroRaw.toLowerCase().includes('already') ||
+                               mensagemErroRaw.toLowerCase().includes('referência já foi');
+    
+    if (isAlreadyProcessed) {
       logger.info('NFe já foi autorizada anteriormente, consultando dados existentes', {
         service: 'focusNFe',
         action: 'emitir_nfe',
