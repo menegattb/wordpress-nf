@@ -67,6 +67,25 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Rota para executar migrations (protegida)
+app.post('/api/migrate', async (req, res) => {
+  try {
+    const { migrate } = require('./src/config/database');
+    await migrate();
+    res.json({
+      status: 'ok',
+      mensagem: 'Migrations executadas com sucesso',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'erro',
+      mensagem: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Rota raiz - servir index.html do front-end
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
