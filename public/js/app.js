@@ -2752,13 +2752,23 @@ function finalizarProgressoEmissao(sucesso, mensagem) {
         mensagemEl.className = 'progresso-mensagem ' + (sucesso ? 'sucesso' : 'erro');
     }
     
-    // Fechar modal após 3 segundos
-    setTimeout(() => {
-        const modal = document.getElementById('modal-progresso-emissao');
-        if (modal) {
-            modal.style.display = 'none';
+    // Adicionar botão de fechar se não existir
+    const modal = document.getElementById('modal-progresso-emissao');
+    if (modal) {
+        const content = modal.querySelector('.modal-progresso-content');
+        if (content && !content.querySelector('.btn-fechar-modal')) {
+            const btnFechar = document.createElement('button');
+            btnFechar.className = 'btn-fechar-modal';
+            btnFechar.textContent = 'Fechar';
+            btnFechar.style.cssText = 'margin-top: 20px; padding: 12px 24px; background-color: var(--color-orange); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; width: 100%;';
+            btnFechar.onclick = () => {
+                modal.style.display = 'none';
+            };
+            content.appendChild(btnFechar);
         }
-    }, 3000);
+    }
+    
+    // NÃO fecha automaticamente - usuário deve clicar no botão ou dar refresh
 }
 
 /**
