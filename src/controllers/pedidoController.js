@@ -1,7 +1,8 @@
 const logger = require('../services/logger');
-const { listarPedidos, buscarPedidoPorId, buscarPedidoPorPedidoId, listarNFSe, listarNFe, atualizarPedido, listarLogs, salvarNFSe, salvarNFe, buscarNFSePorReferencia, buscarNFePorReferencia } = require('../config/database');
+const { listarPedidos, buscarPedidoPorId, buscarPedidoPorPedidoId, listarNFSe, listarNFe, atualizarPedido, listarLogs, salvarNFSe, salvarNFe, buscarNFSePorReferencia, buscarNFePorReferencia, salvarPedido } = require('../config/database');
 const { listarTodasNFSe, consultarNFSe } = require('../services/focusNFSe');
 const { listarTodasNFe, consultarNFe } = require('../services/focusNFe');
+const woocommerce = require('../services/woocommerce');
 
 /**
  * Lista pedidos
@@ -650,6 +651,159 @@ async function sincronizarNotas(req, res) {
   }
 }
 
+/**
+ * Sincroniza pedidos do WooCommerce para o banco local
+ */
+async function sincronizarPedidosWooCommerce(req, res) {
+  try {
+    logger.info('🔄 [SINCRONIZAR PEDIDOS] Iniciando sincronização de pedidos do WooCommerce');
+    
+    let todosPedidos = [];
+    let page = 1;
+    const perPage = 100;
+    
+    // Buscar todos os pedidos do WooCommerce (paginado)
+    while (true) {
+      const resultado = await woocommerce.listarPedidos({
+        per_page: perPage,
+        page: page,
+        orderby: 'date',
+        order: 'desc'
+      });
+      
+      let pedidos = [];
+      if (resultado.sucesso && Array.isArray(resultado.pedidos)) {
+        pedidos = resultado.pedidos;
+      } else if (Array.isArray(resultado)) {
+        pedidos = resultado;
+      } else {
+        break;
+      }
+      
+      if (!pedidos || pedidos.length === 0) {
+        break;
+      }
+      
+      todosPedidos = todosPedidos.concat(pedidos);
+      
+      if (pedidos.length < perPage) {
+        break;
+      }
+      
+      page++;
+    }
+    
+    logger.info(`🔄 [SINCRONIZAR PEDIDOS] ${todosPedidos.length} pedidos encontrados no WooCommerce`);
+    
+    // Salvar/atualizar cada pedido no banco
+    let salvos = 0;
+    let atualizados = 0;
+    let erros = 0;
+    
+    for (const pedido of todosPedidos) {
+      try {
+        const pedidoId = String(pedido.id || pedido.number);
+        
+        // Verificar se já existe
+        const existente = await buscarPedidoPorPedidoId(pedidoId);
+        
+        if (existente) {
+          // Atualizar
+          await atualizarPedido(existente.id, {
+            dados_pedido: pedido
+          });
+          atualizados++;
+        } else {
+          // Criar novo
+          await salvarPedido({
+            pedido_id: pedidoId,
+            origem: 'woocommerce',
+            dados_pedido: pedido,
+            status: 'pendente'
+          });
+          salvos++;
+        }
+      } catch (err) {
+        erros++;
+        logger.warn('🔄 [SINCRONIZAR PEDIDOS] Erro ao salvar pedido', {
+          pedido_id: pedido.id,
+          erro: err.message
+        });
+      }
+    }
+    
+    logger.info('✅ [SINCRONIZAR PEDIDOS] Sincronização concluída', {
+      total: todosPedidos.length,
+      salvos,
+      atualizados,
+      erros
+    });
+    
+    res.json({
+      sucesso: true,
+      mensagem: 'Sincronização concluída',
+      total: todosPedidos.length,
+      salvos,
+      atualizados,
+      erros
+    });
+    
+  } catch (error) {
+    logger.error('Erro ao sincronizar pedidos do WooCommerce', {
+      error: error.message,
+      stack: error.stack
+    });
+    
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+}
+
+/**
+ * Lista pedidos do banco local (com dados completos do WooCommerce)
+ */
+async function listarPedidosBanco(req, res) {
+  try {
+    const { limite = 1000, offset = 0 } = req.query;
+    
+    const resultado = await listarPedidos({
+      limite: parseInt(limite),
+      offset: parseInt(offset)
+    });
+    
+    // Extrair dados_pedido para formato mais útil
+    const pedidos = (resultado.dados || resultado || []).map(p => {
+      // Se dados_pedido existe, usar ele; senão usar o próprio pedido
+      const dadosPedido = p.dados_pedido || p;
+      return {
+        ...dadosPedido,
+        _id_banco: p.id,
+        _status_emissao: p.status,
+        _tem_nfse: p.tem_nfse,
+        _tem_nfe: p.tem_nfe
+      };
+    });
+    
+    res.json({
+      sucesso: true,
+      total: pedidos.length,
+      dados: pedidos
+    });
+    
+  } catch (error) {
+    logger.error('Erro ao listar pedidos do banco', {
+      error: error.message
+    });
+    
+    res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+}
+
 module.exports = {
   listar,
   buscarPorId,
@@ -657,6 +811,8 @@ module.exports = {
   listarTodasNotas,
   atualizarStatus,
   listarLogsPedidos,
-  sincronizarNotas
+  sincronizarNotas,
+  sincronizarPedidosWooCommerce,
+  listarPedidosBanco
 };
 

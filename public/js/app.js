@@ -1023,6 +1023,10 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
     };
 }
 
+// Intervalo de polling para novos pedidos (em ms)
+let pollingInterval = null;
+const POLLING_DELAY = 30000; // 30 segundos
+
 async function carregarPedidos() {
     const contentArea = document.getElementById('content-area');
     
@@ -1032,12 +1036,12 @@ async function carregarPedidos() {
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                 <h2 class="section-title" style="margin: 0;">Pedidos WooCommerce</h2>
                 <div id="status-woocommerce" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
-                    <span style="color: #666; font-size: 12px;">⏳ Carregando do WooCommerce...</span>
+                    <span style="color: #666; font-size: 12px;">⏳ Carregando do banco local...</span>
                 </div>
             </div>
             <div style="text-align: center; padding: 40px;">
                 <div class="loading-spinner" style="width: 40px; height: 40px; margin: 0 auto 16px;"></div>
-                <p style="color: var(--color-gray-medium);">Carregando pedidos do WooCommerce...</p>
+                <p style="color: var(--color-gray-medium);">Carregando pedidos salvos...</p>
             </div>
         </div>
     `;
@@ -1046,52 +1050,30 @@ async function carregarPedidos() {
         // Gerar lista de meses (últimos 12 meses)
         const meses = gerarListaMeses();
         
-        // Buscar pedidos diretamente do WooCommerce (sem usar banco)
-        atualizarStatusConexao('Carregando pedidos do WooCommerce...', 'info');
+        // PRIMEIRO: Tentar carregar do banco local (rápido)
+        atualizarStatusConexao('Carregando do banco local...', 'info');
         
         let todosPedidos = [];
-        let page = 1;
-        const perPage = 100; // WooCommerce permite até 100 por página
         
-        // Buscar pedidos de todos os meses (últimos 12 meses)
-        while (true) {
-            const resultado = await API.WooCommerce.buscarPedidos({
-                per_page: perPage,
-                        page: page,
-                        orderby: 'date',
-                        order: 'desc'
-                    });
-                    
-            // Verificar estrutura da resposta
-            let pedidos = [];
-            if (Array.isArray(resultado)) {
-                pedidos = resultado;
-            } else if (resultado && Array.isArray(resultado.dados)) {
-                pedidos = resultado.dados;
-            } else if (resultado && Array.isArray(resultado.pedidos)) {
-                pedidos = resultado.pedidos;
-            } else if (resultado && resultado.sucesso && Array.isArray(resultado.dados)) {
-                pedidos = resultado.dados;
-            } else {
-                console.warn('Formato de resposta inesperado:', resultado);
-                break;
+        try {
+            const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 1000 });
+            if (resultadoBanco.sucesso && resultadoBanco.dados && resultadoBanco.dados.length > 0) {
+                todosPedidos = resultadoBanco.dados;
+                atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos carregados do banco local`, 'success');
             }
+        } catch (erroBanco) {
+            console.warn('Erro ao carregar do banco local:', erroBanco);
+        }
+        
+        // Se não tem pedidos no banco, buscar do WooCommerce
+        if (todosPedidos.length === 0) {
+            atualizarStatusConexao('Banco vazio. Sincronizando do WooCommerce...', 'info');
+            todosPedidos = await buscarTodosPedidosWooCommerce();
             
-            if (!pedidos || pedidos.length === 0) {
-                break;
-            }
-            
-            todosPedidos = todosPedidos.concat(pedidos);
-            
-            // Se retornou menos que perPage, é a última página
-            if (pedidos.length < perPage) {
-                break;
-            }
-            
-            page++;
-            
-            // Atualizar status
-            atualizarStatusConexao(`Carregando pedidos do WooCommerce... (${todosPedidos.length} carregados)`, 'info');
+            // Sincronizar para o banco em background
+            API.Pedidos.sincronizarDoWooCommerce().catch(err => {
+                console.warn('Erro ao sincronizar para banco:', err);
+            });
         }
         
         // Ordenar por data (mais recente primeiro)
@@ -1101,30 +1083,19 @@ async function carregarPedidos() {
             return dateB - dateA;
         });
         
-        atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos carregados do WooCommerce`, 'success');
-        
         // Salvar no estado
         estadoAtual.dados.meses = meses;
         estadoAtual.dados.todosPedidos = todosPedidos;
-        estadoAtual.filtroMes = null; // Sem filtro inicialmente
+        estadoAtual.filtroMes = null;
         estadoAtual.filtroStatus = null;
         estadoAtual.filtroCategoria = null;
         estadoAtual.agruparPorCategoria = false;
         
-        // Debug: verificar dados antes de renderizar
-        console.log('Dados antes de renderizar:', {
-            totalPedidos: todosPedidos.length,
-            meses: meses.length,
-            primeiroPedido: todosPedidos[0] ? {
-                id: todosPedidos[0].id,
-                date_created: todosPedidos[0].date_created,
-                status: todosPedidos[0].status,
-                total: todosPedidos[0].total
-            } : null
-        });
-        
         // Renderizar tela
         renderizarTelaPedidos(todosPedidos, meses);
+        
+        // Iniciar polling para novos pedidos/notas
+        iniciarPollingPedidos();
         
     } catch (error) {
         console.error('Erro ao carregar pedidos:', error);
@@ -1139,11 +1110,169 @@ async function carregarPedidos() {
                 </div>
                 <div class="empty-state">
                     <p>Erro ao carregar pedidos: ${error.message}</p>
+                    <button class="btn btn-primary" onclick="carregarPedidos()" style="margin-top: 16px;">Tentar novamente</button>
                 </div>
             </div>
         `;
     }
 }
+
+/**
+ * Busca todos os pedidos do WooCommerce (paginado)
+ */
+async function buscarTodosPedidosWooCommerce() {
+    let todosPedidos = [];
+    let page = 1;
+    const perPage = 100;
+    
+    while (true) {
+        atualizarStatusConexao(`Carregando do WooCommerce... (${todosPedidos.length} carregados)`, 'info');
+        
+        const resultado = await API.WooCommerce.buscarPedidos({
+            per_page: perPage,
+            page: page,
+            orderby: 'date',
+            order: 'desc'
+        });
+        
+        let pedidos = [];
+        if (Array.isArray(resultado)) {
+            pedidos = resultado;
+        } else if (resultado && Array.isArray(resultado.dados)) {
+            pedidos = resultado.dados;
+        } else if (resultado && Array.isArray(resultado.pedidos)) {
+            pedidos = resultado.pedidos;
+        } else {
+            break;
+        }
+        
+        if (!pedidos || pedidos.length === 0) break;
+        
+        todosPedidos = todosPedidos.concat(pedidos);
+        
+        if (pedidos.length < perPage) break;
+        page++;
+    }
+    
+    atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos carregados do WooCommerce`, 'success');
+    return todosPedidos;
+}
+
+/**
+ * Inicia polling para verificar novos pedidos/notas
+ */
+function iniciarPollingPedidos() {
+    // Parar polling anterior se existir
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+    }
+    
+    console.log('🔄 Iniciando polling para novos pedidos (a cada 30s)');
+    
+    pollingInterval = setInterval(async () => {
+        try {
+            // Verificar se ainda estamos na seção de pedidos
+            if (estadoAtual.secaoAtiva !== 'pedidos-woocommerce') {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+                return;
+            }
+            
+            // Buscar pedidos atualizados do banco
+            const resultado = await API.Pedidos.listarDoBanco({ limite: 1000 });
+            
+            if (resultado.sucesso && resultado.dados) {
+                const novosTotal = resultado.dados.length;
+                const atualTotal = estadoAtual.dados.todosPedidos?.length || 0;
+                
+                // Se tem novos pedidos, atualizar a lista
+                if (novosTotal > atualTotal) {
+                    console.log(`🔔 Novos pedidos detectados: ${novosTotal - atualTotal}`);
+                    
+                    // Salvar seleção atual
+                    const selecionadosAntes = obterPedidosSelecionados();
+                    
+                    // Atualizar dados
+                    resultado.dados.sort((a, b) => new Date(b.date_created || 0) - new Date(a.date_created || 0));
+                    estadoAtual.dados.todosPedidos = resultado.dados;
+                    
+                    // Re-renderizar mantendo filtros
+                    renderizarTelaPedidos(
+                        resultado.dados, 
+                        estadoAtual.dados.meses,
+                        estadoAtual.filtroStatus,
+                        estadoAtual.filtroCategoria,
+                        estadoAtual.agruparPorCategoria
+                    );
+                    
+                    // Restaurar seleção
+                    setTimeout(() => {
+                        selecionadosAntes.forEach(id => {
+                            const checkbox = document.querySelector(`input.checkbox-pedido[data-pedido-id="${id}"]`);
+                            if (checkbox) checkbox.checked = true;
+                        });
+                        atualizarSelecaoPedidos();
+                    }, 100);
+                    
+                    // Mostrar notificação
+                    atualizarStatusConexao(`🔔 ${novosTotal - atualTotal} novo(s) pedido(s) adicionado(s)`, 'success');
+                }
+            }
+        } catch (err) {
+            console.warn('Erro no polling de pedidos:', err);
+        }
+    }, POLLING_DELAY);
+}
+
+/**
+ * Para o polling de pedidos
+ */
+function pararPollingPedidos() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log('⏹️ Polling de pedidos parado');
+    }
+}
+
+/**
+ * Força atualização do WooCommerce (manual)
+ */
+async function forcarAtualizacaoWooCommerce() {
+    atualizarStatusConexao('Sincronizando do WooCommerce...', 'info');
+    
+    try {
+        // Sincronizar do WooCommerce para o banco
+        const resultado = await API.Pedidos.sincronizarDoWooCommerce();
+        
+        if (resultado.sucesso) {
+            atualizarStatusConexao(`✓ Sincronizado: ${resultado.salvos || 0} novos, ${resultado.atualizados || 0} atualizados`, 'success');
+            
+            // Recarregar do banco
+            const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 1000 });
+            if (resultadoBanco.sucesso && resultadoBanco.dados) {
+                resultadoBanco.dados.sort((a, b) => new Date(b.date_created || 0) - new Date(a.date_created || 0));
+                estadoAtual.dados.todosPedidos = resultadoBanco.dados;
+                
+                renderizarTelaPedidos(
+                    resultadoBanco.dados,
+                    estadoAtual.dados.meses,
+                    estadoAtual.filtroStatus,
+                    estadoAtual.filtroCategoria,
+                    estadoAtual.agruparPorCategoria
+                );
+            }
+        } else {
+            atualizarStatusConexao(`✗ Erro: ${resultado.erro}`, 'error');
+        }
+    } catch (error) {
+        atualizarStatusConexao(`✗ Erro: ${error.message}`, 'error');
+    }
+}
+
+// Expor funções globalmente
+window.forcarAtualizacaoWooCommerce = forcarAtualizacaoWooCommerce;
+window.pararPollingPedidos = pararPollingPedidos;
 
 /**
  * Renderiza a tela de pedidos com accordion de meses

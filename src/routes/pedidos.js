@@ -39,6 +39,18 @@ router.get('/logs', pedidoController.listarLogsPedidos);
 router.put('/:id/status', pedidoController.atualizarStatus);
 
 /**
+ * GET /api/pedidos/banco
+ * Lista pedidos salvos no banco local
+ */
+router.get('/banco', pedidoController.listarPedidosBanco);
+
+/**
+ * POST /api/pedidos/sincronizar-woocommerce
+ * Sincroniza pedidos do WooCommerce para o banco local
+ */
+router.post('/sincronizar-woocommerce', pedidoController.sincronizarPedidosWooCommerce);
+
+/**
  * GET /api/pedidos/:id
  * Busca pedido por ID
  */

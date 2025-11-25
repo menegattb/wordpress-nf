@@ -226,6 +226,27 @@ const PedidosAPI = {
 
         const query = params.toString();
         return await apiRequest(`/api/pedidos/logs${query ? '?' + query : ''}`);
+    },
+
+    /**
+     * Lista pedidos salvos no banco local
+     */
+    async listarDoBanco(filtros = {}) {
+        const params = new URLSearchParams();
+        if (filtros.limite) params.append('limite', filtros.limite);
+        if (filtros.offset) params.append('offset', filtros.offset);
+        
+        const query = params.toString();
+        return await apiRequest(`/api/pedidos/banco${query ? '?' + query : ''}`);
+    },
+
+    /**
+     * Sincroniza pedidos do WooCommerce para o banco local
+     */
+    async sincronizarDoWooCommerce() {
+        return await apiRequest('/api/pedidos/sincronizar-woocommerce', {
+            method: 'POST'
+        });
     }
 };
 
