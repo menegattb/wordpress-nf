@@ -1326,6 +1326,88 @@ async function sincronizarNotas(req, res) {
   }
 }
 
+/**
+ * Atualiza status de todas as notas pendentes (processando_autorizacao)
+ */
+async function atualizarStatusPendentes(req, res) {
+  try {
+    logger.info('🔄 [ATUALIZAR STATUS] Iniciando atualização de notas pendentes');
+    
+    const { listarNFSe: listarNFSeDB, listarNFe: listarNFeDB, atualizarNFSe, atualizarNFe } = require('../config/database');
+    
+    let atualizadas = 0;
+    let erros = 0;
+    const detalhes = [];
+    
+    // Buscar NFSe pendentes
+    const nfsePendentes = await listarNFSeDB({ status_focus: 'processando_autorizacao', limite: 100 });
+    const listaNFSe = nfsePendentes.dados || nfsePendentes || [];
+    
+    for (const nota of listaNFSe) {
+      try {
+        const resultado = await consultarNFSe(nota.referencia);
+        if (resultado.sucesso && resultado.status !== 'processando_autorizacao') {
+          await atualizarNFSe(nota.referencia, {
+            status_focus: resultado.status,
+            chave_nfse: resultado.numero || resultado.chave_nfse,
+            caminho_xml: resultado.caminho_xml_nota_fiscal || resultado.url_xml,
+            caminho_pdf: resultado.caminho_pdf_nota_fiscal || resultado.url_pdf,
+            dados_completos: resultado.dados
+          });
+          atualizadas++;
+          detalhes.push({ ref: nota.referencia, tipo: 'nfse', status_novo: resultado.status });
+        }
+      } catch (err) {
+        erros++;
+      }
+    }
+    
+    // Buscar NFe pendentes
+    const nfePendentes = await listarNFeDB({ status_focus: 'processando_autorizacao', limite: 100 });
+    const listaNFe = nfePendentes.dados || nfePendentes || [];
+    
+    for (const nota of listaNFe) {
+      try {
+        const resultado = await consultarNFe(nota.referencia);
+        if (resultado.sucesso && resultado.status !== 'processando_autorizacao') {
+          await atualizarNFe(nota.referencia, {
+            status_focus: resultado.status,
+            chave_nfe: resultado.chave_nfe,
+            status_sefaz: resultado.status_sefaz,
+            mensagem_sefaz: resultado.mensagem_sefaz,
+            caminho_xml_nota_fiscal: resultado.caminho_xml_nota_fiscal,
+            caminho_danfe: resultado.caminho_danfe,
+            dados_completos: resultado.dados
+          });
+          atualizadas++;
+          detalhes.push({ ref: nota.referencia, tipo: 'nfe', status_novo: resultado.status });
+        }
+      } catch (err) {
+        erros++;
+      }
+    }
+    
+    logger.info('✅ [ATUALIZAR STATUS] Atualização concluída', {
+      total_pendentes: listaNFSe.length + listaNFe.length,
+      atualizadas,
+      erros
+    });
+    
+    res.json({
+      sucesso: true,
+      mensagem: 'Status atualizados',
+      total_pendentes: listaNFSe.length + listaNFe.length,
+      atualizadas,
+      erros,
+      detalhes
+    });
+    
+  } catch (error) {
+    logger.error('Erro ao atualizar status pendentes', { error: error.message });
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
 module.exports = {
   emitirNFSeManual,
   consultarStatus,
@@ -1335,6 +1417,7 @@ module.exports = {
   buscarNotas,
   cancelarNota,
   cancelarNotaPorChave,
-  sincronizarNotas
+  sincronizarNotas,
+  atualizarStatusPendentes
 };
 

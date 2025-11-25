@@ -57,5 +57,11 @@ router.delete('/cancelar-por-chave/:chave_nfe', nfseController.cancelarNotaPorCh
  */
 router.post('/sincronizar', nfseController.sincronizarNotas);
 
+/**
+ * POST /api/nfse/atualizar-status
+ * Atualiza status de todas as notas pendentes (processando_autorizacao)
+ */
+router.post('/atualizar-status', nfseController.atualizarStatusPendentes);
+
 module.exports = router;
 
