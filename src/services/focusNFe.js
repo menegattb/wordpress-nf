@@ -88,7 +88,7 @@ function createApiClient() {
  * Emite uma NFe de Produto
  */
 async function emitirNFe(dadosPedido, configEmitente, configFiscal = null) {
-  const referencia = dadosPedido.referencia || `PED-${dadosPedido.pedido_id || Date.now()}`;
+  const referencia = dadosPedido.referencia || `NFE-${dadosPedido.pedido_id || Date.now()}`;
   
   let apiConfig = null;
   try {

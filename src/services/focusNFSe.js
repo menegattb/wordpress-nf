@@ -89,7 +89,7 @@ function createApiClient() {
  * Emite uma NFSe
  */
 async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipoNF = 'servico') {
-  const referencia = dadosPedido.referencia || `PED-${dadosPedido.pedido_id || Date.now()}`;
+  const referencia = dadosPedido.referencia || `NFSE-${dadosPedido.pedido_id || Date.now()}`;
   
   // Obter configuração da API antes do try para estar disponível no catch
   let apiConfig = null;
