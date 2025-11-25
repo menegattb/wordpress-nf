@@ -2342,7 +2342,8 @@ async function emitirNFServicoMes(mes) {
         
         atualizarProgressoEmissao(3, 'Processando resposta do servidor...');
     
-        if (resultado && resultado.sucesso) {
+        // Verificar se temos resultados para processar (sucesso pode ser 0 mas ainda ter resultados)
+        if (resultado && resultado.resultados && Array.isArray(resultado.resultados)) {
             adicionarLogMes(mes, 'recebido', `Resposta recebida: ${resultado.sucesso || 0} sucesso, ${resultado.erros || 0} erros`, {
                 total: resultado.total,
                 sucesso: resultado.sucesso,
@@ -2350,43 +2351,57 @@ async function emitirNFServicoMes(mes) {
             });
             
             // Adicionar logs individuais dos resultados
-            if (resultado.resultados && Array.isArray(resultado.resultados)) {
-                resultado.resultados.forEach((res, idx) => {
-                    // Buscar dados do pedido para mais detalhes
-                    const pedidoCompleto = estadoAtual.dados.todosPedidos?.find(p => 
-                        String(p.id) === String(res.pedido_id) || String(p.number) === String(res.pedido_id)
-                    );
-                    const cliente = pedidoCompleto?.billing?.first_name ? 
-                        `${pedidoCompleto.billing.first_name} ${pedidoCompleto.billing.last_name || ''}`.trim() : 
-                        (pedidoCompleto?.customer_name || 'N/A');
-                    const valor = pedidoCompleto?.total || res.valor_total || 'N/A';
+            resultado.resultados.forEach((res, idx) => {
+                // Buscar dados do pedido para mais detalhes
+                const pedidoCompleto = estadoAtual.dados.todosPedidos?.find(p => 
+                    String(p.id) === String(res.pedido_id) || String(p.number) === String(res.pedido_id)
+                );
+                const cliente = pedidoCompleto?.billing?.first_name ? 
+                    `${pedidoCompleto.billing.first_name} ${pedidoCompleto.billing.last_name || ''}`.trim() : 
+                    (pedidoCompleto?.customer_name || 'N/A');
+                const valor = pedidoCompleto?.total || res.valor_total || 'N/A';
+                
+                if (res.sucesso) {
+                    adicionarLogMes(mes, 'sucesso', `Pedido #${res.pedido_id}: NFSe emitida com sucesso`, {
+                        '📦 Pedido': `#${res.pedido_id}`,
+                        '👤 Cliente': cliente,
+                        '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
+                        '🏷️ Referência': res.referencia || 'N/A',
+                        '📊 Status': res.status || 'autorizado',
+                        '🔑 Chave': res.chave_nfse || res.numero || 'Aguardando...',
+                        '📁 XML': res.caminho_xml ? '✓ Disponível' : 'Aguardando...',
+                        '📄 PDF': res.caminho_pdf ? '✓ Disponível' : 'Aguardando...'
+                    });
+                } else {
+                    // Extrair mensagem de erro (pode ser string ou objeto)
+                    const erroDetalhe = typeof res.erro === 'object' 
+                        ? (res.erro.mensagem || res.erro.message || JSON.stringify(res.erro))
+                        : (res.erro || res.mensagem || 'Erro desconhecido');
+                    const codigoErro = typeof res.erro === 'object'
+                        ? (res.erro.codigo || res.erro.code || res.codigo_erro || res.codigo || 'N/A')
+                        : (res.codigo_erro || res.codigo || 'N/A');
                     
-                    if (res.sucesso) {
-                        adicionarLogMes(mes, 'sucesso', `Pedido #${res.pedido_id}: NFSe emitida com sucesso`, {
-                            '📦 Pedido': `#${res.pedido_id}`,
-                            '👤 Cliente': cliente,
-                            '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
-                            '🏷️ Referência': res.referencia || 'N/A',
-                            '📊 Status': res.status || 'autorizado',
-                            '🔑 Chave': res.chave_nfse || res.numero || 'Aguardando...',
-                            '📁 XML': res.caminho_xml ? '✓ Disponível' : 'Aguardando...',
-                            '📄 PDF': res.caminho_pdf ? '✓ Disponível' : 'Aguardando...'
-                        });
-                    } else {
-                        adicionarLogMes(mes, 'erro', `Pedido #${res.pedido_id}: Falha na emissão`, {
-                            '📦 Pedido': `#${res.pedido_id}`,
-                            '👤 Cliente': cliente,
-                            '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
-                            '❌ Erro': res.erro || res.mensagem || 'Erro desconhecido',
-                            '🔢 Código': res.codigo_erro || res.codigo || 'N/A'
-                        });
-                    }
-                });
+                    adicionarLogMes(mes, 'erro', `Pedido #${res.pedido_id}: Falha na emissão`, {
+                        '📦 Pedido': `#${res.pedido_id}`,
+                        '👤 Cliente': cliente,
+                        '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
+                        '❌ Erro': erroDetalhe,
+                        '🔢 Código': codigoErro
+                    });
+                }
+            });
+            
+            // Determinar mensagem final baseado no resultado
+            const temSucesso = resultado.sucesso > 0;
+            const mensagemFinal = `${temSucesso ? '✓' : '✗'} Emissão concluída: ${resultado.sucesso || 0} de ${resultado.total || pedidoIds.length} pedido(s) processado(s) com sucesso.`;
+            
+            if (temSucesso) {
+                adicionarLogMes(mes, 'sucesso', mensagemFinal);
+            } else {
+                adicionarLogMes(mes, 'erro', mensagemFinal);
             }
             
-            const mensagemSucesso = `✓ Emissão concluída: ${resultado.sucesso || 0} de ${resultado.total || pedidoIds.length} pedido(s) processado(s) com sucesso.`;
-            adicionarLogMes(mes, 'sucesso', `Emissão concluída: ${resultado.sucesso || 0} de ${resultado.total || pedidoIds.length} pedido(s) processado(s) com sucesso.`);
-            finalizarProgressoEmissao(true, mensagemSucesso);
+            finalizarProgressoEmissao(temSucesso, mensagemFinal);
         } else {
             const erroMsg = resultado?.erro || resultado?.mensagem || 'Erro desconhecido';
             adicionarLogMes(mes, 'erro', `Erro ao emitir NFSe: ${erroMsg}`, {
@@ -2522,7 +2537,8 @@ async function emitirNFProdutoMes(mes) {
         
         atualizarProgressoEmissao(3, 'Processando resposta do servidor...');
         
-        if (resultado && resultado.sucesso) {
+        // Verificar se temos resultados para processar (sucesso pode ser 0 mas ainda ter resultados)
+        if (resultado && resultado.resultados && Array.isArray(resultado.resultados)) {
             adicionarLogMes(mes, 'recebido', `Resposta recebida: ${resultado.sucesso || 0} sucesso, ${resultado.erros || 0} erros`, {
                 total: resultado.total,
                 sucesso: resultado.sucesso,
@@ -2530,43 +2546,57 @@ async function emitirNFProdutoMes(mes) {
             });
             
             // Adicionar logs individuais dos resultados
-            if (resultado.resultados && Array.isArray(resultado.resultados)) {
-                resultado.resultados.forEach((res, idx) => {
-                    // Buscar dados do pedido para mais detalhes
-                    const pedidoCompleto = estadoAtual.dados.todosPedidos?.find(p => 
-                        String(p.id) === String(res.pedido_id) || String(p.number) === String(res.pedido_id)
-                    );
-                    const cliente = pedidoCompleto?.billing?.first_name ? 
-                        `${pedidoCompleto.billing.first_name} ${pedidoCompleto.billing.last_name || ''}`.trim() : 
-                        (pedidoCompleto?.customer_name || 'N/A');
-                    const valor = pedidoCompleto?.total || res.valor_total || 'N/A';
+            resultado.resultados.forEach((res, idx) => {
+                // Buscar dados do pedido para mais detalhes
+                const pedidoCompleto = estadoAtual.dados.todosPedidos?.find(p => 
+                    String(p.id) === String(res.pedido_id) || String(p.number) === String(res.pedido_id)
+                );
+                const cliente = pedidoCompleto?.billing?.first_name ? 
+                    `${pedidoCompleto.billing.first_name} ${pedidoCompleto.billing.last_name || ''}`.trim() : 
+                    (pedidoCompleto?.customer_name || 'N/A');
+                const valor = pedidoCompleto?.total || res.valor_total || 'N/A';
+                
+                if (res.sucesso) {
+                    adicionarLogMes(mes, 'sucesso', `Pedido #${res.pedido_id}: NFe (Produto) emitida com sucesso`, {
+                        '📦 Pedido': `#${res.pedido_id}`,
+                        '👤 Cliente': cliente,
+                        '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
+                        '🏷️ Referência': res.referencia || 'N/A',
+                        '📊 Status': res.status || 'autorizado',
+                        '🔑 Chave NFe': res.chave_nfe || 'Aguardando...',
+                        '📁 XML': res.caminho_xml_nota_fiscal ? '✓ Disponível' : 'Aguardando...',
+                        '📄 DANFE': res.caminho_danfe ? '✓ Disponível' : 'Aguardando...'
+                    });
+                } else {
+                    // Extrair mensagem de erro (pode ser string ou objeto)
+                    const erroDetalhe = typeof res.erro === 'object' 
+                        ? (res.erro.mensagem || res.erro.message || JSON.stringify(res.erro))
+                        : (res.erro || res.mensagem || 'Erro desconhecido');
+                    const codigoErro = typeof res.erro === 'object'
+                        ? (res.erro.codigo || res.erro.code || res.codigo_erro || res.codigo || 'N/A')
+                        : (res.codigo_erro || res.codigo || 'N/A');
                     
-                    if (res.sucesso) {
-                        adicionarLogMes(mes, 'sucesso', `Pedido #${res.pedido_id}: NFe (Produto) emitida com sucesso`, {
-                            '📦 Pedido': `#${res.pedido_id}`,
-                            '👤 Cliente': cliente,
-                            '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
-                            '🏷️ Referência': res.referencia || 'N/A',
-                            '📊 Status': res.status || 'autorizado',
-                            '🔑 Chave NFe': res.chave_nfe || 'Aguardando...',
-                            '📁 XML': res.caminho_xml_nota_fiscal ? '✓ Disponível' : 'Aguardando...',
-                            '📄 DANFE': res.caminho_danfe ? '✓ Disponível' : 'Aguardando...'
-                        });
-                    } else {
-                        adicionarLogMes(mes, 'erro', `Pedido #${res.pedido_id}: Falha na emissão de NFe`, {
-                            '📦 Pedido': `#${res.pedido_id}`,
-                            '👤 Cliente': cliente,
-                            '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
-                            '❌ Erro': res.erro || res.mensagem || 'Erro desconhecido',
-                            '🔢 Código': res.codigo_erro || res.codigo || 'N/A'
-                        });
-                    }
-                });
+                    adicionarLogMes(mes, 'erro', `Pedido #${res.pedido_id}: Falha na emissão de NFe`, {
+                        '📦 Pedido': `#${res.pedido_id}`,
+                        '👤 Cliente': cliente,
+                        '💰 Valor': valor !== 'N/A' ? `R$ ${parseFloat(valor).toFixed(2)}` : valor,
+                        '❌ Erro': erroDetalhe,
+                        '🔢 Código': codigoErro
+                    });
+                }
+            });
+            
+            // Determinar mensagem final baseado no resultado
+            const temSucesso = resultado.sucesso > 0;
+            const mensagemFinal = `${temSucesso ? '✓' : '✗'} Emissão concluída: ${resultado.sucesso || 0} de ${resultado.total || pedidoIds.length} pedido(s) processado(s) com sucesso.`;
+            
+            if (temSucesso) {
+                adicionarLogMes(mes, 'sucesso', mensagemFinal);
+            } else {
+                adicionarLogMes(mes, 'erro', mensagemFinal);
             }
             
-            const mensagemSucesso = `✓ Emissão concluída: ${resultado.sucesso || 0} de ${resultado.total || pedidoIds.length} pedido(s) processado(s) com sucesso.`;
-            adicionarLogMes(mes, 'sucesso', `Emissão concluída: ${resultado.sucesso || 0} de ${resultado.total || pedidoIds.length} pedido(s) processado(s) com sucesso.`);
-            finalizarProgressoEmissao(true, mensagemSucesso);
+            finalizarProgressoEmissao(temSucesso, mensagemFinal);
         } else {
             const erroMsg = resultado?.erro || resultado?.mensagem || JSON.stringify(resultado) || 'Erro desconhecido';
             console.error('Erro na resposta da API:', resultado);

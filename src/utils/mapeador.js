@@ -561,7 +561,10 @@ async function mapearPedidoParaNFe(dadosPedido, configEmitente, configFiscal) {
     valor_seguro: 0,
     valor_total: parseFloat(valorTotal.toFixed(2)),
     valor_produtos: parseFloat(valorProdutos.toFixed(2)),
-    modalidade_frete: 0 // 0 = Por conta do emitente
+    modalidade_frete: 0, // 0 = Por conta do emitente
+    
+    // Informações Adicionais
+    informacoes_adicionais_contribuinte: 'Documento emitido por ME ou EPP optante pelo Simples Nacional. Não gera direito a crédito fiscal de IPI.'
   };
   
   // Adicionar campos do emitente apenas se não estiverem vazios
