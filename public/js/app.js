@@ -3412,6 +3412,47 @@ async function buscarNotasEnviadas() {
 /**
  * Sincroniza notas da Focus NFe
  */
+/**
+ * Atualiza status das notas pendentes (processando_autorizacao)
+ */
+async function atualizarStatusNotas() {
+    console.log('Atualizando status das notas pendentes...');
+    
+    try {
+        const resultado = await API.NFSe.atualizarStatus();
+        
+        if (resultado.sucesso) {
+            let mensagem = `✓ Status atualizados!\n\n`;
+            mensagem += `Total pendentes: ${resultado.total_pendentes}\n`;
+            mensagem += `Atualizadas: ${resultado.atualizadas}\n`;
+            
+            if (resultado.detalhes && resultado.detalhes.length > 0) {
+                mensagem += `\nDetalhes:\n`;
+                resultado.detalhes.forEach(d => {
+                    mensagem += `• ${d.ref}: ${d.status_novo}\n`;
+                });
+            }
+            
+            if (resultado.erros > 0) {
+                mensagem += `\n⚠️ ${resultado.erros} erro(s)`;
+            }
+            
+            alert(mensagem);
+            
+            // Recarregar lista de notas
+            setTimeout(() => buscarNotasEnviadas(), 500);
+        } else {
+            alert(`✗ Erro: ${resultado.erro}`);
+        }
+    } catch (error) {
+        console.error('Erro ao atualizar status:', error);
+        alert(`✗ Erro: ${error.message}`);
+    }
+}
+
+// Expor globalmente
+window.atualizarStatusNotas = atualizarStatusNotas;
+
 async function sincronizarNotasFocus() {
     if (!confirm('Deseja sincronizar todas as notas da Focus NFe com o banco local?\n\nIsso irá buscar todas as notas (NFSe e NFe) da Focus NFe e atualizar/criar registros no banco local.')) {
         return;

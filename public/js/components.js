@@ -336,8 +336,8 @@ function renderizarFiltrosNotasEnviadas() {
             </div>
             
             <div class="filters-actions">
-                <button type="button" class="btn btn-secondary" onclick="sincronizarNotasFocus()" title="Sincronizar todas as notas da Focus NFe">
-                    🔄 Sincronizar com Focus NFe
+                <button type="button" class="btn btn-primary" onclick="atualizarStatusNotas()" title="Atualizar status das notas pendentes">
+                    🔄 Atualizar Status
                 </button>
                 <button type="submit" class="btn btn-primary">Filtrar</button>
                 <button type="button" onclick="limparFiltrosNotasEnviadas()" class="btn btn-secondary">Limpar Filtros</button>

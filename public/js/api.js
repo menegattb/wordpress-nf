@@ -127,6 +127,15 @@ const NFSeAPI = {
     },
 
     /**
+     * Atualiza status de notas pendentes (processando_autorizacao)
+     */
+    async atualizarStatus() {
+        return await apiRequest('/api/nfse/atualizar-status', {
+            method: 'POST'
+        });
+    },
+
+    /**
      * Busca notas na Focus NFe e banco local
      */
     async buscar(filtros = {}) {
