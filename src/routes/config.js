@@ -244,6 +244,11 @@ router.post('/focus', (req, res) => {
     const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
     
     if (isVercel) {
+      // Verificar se os tokens já estão configurados no ambiente ANTES de atualizar
+      const tokenHomologacaoJaConfigurado = !!process.env.FOCUS_NFE_TOKEN_HOMOLOGACAO;
+      const tokenProducaoJaConfigurado = !!process.env.FOCUS_NFE_TOKEN_PRODUCAO;
+      const tokensJaConfigurados = tokenHomologacaoJaConfigurado && (ambiente === 'homologacao' || tokenProducaoJaConfigurado);
+      
       // Na Vercel: apenas atualizar process.env temporariamente
       // As variáveis devem ser configuradas no dashboard da Vercel para persistir
       process.env.FOCUS_NFE_AMBIENTE = ambiente;
@@ -260,25 +265,46 @@ router.post('/focus', (req, res) => {
         token_producao_preview: token_producao ? token_producao.substring(0, 10) + '...' : 'Não fornecido',
         has_token_homologacao: !!token_homologacao,
         has_token_producao: !!token_producao,
+        tokens_ja_configurados_no_ambiente: tokensJaConfigurados,
         aviso: 'Configuração temporária - configure no dashboard Vercel para persistir'
       });
       
-      return res.json({
-        sucesso: true,
-        mensagem: 'Configurações atualizadas temporariamente. ⚠️ Para persistir, configure as variáveis de ambiente no dashboard da Vercel: Settings > Environment Variables',
-        aviso: 'Na Vercel, as variáveis devem ser configuradas no dashboard para persistir após o deploy.',
-        instrucoes: [
+      let mensagem = '';
+      let instrucoes = [];
+      
+      if (tokensJaConfigurados) {
+        // Tokens já configurados - só precisa mudar o ambiente
+        mensagem = `✅ Configuração temporária aplicada! Como os tokens já estão configurados no dashboard da Vercel, você só precisa atualizar a variável FOCUS_NFE_AMBIENTE para "${ambiente}" no dashboard para persistir.`;
+        instrucoes = [
           '1. Acesse: https://vercel.com/seu-projeto/settings/environment-variables',
-          '2. Adicione/atualize: FOCUS_NFE_AMBIENTE = ' + ambiente,
+          `2. Encontre a variável FOCUS_NFE_AMBIENTE e altere para: ${ambiente}`,
+          '3. Salve e aguarde o próximo deploy automático (ou faça um redeploy manual)',
+          '',
+          '💡 Dica: A mudança na interface funciona temporariamente, mas só persiste após atualizar no dashboard.'
+        ];
+      } else {
+        // Tokens não configurados - precisa configurar tudo
+        mensagem = '⚠️ Configuração temporária aplicada. Para persistir, configure as variáveis no dashboard da Vercel:';
+        instrucoes = [
+          '1. Acesse: https://vercel.com/seu-projeto/settings/environment-variables',
+          `2. Adicione/atualize: FOCUS_NFE_AMBIENTE = ${ambiente}`,
           token_homologacao ? '3. Adicione/atualize: FOCUS_NFE_TOKEN_HOMOLOGACAO = [seu token]' : '',
           token_producao ? '4. Adicione/atualize: FOCUS_NFE_TOKEN_PRODUCAO = [seu token]' : '',
-          '5. Faça um novo deploy ou aguarde o próximo deploy automático'
-        ].filter(Boolean),
+          '5. Salve e aguarde o próximo deploy automático'
+        ].filter(Boolean);
+      }
+      
+      return res.json({
+        sucesso: true,
+        mensagem: mensagem,
+        aviso: 'Na Vercel, as variáveis devem ser configuradas no dashboard para persistir após o deploy.',
+        instrucoes: instrucoes,
         dados: {
           ambiente,
           token_homologacao_preview: token_homologacao ? token_homologacao.substring(0, 10) + '...' : null,
           token_producao_preview: token_producao ? token_producao.substring(0, 10) + '...' : null,
-          temporario: true
+          temporario: true,
+          tokens_ja_configurados: tokensJaConfigurados
         }
       });
     }

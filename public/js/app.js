@@ -564,9 +564,6 @@ async function carregarConexaoFocus() {
                         <input type="password" class="form-input" id="token-homologacao" value="${tokenHomologacao}" placeholder="Token de homologação" style="flex: 1;">
                         <button type="button" class="btn btn-secondary" onclick="toggleTokenVisibility('homologacao')" id="btn-toggle-homologacao">Mostrar</button>
                     </div>
-                    <small style="color: var(--color-gray-medium); margin-top: 4px; display: block;">
-                        Token atual: <span id="token-preview-homologacao">${tokenHomologacao ? tokenHomologacao.substring(0, 10) + '...' : 'Não configurado'}</span>
-                    </small>
                 </div>
                     
                     <!-- Token de Produção -->
@@ -576,9 +573,6 @@ async function carregarConexaoFocus() {
                         <input type="password" class="form-input" id="token-producao" value="${tokenProducao}" placeholder="Token de produção" style="flex: 1;">
                         <button type="button" class="btn btn-secondary" onclick="toggleTokenVisibility('producao')" id="btn-toggle-producao">Mostrar</button>
                     </div>
-                    <small style="color: var(--color-gray-medium); margin-top: 4px; display: block;">
-                        Token atual: <span id="token-preview-producao">${tokenProducao ? tokenProducao.substring(0, 10) + '...' : 'Não configurado'}</span>
-                    </small>
                 </div>
                     
                     <!-- Informações adicionais -->
@@ -733,16 +727,6 @@ async function resetarFocusConfig() {
         document.getElementById('focus-ambiente').value = dados.ambiente || 'homologacao';
         document.getElementById('token-homologacao').value = dados.token_homologacao || '';
         document.getElementById('token-producao').value = dados.token_producao || '';
-        
-        // Atualizar previews
-        const previewHomologacao = document.getElementById('token-preview-homologacao');
-        const previewProducao = document.getElementById('token-preview-producao');
-        if (previewHomologacao) {
-            previewHomologacao.textContent = dados.token_homologacao ? dados.token_homologacao.substring(0, 10) + '...' : 'Não configurado';
-        }
-        if (previewProducao) {
-            previewProducao.textContent = dados.token_producao ? dados.token_producao.substring(0, 10) + '...' : 'Não configurado';
-        }
     } else {
         // Recarregar do servidor
         await carregarConexaoFocus();
