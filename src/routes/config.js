@@ -101,6 +101,12 @@ router.get('/focus', async (req, res) => {
       tokenHomologacaoDoBanco = await buscarConfiguracao('FOCUS_NFE_TOKEN_HOMOLOGACAO');
       tokenProducaoDoBanco = await buscarConfiguracao('FOCUS_NFE_TOKEN_PRODUCAO');
       
+      logger.info('Configurações lidas do banco', {
+        ambienteDoBanco,
+        temTokenHomologacao: !!tokenHomologacaoDoBanco,
+        temTokenProducao: !!tokenProducaoDoBanco
+      });
+      
       // Se encontrou no banco, usar esses valores (prioridade máxima)
       if (ambienteDoBanco) {
         ambiente = ambienteDoBanco;
@@ -113,7 +119,9 @@ router.get('/focus', async (req, res) => {
       }
     } catch (err) {
       // Ignorar erros ao ler do banco
-      console.warn('Erro ao ler configurações do banco:', err.message);
+      logger.warn('Erro ao ler configurações do banco', {
+        error: err.message
+      });
     }
     
     if (isVercel) {
@@ -168,6 +176,14 @@ router.get('/focus', async (req, res) => {
     }
     
     const tokenAtual = ambiente === 'producao' ? tokenProducao : tokenHomologacao;
+    
+    logger.info('GET /api/config/focus - Retornando configurações', {
+      ambiente,
+      ambienteDoBanco,
+      isVercel,
+      temTokenHomologacao: !!tokenHomologacao,
+      temTokenProducao: !!tokenProducao
+    });
     
     res.json({
       sucesso: true,

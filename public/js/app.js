@@ -520,9 +520,8 @@ async function carregarConexaoFocus() {
         contentArea.innerHTML = '<div class="content-section"><div class="loading-spinner"></div><p>Carregando...</p></div>';
     }
     
-    // Buscar configurações do FocusNFe
+    // Buscar configurações do FocusNFe (sempre usar do banco)
     const resultado = await API.Config.getFocus();
-    const healthResult = await API.Config.getHealth();
     
     const dadosFocus = resultado.sucesso ? resultado.dados : {
         ambiente: 'homologacao',
@@ -530,7 +529,8 @@ async function carregarConexaoFocus() {
         token_producao: ''
     };
     
-    const ambienteAtual = healthResult.sucesso ? (healthResult.dados.ambiente || dadosFocus.ambiente) : dadosFocus.ambiente;
+    // Usar sempre o ambiente do banco (dadosFocus.ambiente)
+    const ambienteAtual = dadosFocus.ambiente || 'homologacao';
     
     const tokenHomologacao = dadosFocus.token_homologacao || '';
     const tokenProducao = dadosFocus.token_producao || '';
@@ -677,6 +677,19 @@ async function salvarFocusConfig() {
         });
         
         if (resultado.sucesso) {
+            // Atualizar o select diretamente com o valor retornado
+            const ambienteSalvo = resultado.dados?.ambiente || ambiente;
+            const selectAmbiente = document.getElementById('focus-ambiente');
+            if (selectAmbiente) {
+                selectAmbiente.value = ambienteSalvo;
+            }
+            
+            // Atualizar o texto "Ambiente atual" também
+            const ambienteAtualText = document.querySelector('small strong');
+            if (ambienteAtualText) {
+                ambienteAtualText.textContent = ambienteSalvo.toUpperCase();
+            }
+            
             // Verificar se é configuração temporária (Vercel)
             if (resultado.dados?.temporario || resultado.aviso) {
                 // Mostrar instruções para configurar no dashboard Vercel
@@ -698,7 +711,7 @@ async function salvarFocusConfig() {
                 alert('Configurações salvas com sucesso!');
             }
             
-            // Recarregar página para atualizar dados
+            // Recarregar página para atualizar todos os dados
             await carregarConexaoFocus();
         } else {
             alert('Erro ao salvar configurações: ' + (resultado.erro || 'Erro desconhecido'));
