@@ -560,19 +560,13 @@ async function carregarConexaoFocus() {
                     <!-- Token de Homologação -->
                 <div class="form-group" style="margin-bottom: 32px;">
                     <label class="form-label">Token de Homologação</label>
-                    <div style="display: flex; gap: 8px;">
-                        <input type="password" class="form-input" id="token-homologacao" value="${tokenHomologacao}" placeholder="Token de homologação" style="flex: 1;">
-                        <button type="button" class="btn btn-secondary" onclick="toggleTokenVisibility('homologacao')" id="btn-toggle-homologacao">Mostrar</button>
-                    </div>
+                    <input type="password" class="form-input" id="token-homologacao" value="${tokenHomologacao}" placeholder="Token de homologação">
                 </div>
                     
                     <!-- Token de Produção -->
                 <div class="form-group" style="margin-bottom: 32px;">
                     <label class="form-label">Token de Produção</label>
-                    <div style="display: flex; gap: 8px;">
-                        <input type="password" class="form-input" id="token-producao" value="${tokenProducao}" placeholder="Token de produção" style="flex: 1;">
-                        <button type="button" class="btn btn-secondary" onclick="toggleTokenVisibility('producao')" id="btn-toggle-producao">Mostrar</button>
-                    </div>
+                    <input type="password" class="form-input" id="token-producao" value="${tokenProducao}" placeholder="Token de produção">
                 </div>
                     
                     <!-- Informações adicionais -->

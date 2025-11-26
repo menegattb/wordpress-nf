@@ -92,27 +92,39 @@ router.get('/focus', async (req, res) => {
     let tokenProducao = '';
     
     // Tentar ler do banco primeiro (funciona em qualquer ambiente)
+    let ambienteDoBanco = null;
+    let tokenHomologacaoDoBanco = null;
+    let tokenProducaoDoBanco = null;
+    
     try {
-      const ambienteBanco = await buscarConfiguracao('FOCUS_NFE_AMBIENTE');
-      const tokenHomologacaoBanco = await buscarConfiguracao('FOCUS_NFE_TOKEN_HOMOLOGACAO');
-      const tokenProducaoBanco = await buscarConfiguracao('FOCUS_NFE_TOKEN_PRODUCAO');
+      ambienteDoBanco = await buscarConfiguracao('FOCUS_NFE_AMBIENTE');
+      tokenHomologacaoDoBanco = await buscarConfiguracao('FOCUS_NFE_TOKEN_HOMOLOGACAO');
+      tokenProducaoDoBanco = await buscarConfiguracao('FOCUS_NFE_TOKEN_PRODUCAO');
       
-      if (ambienteBanco) ambiente = ambienteBanco;
-      if (tokenHomologacaoBanco) tokenHomologacao = tokenHomologacaoBanco;
-      if (tokenProducaoBanco) tokenProducao = tokenProducaoBanco;
+      // Se encontrou no banco, usar esses valores (prioridade máxima)
+      if (ambienteDoBanco) {
+        ambiente = ambienteDoBanco;
+      }
+      if (tokenHomologacaoDoBanco) {
+        tokenHomologacao = tokenHomologacaoDoBanco;
+      }
+      if (tokenProducaoDoBanco) {
+        tokenProducao = tokenProducaoDoBanco;
+      }
     } catch (err) {
       // Ignorar erros ao ler do banco
+      console.warn('Erro ao ler configurações do banco:', err.message);
     }
     
     if (isVercel) {
-      // Na Vercel: usar process.env como fallback se não tiver no banco
-      if (!ambiente || ambiente === 'homologacao') {
+      // Na Vercel: usar process.env apenas como fallback se não tiver no banco
+      if (!ambienteDoBanco) {
         ambiente = process.env.FOCUS_NFE_AMBIENTE || 'homologacao';
       }
-      if (!tokenHomologacao) {
+      if (!tokenHomologacaoDoBanco) {
         tokenHomologacao = process.env.FOCUS_NFE_TOKEN_HOMOLOGACAO || '';
       }
-      if (!tokenProducao) {
+      if (!tokenProducaoDoBanco) {
         tokenProducao = process.env.FOCUS_NFE_TOKEN_PRODUCAO || '';
       }
     } else {
