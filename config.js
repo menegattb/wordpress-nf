@@ -28,7 +28,7 @@ module.exports = {
     cnpj: process.env.PRESTADOR_CNPJ || process.env.FOCUS_NFE_CNPJ || '51581345000117',
     inscricao_municipal: process.env.PRESTADOR_IM || process.env.EMITENTE_INSCRICAO_MUNICIPAL || '032.392-6',
     razao_social: process.env.PRESTADOR_RAZAO || 'Lungta Psicoterapia Ltda',
-    codigo_municipio: process.env.PRESTADOR_MUNICIPIO || process.env.EMITENTE_CODIGO_MUNICIPIO || '2607200',
+    codigo_municipio: process.env.PRESTADOR_MUNICIPIO || process.env.EMITENTE_CODIGO_MUNICIPIO || '2607208',
     email: process.env.PRESTADOR_EMAIL || '',
     telefone: process.env.PRESTADOR_TELEFONE || '',
     optante_simples_nacional: process.env.EMITENTE_SIMPLES_NACIONAL !== 'false',
@@ -46,7 +46,7 @@ module.exports = {
     item_lista_servico: process.env.ITEM_LISTA_SERVICO || '70101', // Removido zero à esquerda (5 caracteres)
     codigo_tributario_municipio: process.env.CODIGO_TRIBUTARIO_MUNICIPIO || '101',
     aliquota: parseFloat(process.env.ALIQUOTA || '3'),
-    tomador_municipio: process.env.TOMADOR_MUNICIPIO || process.env.PRESTADOR_MUNICIPIO || '2607200',
+    tomador_municipio: process.env.TOMADOR_MUNICIPIO || process.env.PRESTADOR_MUNICIPIO || '2607208',
     // Configurações para NFe (produto)
     cfop_padrao: process.env.CFOP_PADRAO || '5102', // CFOP padrão para venda de produto
     ncm_padrao: process.env.NCM_PADRAO || '49019900', // NCM padrão (livros, impressos, etc)
