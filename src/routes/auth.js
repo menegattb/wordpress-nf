@@ -102,29 +102,40 @@ router.post('/login', async (req, res) => {
     req.session.usuario = username;
     req.session.loginTime = new Date().toISOString();
     
+    logger.info('Login realizado com sucesso', {
+      service: 'auth',
+      action: 'login',
+      username: username,
+      ip: req.ip,
+      sessionId: req.sessionID,
+      hasSession: !!req.session,
+      authenticated: req.session.authenticated
+    });
+    
     // Salvar sessão antes de enviar resposta
     req.session.save((err) => {
       if (err) {
         logger.error('Erro ao salvar sessão', {
           service: 'auth',
           action: 'login',
-          error: err.message
+          error: err.message,
+          sessionId: req.sessionID
+        });
+        
+        return res.status(500).json({
+          sucesso: false,
+          erro: 'Erro ao salvar sessão',
+          mensagem: 'Não foi possível salvar a sessão. Tente novamente.'
         });
       }
-    });
-    
-    logger.info('Login realizado com sucesso', {
-      service: 'auth',
-      action: 'login',
-      username: username,
-      ip: req.ip,
-      sessionId: req.sessionID
-    });
-    
-    res.json({
-      sucesso: true,
-      mensagem: 'Login realizado com sucesso',
-      usuario: username
+      
+      // Enviar resposta após salvar sessão
+      res.json({
+        sucesso: true,
+        mensagem: 'Login realizado com sucesso',
+        usuario: username,
+        sessionId: req.sessionID
+      });
     });
     
   } catch (error) {

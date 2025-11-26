@@ -199,25 +199,30 @@
 
                 if (data.sucesso) {
                     // Aguardar um pouco para garantir que o cookie foi salvo
-                    setTimeout(() => {
-                        // Verificar autenticação antes de redirecionar
-                        fetch('/api/auth/status', {
-                            credentials: 'include'
-                        })
-                        .then(res => res.json())
-                        .then(status => {
+                    setTimeout(async () => {
+                        try {
+                            // Verificar autenticação antes de redirecionar
+                            const statusResponse = await fetch('/api/auth/status', {
+                                credentials: 'include',
+                                cache: 'no-cache'
+                            });
+                            
+                            const status = await statusResponse.json();
+                            
                             if (status.autenticado) {
-                                window.location.href = '/';
+                                // Redirecionar para a página principal
+                                window.location.replace('/');
                             } else {
-                                showError('Erro ao verificar autenticação. Tente novamente.');
+                                console.error('Sessão não encontrada após login:', status);
+                                showError('Erro ao verificar autenticação. A sessão não foi salva. Tente novamente.');
                                 setLoading(false);
                             }
-                        })
-                        .catch(() => {
-                            // Mesmo com erro, tentar redirecionar
-                            window.location.href = '/';
-                        });
-                    }, 100);
+                        } catch (error) {
+                            console.error('Erro ao verificar status:', error);
+                            // Tentar redirecionar mesmo com erro
+                            window.location.replace('/');
+                        }
+                    }, 200);
                 } else {
                     showError(data.erro || 'Erro ao realizar login');
                     setLoading(false);
