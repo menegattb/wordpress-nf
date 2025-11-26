@@ -80,38 +80,54 @@ router.get('/webhook-url', (req, res) => {
 /**
  * GET /api/config/focus
  * Retorna configurações do Focus NFe (ambiente e tokens mascarados)
- * Lê diretamente do arquivo .env para garantir valores atualizados
+ * Na Vercel: lê de process.env
+ * Em desenvolvimento: tenta ler do arquivo .env, fallback para process.env
  */
 router.get('/focus', (req, res) => {
   try {
-    // Ler diretamente do arquivo .env para garantir valores atualizados
-    const envPath = path.join(process.cwd(), '.env');
+    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
     let ambiente = 'homologacao';
     let tokenHomologacao = '';
     let tokenProducao = '';
     
-    if (fs.existsSync(envPath)) {
-      const envContent = fs.readFileSync(envPath, 'utf8');
-      
-      // Extrair valores do .env
-      const ambienteMatch = envContent.match(/^FOCUS_NFE_AMBIENTE=(.+)$/m);
-      const tokenHomologacaoMatch = envContent.match(/^FOCUS_NFE_TOKEN_HOMOLOGACAO=(.+)$/m);
-      const tokenProducaoMatch = envContent.match(/^FOCUS_NFE_TOKEN_PRODUCAO=(.+)$/m);
-      
-      if (ambienteMatch) {
-        ambiente = ambienteMatch[1].trim();
-      }
-      if (tokenHomologacaoMatch) {
-        tokenHomologacao = tokenHomologacaoMatch[1].trim();
-      }
-      if (tokenProducaoMatch) {
-        tokenProducao = tokenProducaoMatch[1].trim();
-      }
-    } else {
-      // Fallback para process.env ou config se .env não existir
-      ambiente = process.env.FOCUS_NFE_AMBIENTE || config.focusNFe.ambiente || 'homologacao';
-      tokenHomologacao = process.env.FOCUS_NFE_TOKEN_HOMOLOGACAO || config.focusNFe.token || '4tn92XZHfM22uOfhtmbhb3dMvLk48ymA';
+    if (isVercel) {
+      // Na Vercel: sempre usar process.env
+      ambiente = process.env.FOCUS_NFE_AMBIENTE || 'homologacao';
+      tokenHomologacao = process.env.FOCUS_NFE_TOKEN_HOMOLOGACAO || '';
       tokenProducao = process.env.FOCUS_NFE_TOKEN_PRODUCAO || '';
+    } else {
+      // Desenvolvimento: tentar ler do .env primeiro
+      const envPath = path.join(process.cwd(), '.env');
+      
+      if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8');
+        
+        // Extrair valores do .env
+        const ambienteMatch = envContent.match(/^FOCUS_NFE_AMBIENTE=(.+)$/m);
+        const tokenHomologacaoMatch = envContent.match(/^FOCUS_NFE_TOKEN_HOMOLOGACAO=(.+)$/m);
+        const tokenProducaoMatch = envContent.match(/^FOCUS_NFE_TOKEN_PRODUCAO=(.+)$/m);
+        
+        if (ambienteMatch) {
+          ambiente = ambienteMatch[1].trim();
+        }
+        if (tokenHomologacaoMatch) {
+          tokenHomologacao = tokenHomologacaoMatch[1].trim();
+        }
+        if (tokenProducaoMatch) {
+          tokenProducao = tokenProducaoMatch[1].trim();
+        }
+      }
+      
+      // Fallback para process.env ou config se .env não existir ou valores vazios
+      if (!ambiente || ambiente === 'homologacao') {
+        ambiente = process.env.FOCUS_NFE_AMBIENTE || config.focusNFe.ambiente || 'homologacao';
+      }
+      if (!tokenHomologacao) {
+        tokenHomologacao = process.env.FOCUS_NFE_TOKEN_HOMOLOGACAO || config.focusNFe.token || '4tn92XZHfM22uOfhtmbhb3dMvLk48ymA';
+      }
+      if (!tokenProducao) {
+        tokenProducao = process.env.FOCUS_NFE_TOKEN_PRODUCAO || '';
+      }
     }
     
     // Garantir valores padrão se vazios
@@ -127,7 +143,8 @@ router.get('/focus', (req, res) => {
         ambiente: ambiente,
         token_homologacao: tokenHomologacao,
         token_producao: tokenProducao,
-        token_atual_preview: tokenAtual ? tokenAtual.substring(0, 10) + '...' : 'Não configurado'
+        token_atual_preview: tokenAtual ? tokenAtual.substring(0, 10) + '...' : 'Não configurado',
+        ambiente_atual: isVercel ? 'vercel' : 'local'
       }
     });
   } catch (error) {
@@ -194,8 +211,8 @@ router.get('/woocommerce', (req, res) => {
 /**
  * POST /api/config/focus
  * Salva configurações do Focus NFe
- * Nota: Em produção, isso deveria salvar em variáveis de ambiente ou banco de dados
- * Por enquanto, apenas retorna sucesso e loga os dados
+ * Na Vercel: apenas atualiza process.env temporariamente (não persiste)
+ * Em desenvolvimento: salva no arquivo .env
  */
 router.post('/focus', (req, res) => {
   try {
@@ -223,7 +240,50 @@ router.post('/focus', (req, res) => {
       });
     }
     
-    // Salvar no arquivo .env
+    // Detectar se está rodando na Vercel
+    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
+    
+    if (isVercel) {
+      // Na Vercel: apenas atualizar process.env temporariamente
+      // As variáveis devem ser configuradas no dashboard da Vercel para persistir
+      process.env.FOCUS_NFE_AMBIENTE = ambiente;
+      if (token_homologacao) {
+        process.env.FOCUS_NFE_TOKEN_HOMOLOGACAO = token_homologacao;
+      }
+      if (token_producao) {
+        process.env.FOCUS_NFE_TOKEN_PRODUCAO = token_producao;
+      }
+      
+      logger.info('Configurações do Focus NFe atualizadas temporariamente (Vercel)', {
+        ambiente,
+        token_homologacao_preview: token_homologacao ? token_homologacao.substring(0, 10) + '...' : 'Não fornecido',
+        token_producao_preview: token_producao ? token_producao.substring(0, 10) + '...' : 'Não fornecido',
+        has_token_homologacao: !!token_homologacao,
+        has_token_producao: !!token_producao,
+        aviso: 'Configuração temporária - configure no dashboard Vercel para persistir'
+      });
+      
+      return res.json({
+        sucesso: true,
+        mensagem: 'Configurações atualizadas temporariamente. ⚠️ Para persistir, configure as variáveis de ambiente no dashboard da Vercel: Settings > Environment Variables',
+        aviso: 'Na Vercel, as variáveis devem ser configuradas no dashboard para persistir após o deploy.',
+        instrucoes: [
+          '1. Acesse: https://vercel.com/seu-projeto/settings/environment-variables',
+          '2. Adicione/atualize: FOCUS_NFE_AMBIENTE = ' + ambiente,
+          token_homologacao ? '3. Adicione/atualize: FOCUS_NFE_TOKEN_HOMOLOGACAO = [seu token]' : '',
+          token_producao ? '4. Adicione/atualize: FOCUS_NFE_TOKEN_PRODUCAO = [seu token]' : '',
+          '5. Faça um novo deploy ou aguarde o próximo deploy automático'
+        ].filter(Boolean),
+        dados: {
+          ambiente,
+          token_homologacao_preview: token_homologacao ? token_homologacao.substring(0, 10) + '...' : null,
+          token_producao_preview: token_producao ? token_producao.substring(0, 10) + '...' : null,
+          temporario: true
+        }
+      });
+    }
+    
+    // Desenvolvimento local: salvar no arquivo .env
     const envPath = path.join(process.cwd(), '.env');
     let envContent = '';
     
@@ -276,23 +336,23 @@ FOCUS_NFE_CNPJ=51581345000117
       }
       
       logger.info('Configurações do Focus NFe salvas no arquivo .env', {
-      ambiente,
-      token_homologacao_preview: token_homologacao ? token_homologacao.substring(0, 10) + '...' : 'Não fornecido',
-      token_producao_preview: token_producao ? token_producao.substring(0, 10) + '...' : 'Não fornecido',
-      has_token_homologacao: !!token_homologacao,
+        ambiente,
+        token_homologacao_preview: token_homologacao ? token_homologacao.substring(0, 10) + '...' : 'Não fornecido',
+        token_producao_preview: token_producao ? token_producao.substring(0, 10) + '...' : 'Não fornecido',
+        has_token_homologacao: !!token_homologacao,
         has_token_producao: !!token_producao,
         env_file_path: envPath
       });
       
-    res.json({
-      sucesso: true,
+      return res.json({
+        sucesso: true,
         mensagem: 'Configurações salvas com sucesso! As mudanças já estão ativas. Reinicie o servidor para garantir que todas as configurações sejam recarregadas.',
-      dados: {
-        ambiente,
-        token_homologacao_preview: token_homologacao ? token_homologacao.substring(0, 10) + '...' : null,
-        token_producao_preview: token_producao ? token_producao.substring(0, 10) + '...' : null
-      }
-    });
+        dados: {
+          ambiente,
+          token_homologacao_preview: token_homologacao ? token_homologacao.substring(0, 10) + '...' : null,
+          token_producao_preview: token_producao ? token_producao.substring(0, 10) + '...' : null
+        }
+      });
       
     } catch (writeError) {
       logger.error('Erro ao salvar arquivo .env', {
@@ -300,7 +360,7 @@ FOCUS_NFE_CNPJ=51581345000117
         env_path: envPath
       });
       
-      res.status(500).json({
+      return res.status(500).json({
         sucesso: false,
         erro: `Erro ao salvar arquivo .env: ${writeError.message}`
       });

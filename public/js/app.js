@@ -689,7 +689,27 @@ async function salvarFocusConfig() {
         });
         
         if (resultado.sucesso) {
-            alert('Configurações salvas com sucesso!');
+            // Verificar se é configuração temporária (Vercel)
+            if (resultado.dados?.temporario || resultado.aviso) {
+                // Mostrar instruções para configurar no dashboard Vercel
+                const instrucoes = resultado.instrucoes || [];
+                const mensagem = resultado.mensagem || 'Configuração temporária aplicada.';
+                
+                let mensagemCompleta = mensagem + '\n\n';
+                if (instrucoes.length > 0) {
+                    mensagemCompleta += '📋 Instruções:\n\n';
+                    instrucoes.forEach(inst => {
+                        mensagemCompleta += inst + '\n';
+                    });
+                }
+                
+                mensagemCompleta += '\n⚠️ As configurações serão temporárias até você configurar no dashboard da Vercel.';
+                
+                alert(mensagemCompleta);
+            } else {
+                alert('Configurações salvas com sucesso!');
+            }
+            
             // Recarregar página para atualizar dados
             await carregarConexaoFocus();
         } else {
