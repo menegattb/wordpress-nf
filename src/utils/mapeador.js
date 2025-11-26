@@ -350,6 +350,12 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     }
   };
   
+  // Adicionar inscrição municipal se estiver configurada (alguns municípios exigem mesmo sendo opcional)
+  // Baseado no WSDL de Ipojuca/PE fornecido pelo suporte Focus NFe
+  if (configEmitente.inscricao_municipal && configEmitente.inscricao_municipal.trim() !== '') {
+    nfse.prestador.inscricao_municipal = configEmitente.inscricao_municipal.replace(/\D/g, ''); // Remover formatação (pontos, traços)
+  }
+  
   logger.mapping('Mapeamento para Focus NFSe concluído', {
     pedido_id: dadosPedido.pedido_id,
     tomador: tomador.razao_social,
