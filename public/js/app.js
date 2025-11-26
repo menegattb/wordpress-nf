@@ -73,6 +73,13 @@ function atualizarSidebarAtivo(secao) {
  * Carrega seção específica
  */
 async function carregarSecao(secao) {
+    // Parar polling anterior se mudar de seção
+    if (estadoAtual.secaoAtiva === 'pedidos-woocommerce') {
+        pararPollingPedidos();
+    }
+    if (estadoAtual.secaoAtiva === 'notas-enviadas') {
+        pararPollingNotas();
+    }
     
     estadoAtual.secaoAtiva = secao;
     atualizarSidebarAtivo(secao);
@@ -1034,8 +1041,9 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
     };
 }
 
-// Intervalo de polling para novos pedidos (em ms)
+// Intervalos de polling (em ms)
 let pollingInterval = null;
+let pollingNotasInterval = null;
 const POLLING_DELAY = 30000; // 30 segundos
 
 async function carregarPedidos() {
@@ -1303,6 +1311,85 @@ function pararPollingPedidos() {
 }
 
 /**
+ * Inicia polling para atualizar notas enviadas automaticamente
+ */
+function iniciarPollingNotas() {
+    // Parar polling anterior se existir
+    if (pollingNotasInterval) {
+        clearInterval(pollingNotasInterval);
+    }
+    
+    console.log('🔄 Iniciando polling para notas enviadas (a cada 30s)');
+    
+    pollingNotasInterval = setInterval(async () => {
+        try {
+            // Verificar se ainda estamos na seção de notas enviadas
+            if (estadoAtual.secaoAtiva !== 'notas-enviadas') {
+                clearInterval(pollingNotasInterval);
+                pollingNotasInterval = null;
+                return;
+            }
+            
+            // Buscar notas atualizadas do banco (sem alterar página atual)
+            const limite = 50;
+            const offset = (estadoAtual.paginaNotas - 1) * limite;
+            const filtros = {
+                limite: limite,
+                offset: offset,
+                ...estadoAtual.filtrosNotas
+            };
+            
+            const resultado = await API.NFSe.listar(filtros);
+            
+            if (resultado.sucesso) {
+                const notas = resultado.dados || [];
+                const total = resultado.total || 0;
+                const notasAnteriores = estadoAtual.dados.notasEnviadas || [];
+                
+                // Verificar se há novas notas (comparar por referência)
+                const referenciasAnteriores = new Set(notasAnteriores.map(n => n.referencia));
+                const novasNotas = notas.filter(n => !referenciasAnteriores.has(n.referencia));
+                
+                if (novasNotas.length > 0) {
+                    console.log(`🔔 ${novasNotas.length} nova(s) nota(s) detectada(s)`);
+                    
+                    // Atualizar dados
+                    estadoAtual.dados.notasEnviadas = notas;
+                    const tabelaArea = document.getElementById('tabela-notas-enviadas');
+                    if (tabelaArea) {
+                        tabelaArea.innerHTML = window.Components.renderizarTabelaNotasEnviadas(notas);
+                    }
+                    
+                    // Atualizar paginação se necessário
+                    const totalPaginas = Math.ceil(total / limite) || 1;
+                    const paginacaoArea = document.getElementById('paginacao-notas-enviadas');
+                    if (paginacaoArea) {
+                        paginacaoArea.innerHTML = window.Components.renderizarPaginacao(
+                            estadoAtual.paginaNotas,
+                            totalPaginas,
+                            'mudarPaginaNotasEnviadas'
+                        );
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn('Erro no polling de notas:', err);
+        }
+    }, POLLING_DELAY);
+}
+
+/**
+ * Para o polling de notas
+ */
+function pararPollingNotas() {
+    if (pollingNotasInterval) {
+        clearInterval(pollingNotasInterval);
+        pollingNotasInterval = null;
+        console.log('⏹️ Polling de notas parado');
+    }
+}
+
+/**
  * Força atualização do WooCommerce (manual)
  */
 async function forcarAtualizacaoWooCommerce() {
@@ -1342,6 +1429,8 @@ async function forcarAtualizacaoWooCommerce() {
 // Expor funções globalmente
 window.forcarAtualizacaoWooCommerce = forcarAtualizacaoWooCommerce;
 window.pararPollingPedidos = pararPollingPedidos;
+window.iniciarPollingNotas = iniciarPollingNotas;
+window.pararPollingNotas = pararPollingNotas;
 
 /**
  * Renderiza a tela de pedidos com accordion de meses
@@ -3423,6 +3512,9 @@ async function carregarNotasEnviadas() {
         
         // Carregar dados iniciais
         await buscarNotasEnviadas();
+        
+        // Iniciar polling para atualizar notas automaticamente
+        iniciarPollingNotas();
     } catch (error) {
         console.error('Erro ao carregar notas enviadas:', error);
         const contentArea = document.getElementById('content-area');
