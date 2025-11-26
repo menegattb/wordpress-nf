@@ -335,11 +335,6 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
       codigo_municipio: configEmitente.codigo_municipio
     },
     
-    // Adicionar inscrição municipal se estiver configurada (alguns municípios exigem mesmo sendo opcional)
-    if (configEmitente.inscricao_municipal && configEmitente.inscricao_municipal.trim() !== '') {
-      nfse.prestador.inscricao_municipal = configEmitente.inscricao_municipal.replace(/\D/g, ''); // Remover formatação
-    }
-    
     // Tomador
     tomador: tomador,
     
