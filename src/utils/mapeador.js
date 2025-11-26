@@ -277,6 +277,7 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
       logradouro: dadosPedido.endereco?.rua || '',
       numero: dadosPedido.endereco?.numero || '',
       bairro: bairroCorreto, // Usar bairro da API quando disponível (mais confiável)
+      cidade: cidadeCorreta || dadosPedido.endereco?.cidade || '', // Cidade obtida via API ou do pedido
       uf: ufCorreta, // Usar UF retornada pela API (corrige inconsistências)
       codigo_municipio: codigoMunicipioTomador, // Código obtido via API
       cep: cepTomador // CEP sempre presente com 8 dígitos
@@ -290,21 +291,29 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     }
   });
   
-  // Limpar campos vazios do endereco (exceto CEP e codigo_municipio que são obrigatórios)
+  // Limpar campos vazios do endereco (exceto CEP, codigo_municipio e cidade que são obrigatórios)
   Object.keys(tomador.endereco).forEach(key => {
-    if (key !== 'cep' && key !== 'codigo_municipio') {
+    if (key !== 'cep' && key !== 'codigo_municipio' && key !== 'cidade') {
       if (tomador.endereco[key] === undefined || tomador.endereco[key] === '') {
         delete tomador.endereco[key];
       }
     }
   });
   
-  // Garantir que CEP e codigo_municipio sempre estejam presentes
+  // Garantir que CEP, codigo_municipio e cidade sempre estejam presentes
   if (!tomador.endereco.cep || tomador.endereco.cep === '') {
     throw new Error('CEP do tomador é obrigatório e não pode estar vazio.');
   }
   if (!tomador.endereco.codigo_municipio) {
     throw new Error('Código IBGE do município do tomador é obrigatório e não foi obtido.');
+  }
+  // Garantir que cidade esteja presente (Focus NFe exige mesmo com codigo_municipio)
+  if (!tomador.endereco.cidade || tomador.endereco.cidade === '') {
+    // Se não tiver cidade, tentar usar a cidade retornada pela API ou do pedido
+    tomador.endereco.cidade = cidadeCorreta || dadosPedido.endereco?.cidade || '';
+    if (!tomador.endereco.cidade) {
+      throw new Error('Cidade do tomador é obrigatória e não foi obtida.');
+    }
   }
   
   // Discriminação dos serviços (juntar todos os produtos em uma string)
