@@ -4,10 +4,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Environment variables (mantendo apenas arquivos locais ignorados)
+# Environment variables - NUNCA commitar arquivos .env com dados sensíveis!
+.env
 .env.local
 .env.*.local
-# .env será commitado para facilitar configuração
 
 # Logs
 logs/
