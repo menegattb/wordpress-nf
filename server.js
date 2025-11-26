@@ -62,8 +62,24 @@ app.use(session({
 // Middleware para verificar autenticação (não bloqueia, apenas adiciona info) - LOGIN DESABILITADO
 // app.use(checkAuth);
 
-// Servir arquivos estáticos da pasta public
-app.use(express.static(path.join(__dirname, 'public')));
+// Servir arquivos estáticos da pasta public (exceto login.html - LOGIN DESABILITADO)
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, path) => {
+    // Bloquear acesso ao login.html
+    if (path.endsWith('login.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+      // Redirecionar para raiz se tentar acessar login.html
+    }
+  }
+}));
+
+// Bloquear acesso direto ao login.html - LOGIN DESABILITADO
+app.get('/login.html', (req, res) => {
+  res.redirect('/');
+});
+app.get('/login', (req, res) => {
+  res.redirect('/');
+});
 
 // Middleware de logging (sem console.log, apenas salva nos arquivos)
 app.use((req, res, next) => {
