@@ -653,54 +653,50 @@ async function sincronizarNotas(req, res) {
 
 /**
  * Sincroniza pedidos do WooCommerce para o banco local
+ * Aceita parâmetro 'pagina' para sincronização incremental (limite Vercel = 10s)
  */
 async function sincronizarPedidosWooCommerce(req, res) {
   try {
-    logger.info('🔄 [SINCRONIZAR PEDIDOS] Iniciando sincronização de pedidos do WooCommerce');
+    const { pagina = 1, por_pagina = 30 } = req.body || req.query;
+    const page = parseInt(pagina);
+    const perPage = Math.min(parseInt(por_pagina), 50); // Max 50 por vez
     
-    let todosPedidos = [];
-    let page = 1;
-    const perPage = 100;
+    logger.info('🔄 [SINCRONIZAR PEDIDOS] Iniciando sincronização', { page, perPage });
     
-    // Buscar todos os pedidos do WooCommerce (paginado)
-    while (true) {
-      const resultado = await woocommerce.buscarPedidos({
-        per_page: perPage,
-        page: page,
-        orderby: 'date',
-        order: 'desc'
-      });
-      
-      let pedidos = [];
-      if (resultado.sucesso && Array.isArray(resultado.pedidos)) {
-        pedidos = resultado.pedidos;
-      } else if (Array.isArray(resultado)) {
-        pedidos = resultado;
-      } else {
-        break;
-      }
-      
-      if (!pedidos || pedidos.length === 0) {
-        break;
-      }
-      
-      todosPedidos = todosPedidos.concat(pedidos);
-      
-      if (pedidos.length < perPage) {
-        break;
-      }
-      
-      page++;
+    // Buscar apenas uma página do WooCommerce
+    const resultado = await woocommerce.buscarPedidos({
+      per_page: perPage,
+      page: page,
+      orderby: 'date',
+      order: 'desc'
+    });
+    
+    let pedidos = [];
+    if (resultado.sucesso && Array.isArray(resultado.pedidos)) {
+      pedidos = resultado.pedidos;
+    } else if (Array.isArray(resultado)) {
+      pedidos = resultado;
     }
     
-    logger.info(`🔄 [SINCRONIZAR PEDIDOS] ${todosPedidos.length} pedidos encontrados no WooCommerce`);
+    if (!pedidos || pedidos.length === 0) {
+      return res.json({
+        sucesso: true,
+        mensagem: 'Nenhum pedido encontrado nesta página',
+        pagina: page,
+        total: 0,
+        salvos: 0,
+        atualizados: 0,
+        erros: 0,
+        tem_mais: false
+      });
+    }
     
     // Salvar/atualizar cada pedido no banco
     let salvos = 0;
     let atualizados = 0;
     let erros = 0;
     
-    for (const pedido of todosPedidos) {
+    for (const pedido of pedidos) {
       try {
         const pedidoId = String(pedido.id || pedido.number);
         
@@ -732,20 +728,27 @@ async function sincronizarPedidosWooCommerce(req, res) {
       }
     }
     
-    logger.info('✅ [SINCRONIZAR PEDIDOS] Sincronização concluída', {
-      total: todosPedidos.length,
+    const temMais = pedidos.length === perPage;
+    
+    logger.info('✅ [SINCRONIZAR PEDIDOS] Página sincronizada', {
+      pagina: page,
+      total: pedidos.length,
       salvos,
       atualizados,
-      erros
+      erros,
+      tem_mais: temMais
     });
     
     res.json({
       sucesso: true,
-      mensagem: 'Sincronização concluída',
-      total: todosPedidos.length,
+      mensagem: `Página ${page} sincronizada`,
+      pagina: page,
+      total: pedidos.length,
       salvos,
       atualizados,
-      erros
+      erros,
+      tem_mais: temMais,
+      proxima_pagina: temMais ? page + 1 : null
     });
     
   } catch (error) {

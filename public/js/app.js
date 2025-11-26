@@ -1068,12 +1068,23 @@ async function carregarPedidos() {
         // Se não tem pedidos no banco, buscar do WooCommerce
         if (todosPedidos.length === 0) {
             atualizarStatusConexao('Banco vazio. Sincronizando do WooCommerce...', 'info');
-            todosPedidos = await buscarTodosPedidosWooCommerce();
             
-            // Sincronizar para o banco em background
-            API.Pedidos.sincronizarDoWooCommerce().catch(err => {
-                console.warn('Erro ao sincronizar para banco:', err);
+            // Sincronizar todos os pedidos do WooCommerce (paginado)
+            const resultado = await API.Pedidos.sincronizarTodosDoWooCommerce((progresso) => {
+                atualizarStatusConexao(`Sincronizando página ${progresso.pagina}... (${progresso.salvos} novos)`, 'info');
             });
+            
+            if (resultado.sucesso) {
+                atualizarStatusConexao(`✓ ${resultado.salvos} novos, ${resultado.atualizados} atualizados`, 'success');
+                // Recarregar do banco após sincronização
+                const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 1000 });
+                if (resultadoBanco.sucesso && resultadoBanco.dados) {
+                    todosPedidos = resultadoBanco.dados;
+                }
+            } else {
+                // Fallback: buscar direto do WooCommerce
+                todosPedidos = await buscarTodosPedidosWooCommerce();
+            }
         }
         
         // Ordenar por data (mais recente primeiro)
@@ -1242,11 +1253,13 @@ async function forcarAtualizacaoWooCommerce() {
     atualizarStatusConexao('Sincronizando do WooCommerce...', 'info');
     
     try {
-        // Sincronizar do WooCommerce para o banco
-        const resultado = await API.Pedidos.sincronizarDoWooCommerce();
+        // Sincronizar todos os pedidos do WooCommerce (paginado)
+        const resultado = await API.Pedidos.sincronizarTodosDoWooCommerce((progresso) => {
+            atualizarStatusConexao(`Sincronizando página ${progresso.pagina}... (${progresso.salvos} novos, ${progresso.atualizados} atualizados)`, 'info');
+        });
         
         if (resultado.sucesso) {
-            atualizarStatusConexao(`✓ Sincronizado: ${resultado.salvos || 0} novos, ${resultado.atualizados || 0} atualizados`, 'success');
+            atualizarStatusConexao(`✓ ${resultado.paginas} páginas: ${resultado.salvos} novos, ${resultado.atualizados} atualizados`, 'success');
             
             // Recarregar do banco
             const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 1000 });

@@ -250,12 +250,57 @@ const PedidosAPI = {
     },
 
     /**
-     * Sincroniza pedidos do WooCommerce para o banco local
+     * Sincroniza pedidos do WooCommerce para o banco local (paginado)
+     * @param {number} pagina - Página a sincronizar (default: 1)
+     * @param {number} porPagina - Itens por página (default: 30, max: 50)
      */
-    async sincronizarDoWooCommerce() {
+    async sincronizarDoWooCommerce(pagina = 1, porPagina = 30) {
         return await apiRequest('/api/pedidos/sincronizar-woocommerce', {
-            method: 'POST'
+            method: 'POST',
+            body: { pagina, por_pagina: porPagina }
         });
+    },
+
+    /**
+     * Sincroniza TODOS os pedidos do WooCommerce (múltiplas páginas)
+     */
+    async sincronizarTodosDoWooCommerce(onProgress = null) {
+        let pagina = 1;
+        let totalSalvos = 0;
+        let totalAtualizados = 0;
+        let totalErros = 0;
+        
+        while (true) {
+            const resultado = await this.sincronizarDoWooCommerce(pagina, 30);
+            
+            if (!resultado.sucesso) {
+                return { sucesso: false, erro: resultado.erro };
+            }
+            
+            totalSalvos += resultado.salvos || 0;
+            totalAtualizados += resultado.atualizados || 0;
+            totalErros += resultado.erros || 0;
+            
+            if (onProgress) {
+                onProgress({
+                    pagina,
+                    salvos: totalSalvos,
+                    atualizados: totalAtualizados,
+                    erros: totalErros
+                });
+            }
+            
+            if (!resultado.tem_mais) break;
+            pagina++;
+        }
+        
+        return {
+            sucesso: true,
+            paginas: pagina,
+            salvos: totalSalvos,
+            atualizados: totalAtualizados,
+            erros: totalErros
+        };
     }
 };
 
