@@ -17,8 +17,10 @@ const app = express();
 // Executar migrations automaticamente no startup (apenas se houver banco)
 (async () => {
   try {
-    const { migrate } = require('./src/config/database');
+    const { migrate, carregarConfiguracoesFocus } = require('./src/config/database');
     await migrate();
+    // Carregar configurações do Focus NFe do banco após migrations
+    await carregarConfiguracoesFocus();
   } catch (error) {
     console.log('⚠ Erro ao executar migrations no startup:', error.message);
   }

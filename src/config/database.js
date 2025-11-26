@@ -184,6 +184,16 @@ async function migrate() {
       )
     `;
     
+    // Criar tabela configuracoes
+    console.log('Criando tabela configuracoes...');
+    await sql`
+      CREATE TABLE IF NOT EXISTS configuracoes (
+        chave TEXT PRIMARY KEY,
+        valor TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    
     // Criar índices
     console.log('Criando índices...');
     const indices = [
@@ -1192,6 +1202,88 @@ async function atualizarNFe(referencia, atualizacoes) {
   }
 }
 
+/**
+ * Salva uma configuração no banco
+ */
+async function salvarConfiguracao(chave, valor) {
+  if (!hasDatabase || !sql) {
+    return false;
+  }
+  
+  try {
+    await sql`
+      INSERT INTO configuracoes (chave, valor, updated_at)
+      VALUES (${chave}, ${valor}, CURRENT_TIMESTAMP)
+      ON CONFLICT (chave) 
+      DO UPDATE SET valor = ${valor}, updated_at = CURRENT_TIMESTAMP
+    `;
+    return true;
+  } catch (error) {
+    console.error('Erro ao salvar configuração:', error.message);
+    return false;
+  }
+}
+
+/**
+ * Busca uma configuração do banco
+ */
+async function buscarConfiguracao(chave) {
+  if (!hasDatabase || !sql) {
+    return null;
+  }
+  
+  try {
+    const result = await sql`
+      SELECT valor FROM configuracoes WHERE chave = ${chave}
+    `;
+    return result.rows.length > 0 ? result.rows[0].valor : null;
+  } catch (error) {
+    console.error('Erro ao buscar configuração:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Carrega todas as configurações do Focus NFe do banco e atualiza process.env
+ */
+async function carregarConfiguracoesFocus() {
+  if (!hasDatabase || !sql) {
+    return;
+  }
+  
+  try {
+    const ambiente = await buscarConfiguracao('FOCUS_NFE_AMBIENTE');
+    const tokenHomologacao = await buscarConfiguracao('FOCUS_NFE_TOKEN_HOMOLOGACAO');
+    const tokenProducao = await buscarConfiguracao('FOCUS_NFE_TOKEN_PRODUCAO');
+    
+    if (ambiente) {
+      process.env.FOCUS_NFE_AMBIENTE = ambiente;
+    }
+    if (tokenHomologacao) {
+      process.env.FOCUS_NFE_TOKEN_HOMOLOGACAO = tokenHomologacao;
+    }
+    if (tokenProducao) {
+      process.env.FOCUS_NFE_TOKEN_PRODUCAO = tokenProducao;
+    }
+    
+    if (ambiente || tokenHomologacao || tokenProducao) {
+      console.log('✓ Configurações do Focus NFe carregadas do banco de dados');
+    }
+  } catch (error) {
+    console.error('Erro ao carregar configurações do Focus NFe:', error.message);
+  }
+}
+
+// Carregar configurações do Focus NFe ao iniciar (se houver banco)
+if (hasDatabase) {
+  // Aguardar um pouco para garantir que o banco está pronto
+  setTimeout(() => {
+    carregarConfiguracoesFocus().catch(err => {
+      console.warn('Erro ao carregar configurações iniciais:', err.message);
+    });
+  }, 1000);
+}
+
 module.exports = {
   query,
   migrate,
@@ -1207,6 +1299,9 @@ module.exports = {
   salvarNFe,
   buscarNFePorReferencia,
   buscarNFePorChave,
+  salvarConfiguracao,
+  buscarConfiguracao,
+  carregarConfiguracoesFocus,
   listarNFe,
   atualizarNFe,
   salvarLog,
