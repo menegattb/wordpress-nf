@@ -81,14 +81,14 @@ app.use((req, res, next) => {
 });
 
 // Rotas públicas (não requerem autenticação)
-app.use('/api/auth', authRoutes);
+// app.use('/api/auth', authRoutes); // LOGIN DESABILITADO
 app.use('/api/webhook', webhookRoutes); // Webhooks devem ser públicos
 
-// Rotas protegidas (requerem autenticação)
-app.use('/api/nfse', requireAuth, nfseRoutes);
-app.use('/api/pedidos', requireAuth, pedidoRoutes);
-app.use('/api/woocommerce', requireAuth, woocommerceRoutes);
-app.use('/api/config', requireAuth, configRoutes);
+// Rotas protegidas (requerem autenticação) - LOGIN DESABILITADO
+app.use('/api/nfse', nfseRoutes); // requireAuth comentado
+app.use('/api/pedidos', pedidoRoutes); // requireAuth comentado
+app.use('/api/woocommerce', woocommerceRoutes); // requireAuth comentado
+app.use('/api/config', configRoutes); // requireAuth comentado
 
 // Função auxiliar para ler ambiente do .env
 function lerAmbienteDoEnv() {
@@ -149,8 +149,8 @@ app.get('/health', async (req, res) => {
   });
 });
 
-// Rota para executar migrations (protegida)
-app.post('/api/migrate', requireAuth, async (req, res) => {
+// Rota para executar migrations (protegida) - LOGIN DESABILITADO
+app.post('/api/migrate', async (req, res) => { // requireAuth comentado
   try {
     const { migrate } = require('./src/config/database');
     await migrate();
@@ -168,17 +168,17 @@ app.post('/api/migrate', requireAuth, async (req, res) => {
   }
 });
 
-// Rota de login - servir página de login
-app.get('/login', (req, res) => {
-  // Se já estiver autenticado, redirecionar para home
-  if (req.session && req.session.authenticated) {
-    return res.redirect('/');
-  }
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
+// Rota de login - servir página de login - LOGIN DESABILITADO
+// app.get('/login', (req, res) => {
+//   // Se já estiver autenticado, redirecionar para home
+//   if (req.session && req.session.authenticated) {
+//     return res.redirect('/');
+//   }
+//   res.sendFile(path.join(__dirname, 'public', 'login.html'));
+// });
 
-// Rota raiz - servir index.html do front-end (protegida)
-app.get('/', requireAuth, (req, res) => {
+// Rota raiz - servir index.html do front-end (protegida) - LOGIN DESABILITADO
+app.get('/', (req, res) => { // requireAuth comentado
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
