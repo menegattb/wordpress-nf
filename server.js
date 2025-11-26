@@ -59,8 +59,8 @@ app.use(session({
   name: 'mj-notas.sid' // Nome customizado para o cookie
 }));
 
-// Middleware para verificar autenticação (não bloqueia, apenas adiciona info)
-app.use(checkAuth);
+// Middleware para verificar autenticação (não bloqueia, apenas adiciona info) - LOGIN DESABILITADO
+// app.use(checkAuth);
 
 // Servir arquivos estáticos da pasta public
 app.use(express.static(path.join(__dirname, 'public')));
