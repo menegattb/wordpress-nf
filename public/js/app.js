@@ -1029,83 +1029,58 @@ const POLLING_DELAY = 30000; // 30 segundos
 
 async function carregarPedidos() {
     const contentArea = document.getElementById('content-area');
+    const meses = gerarListaMeses();
     
-    // Mostrar tela inicial com barra de status
+    // Mostrar tela inicial
     contentArea.innerHTML = `
         <div class="content-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                 <h2 class="section-title" style="margin: 0;">Pedidos WooCommerce</h2>
                 <div id="status-woocommerce" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
-                    <span style="color: #666; font-size: 12px;">⏳ Carregando do banco local...</span>
+                    <span style="color: #666; font-size: 12px;">⏳ Carregando...</span>
                 </div>
             </div>
             <div style="text-align: center; padding: 40px;">
                 <div class="loading-spinner" style="width: 40px; height: 40px; margin: 0 auto 16px;"></div>
-                <p style="color: var(--color-gray-medium);">Carregando pedidos salvos...</p>
+                <p style="color: var(--color-gray-medium);">Carregando pedidos...</p>
             </div>
         </div>
     `;
     
     try {
-        // Gerar lista de meses (últimos 12 meses)
-        const meses = gerarListaMeses();
-        
-        // PRIMEIRO: Tentar carregar do banco local (rápido)
-        atualizarStatusConexao('Carregando do banco local...', 'info');
+        // 1. CARREGAR DO BANCO LOCAL (instantâneo)
+        atualizarStatusConexao('Carregando do banco...', 'info');
         
         let todosPedidos = [];
+        const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
         
-        try {
-            const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 1000 });
-            if (resultadoBanco.sucesso && resultadoBanco.dados && resultadoBanco.dados.length > 0) {
-                todosPedidos = resultadoBanco.dados;
-                atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos carregados do banco local`, 'success');
-            }
-        } catch (erroBanco) {
-            console.warn('Erro ao carregar do banco local:', erroBanco);
+        if (resultadoBanco.sucesso && resultadoBanco.dados && resultadoBanco.dados.length > 0) {
+            todosPedidos = resultadoBanco.dados;
+            
+            // Ordenar por data
+            todosPedidos.sort((a, b) => new Date(b.date_created || 0) - new Date(a.date_created || 0));
+            
+            // Salvar no estado e renderizar IMEDIATAMENTE
+            estadoAtual.dados.meses = meses;
+            estadoAtual.dados.todosPedidos = todosPedidos;
+            estadoAtual.filtroMes = null;
+            estadoAtual.filtroStatus = null;
+            estadoAtual.filtroCategoria = null;
+            estadoAtual.agruparPorCategoria = false;
+            
+            renderizarTelaPedidos(todosPedidos, meses);
+            atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos carregados`, 'success');
+            
+            // 2. ATUALIZAR EM BACKGROUND (em lotes pequenos, sem bloquear)
+            sincronizarEmBackground();
+            
+        } else {
+            // Banco vazio - fazer primeira importação
+            atualizarStatusConexao('Importando do WooCommerce...', 'info');
+            await importarPrimeiraVez(meses);
         }
         
-        // Se não tem pedidos no banco, buscar do WooCommerce
-        if (todosPedidos.length === 0) {
-            atualizarStatusConexao('Banco vazio. Sincronizando do WooCommerce...', 'info');
-            
-            // Sincronizar todos os pedidos do WooCommerce (paginado)
-            const resultado = await API.Pedidos.sincronizarTodosDoWooCommerce((progresso) => {
-                atualizarStatusConexao(`Sincronizando página ${progresso.pagina}... (${progresso.salvos} novos)`, 'info');
-            });
-            
-            if (resultado.sucesso) {
-                atualizarStatusConexao(`✓ ${resultado.salvos} novos, ${resultado.atualizados} atualizados`, 'success');
-                // Recarregar do banco após sincronização
-                const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 1000 });
-                if (resultadoBanco.sucesso && resultadoBanco.dados) {
-                    todosPedidos = resultadoBanco.dados;
-                }
-            } else {
-                // Fallback: buscar direto do WooCommerce
-                todosPedidos = await buscarTodosPedidosWooCommerce();
-            }
-        }
-        
-        // Ordenar por data (mais recente primeiro)
-        todosPedidos.sort((a, b) => {
-            const dateA = new Date(a.date_created || 0);
-            const dateB = new Date(b.date_created || 0);
-            return dateB - dateA;
-        });
-        
-        // Salvar no estado
-        estadoAtual.dados.meses = meses;
-        estadoAtual.dados.todosPedidos = todosPedidos;
-        estadoAtual.filtroMes = null;
-        estadoAtual.filtroStatus = null;
-        estadoAtual.filtroCategoria = null;
-        estadoAtual.agruparPorCategoria = false;
-        
-        // Renderizar tela
-        renderizarTelaPedidos(todosPedidos, meses);
-        
-        // Iniciar polling para novos pedidos/notas
+        // Iniciar polling
         iniciarPollingPedidos();
         
     } catch (error) {
@@ -1125,6 +1100,76 @@ async function carregarPedidos() {
                 </div>
             </div>
         `;
+    }
+}
+
+/**
+ * Sincroniza pedidos do WooCommerce em background (em lotes pequenos)
+ * Não bloqueia a interface
+ */
+async function sincronizarEmBackground() {
+    try {
+        // Sincronizar apenas página 1 (pedidos mais recentes) para pegar novos
+        const resultado = await API.Pedidos.sincronizarDoWooCommerce(1, 50);
+        
+        if (resultado.sucesso && resultado.salvos > 0) {
+            // Tem pedidos novos - recarregar do banco e atualizar tela
+            atualizarStatusConexao(`🔄 ${resultado.salvos} novos pedidos encontrados`, 'info');
+            
+            const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
+            if (resultadoBanco.sucesso && resultadoBanco.dados) {
+                const todosPedidos = resultadoBanco.dados;
+                todosPedidos.sort((a, b) => new Date(b.date_created || 0) - new Date(a.date_created || 0));
+                
+                estadoAtual.dados.todosPedidos = todosPedidos;
+                
+                // Re-renderizar mantendo filtros
+                renderizarTelaPedidos(
+                    todosPedidos,
+                    estadoAtual.dados.meses,
+                    estadoAtual.filtroStatus,
+                    estadoAtual.filtroCategoria,
+                    estadoAtual.agruparPorCategoria
+                );
+                
+                atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos (${resultado.salvos} novos)`, 'success');
+            }
+        } else {
+            // Sem pedidos novos - apenas atualizar status
+            atualizarStatusConexao(`✓ ${estadoAtual.dados.todosPedidos?.length || 0} pedidos (atualizado)`, 'success');
+        }
+    } catch (err) {
+        console.warn('Erro na sincronização em background:', err);
+        // Não mostrar erro para o usuário, dados do banco já estão carregados
+    }
+}
+
+/**
+ * Importa pedidos pela primeira vez (banco vazio)
+ */
+async function importarPrimeiraVez(meses) {
+    const resultado = await API.Pedidos.sincronizarTodosDoWooCommerce((progresso) => {
+        atualizarStatusConexao(`Importando página ${progresso.pagina}... (${progresso.salvos} pedidos)`, 'info');
+    });
+    
+    if (resultado.sucesso) {
+        const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
+        if (resultadoBanco.sucesso && resultadoBanco.dados) {
+            const todosPedidos = resultadoBanco.dados;
+            todosPedidos.sort((a, b) => new Date(b.date_created || 0) - new Date(a.date_created || 0));
+            
+            estadoAtual.dados.meses = meses;
+            estadoAtual.dados.todosPedidos = todosPedidos;
+            estadoAtual.filtroMes = null;
+            estadoAtual.filtroStatus = null;
+            estadoAtual.filtroCategoria = null;
+            estadoAtual.agruparPorCategoria = false;
+            
+            renderizarTelaPedidos(todosPedidos, meses);
+            atualizarStatusConexao(`✓ ${resultado.salvos} pedidos importados`, 'success');
+        }
+    } else {
+        throw new Error(resultado.erro || 'Erro ao importar pedidos');
     }
 }
 
