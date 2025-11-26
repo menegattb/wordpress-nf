@@ -12,9 +12,66 @@ let estadoAtual = {
 };
 
 /**
+ * Verifica autenticação ao carregar a página
+ */
+async function verificarAutenticacao() {
+    try {
+        const response = await fetch('/api/auth/status', {
+            credentials: 'include'
+        });
+        const data = await response.json();
+        
+        if (!data.autenticado) {
+            // Redirecionar para login se não estiver autenticado
+            window.location.href = '/login';
+            return false;
+        }
+        return true;
+    } catch (error) {
+        console.error('Erro ao verificar autenticação:', error);
+        window.location.href = '/login';
+        return false;
+    }
+}
+
+/**
+ * Realiza logout do usuário
+ */
+async function logout() {
+    if (!confirm('Deseja realmente sair?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        
+        const data = await response.json();
+        
+        if (data.sucesso) {
+            window.location.href = '/login';
+        } else {
+            alert('Erro ao realizar logout: ' + (data.erro || 'Erro desconhecido'));
+        }
+    } catch (error) {
+        console.error('Erro ao fazer logout:', error);
+        // Mesmo com erro, redirecionar para login
+        window.location.href = '/login';
+    }
+}
+
+/**
  * Inicialização da aplicação
  */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Verificar autenticação primeiro
+    const autenticado = await verificarAutenticacao();
+    if (!autenticado) {
+        return; // Redirecionamento já foi feito
+    }
+    
     // Verificar se Components está disponível
     if (!window.Components) {
         console.error('Components não está disponível no DOMContentLoaded');

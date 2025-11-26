@@ -3,14 +3,20 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
 const logger = require('./src/services/logger');
 
 // Importar rotas
+const authRoutes = require('./src/routes/auth');
 const webhookRoutes = require('./src/routes/webhook');
 const nfseRoutes = require('./src/routes/nfse');
 const pedidoRoutes = require('./src/routes/pedidos');
 const woocommerceRoutes = require('./src/routes/woocommerce');
 const configRoutes = require('./src/routes/config');
+
+// Importar middleware de autenticação
+const { requireAuth, checkAuth } = require('./src/middleware/auth');
 
 const app = express();
 
@@ -27,9 +33,32 @@ const app = express();
 })();
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
+app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Configurar sessões
+const sessionSecret = process.env.SESSION_SECRET || 'sua-chave-secreta-alterar-em-producao-' + Date.now();
+const isProduction = process.env.NODE_ENV === 'production';
+
+app.use(session({
+  secret: sessionSecret,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: isProduction, // HTTPS apenas em produção
+    httpOnly: true, // Não acessível via JavaScript
+    maxAge: 24 * 60 * 60 * 1000 // 24 horas
+  },
+  name: 'mj-notas.sid' // Nome customizado para o cookie
+}));
+
+// Middleware para verificar autenticação (não bloqueia, apenas adiciona info)
+app.use(checkAuth);
 
 // Servir arquivos estáticos da pasta public
 app.use(express.static(path.join(__dirname, 'public')));
@@ -49,12 +78,15 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rotas
-app.use('/api/webhook', webhookRoutes);
-app.use('/api/nfse', nfseRoutes);
-app.use('/api/pedidos', pedidoRoutes);
-app.use('/api/woocommerce', woocommerceRoutes);
-app.use('/api/config', configRoutes);
+// Rotas públicas (não requerem autenticação)
+app.use('/api/auth', authRoutes);
+app.use('/api/webhook', webhookRoutes); // Webhooks devem ser públicos
+
+// Rotas protegidas (requerem autenticação)
+app.use('/api/nfse', requireAuth, nfseRoutes);
+app.use('/api/pedidos', requireAuth, pedidoRoutes);
+app.use('/api/woocommerce', requireAuth, woocommerceRoutes);
+app.use('/api/config', requireAuth, configRoutes);
 
 // Função auxiliar para ler ambiente do .env
 function lerAmbienteDoEnv() {
@@ -116,7 +148,7 @@ app.get('/health', async (req, res) => {
 });
 
 // Rota para executar migrations (protegida)
-app.post('/api/migrate', async (req, res) => {
+app.post('/api/migrate', requireAuth, async (req, res) => {
   try {
     const { migrate } = require('./src/config/database');
     await migrate();
@@ -134,8 +166,17 @@ app.post('/api/migrate', async (req, res) => {
   }
 });
 
-// Rota raiz - servir index.html do front-end
-app.get('/', (req, res) => {
+// Rota de login - servir página de login
+app.get('/login', (req, res) => {
+  // Se já estiver autenticado, redirecionar para home
+  if (req.session && req.session.authenticated) {
+    return res.redirect('/');
+  }
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Rota raiz - servir index.html do front-end (protegida)
+app.get('/', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
