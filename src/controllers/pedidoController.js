@@ -664,7 +664,7 @@ async function sincronizarPedidosWooCommerce(req, res) {
     
     // Buscar todos os pedidos do WooCommerce (paginado)
     while (true) {
-      const resultado = await woocommerce.listarPedidos({
+      const resultado = await woocommerce.buscarPedidos({
         per_page: perPage,
         page: page,
         orderby: 'date',
