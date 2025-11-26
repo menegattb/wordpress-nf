@@ -102,11 +102,23 @@ router.post('/login', async (req, res) => {
     req.session.usuario = username;
     req.session.loginTime = new Date().toISOString();
     
+    // Salvar sessão antes de enviar resposta
+    req.session.save((err) => {
+      if (err) {
+        logger.error('Erro ao salvar sessão', {
+          service: 'auth',
+          action: 'login',
+          error: err.message
+        });
+      }
+    });
+    
     logger.info('Login realizado com sucesso', {
       service: 'auth',
       action: 'login',
       username: username,
-      ip: req.ip
+      ip: req.ip,
+      sessionId: req.sessionID
     });
     
     res.json({

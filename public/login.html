@@ -198,8 +198,26 @@
                 const data = await response.json();
 
                 if (data.sucesso) {
-                    // Redirecionar para a página principal
-                    window.location.href = '/';
+                    // Aguardar um pouco para garantir que o cookie foi salvo
+                    setTimeout(() => {
+                        // Verificar autenticação antes de redirecionar
+                        fetch('/api/auth/status', {
+                            credentials: 'include'
+                        })
+                        .then(res => res.json())
+                        .then(status => {
+                            if (status.autenticado) {
+                                window.location.href = '/';
+                            } else {
+                                showError('Erro ao verificar autenticação. Tente novamente.');
+                                setLoading(false);
+                            }
+                        })
+                        .catch(() => {
+                            // Mesmo com erro, tentar redirecionar
+                            window.location.href = '/';
+                        });
+                    }, 100);
                 } else {
                     showError(data.erro || 'Erro ao realizar login');
                     setLoading(false);

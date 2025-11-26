@@ -44,14 +44,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Configurar sessões
 const sessionSecret = process.env.SESSION_SECRET || 'sua-chave-secreta-alterar-em-producao-' + Date.now();
 const isProduction = process.env.NODE_ENV === 'production';
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
 
 app.use(session({
   secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isProduction, // HTTPS apenas em produção
+    secure: isVercel || isProduction, // HTTPS na Vercel e produção
     httpOnly: true, // Não acessível via JavaScript
+    sameSite: 'lax', // Permite cookies em navegação cross-site
     maxAge: 24 * 60 * 60 * 1000 // 24 horas
   },
   name: 'mj-notas.sid' // Nome customizado para o cookie
