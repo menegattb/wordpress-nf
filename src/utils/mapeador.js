@@ -328,13 +328,17 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     optante_simples_nacional: configEmitente.optante_simples_nacional !== false,
     
     // Prestador
-    // Nota: inscricao_municipal não deve ser enviada se não houver informações complementares
-    // registradas no CNC NFS-e (conforme erro E0120 da SEFAZ)
+    // Nota: inscricao_municipal é opcional no schema, mas alguns municípios exigem
+    // Para Ipojuca/PE, vamos enviar se estiver configurada
     prestador: {
       cnpj: configEmitente.cnpj,
       codigo_municipio: configEmitente.codigo_municipio
-      // inscricao_municipal removido - não deve ser enviado se não houver informações complementares
     },
+    
+    // Adicionar inscrição municipal se estiver configurada (alguns municípios exigem mesmo sendo opcional)
+    if (configEmitente.inscricao_municipal && configEmitente.inscricao_municipal.trim() !== '') {
+      nfse.prestador.inscricao_municipal = configEmitente.inscricao_municipal.replace(/\D/g, ''); // Remover formatação
+    }
     
     // Tomador
     tomador: tomador,
