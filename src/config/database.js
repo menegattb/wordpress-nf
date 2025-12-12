@@ -668,20 +668,24 @@ async function listarNFSe(filtros = {}) {
         }
         // Se já for objeto, manter como está (Vercel Postgres retorna JSONB como objeto)
         
-        // Log para debug (apenas primeira linha)
-        if (index === 0) {
-          console.log('Debug NFSe - Tipo dados_completos:', tipoOriginal, 'Tipo após processamento:', typeof row.dados_completos);
-          if (row.dados_completos && typeof row.dados_completos === 'object') {
-            console.log('Debug NFSe - Chaves disponíveis:', Object.keys(row.dados_completos).slice(0, 10));
-            console.log('Debug NFSe - Tem tomador?', !!row.dados_completos.tomador);
-            console.log('Debug NFSe - Tem servico?', !!row.dados_completos.servico);
-          }
+        // Log para debug (apenas primeira linha e se dados_completos estiver vazio)
+        if (index === 0 || !row.dados_completos || (typeof row.dados_completos === 'object' && Object.keys(row.dados_completos).length === 0)) {
+          console.log(`🔍 [LISTAR NFSe] Nota ${index + 1}:`, {
+            referencia: row.referencia,
+            ambiente: row.ambiente,
+            tipo_dados_completos_original: tipoOriginal,
+            tipo_apos_processamento: typeof row.dados_completos,
+            tem_dados_completos: !!row.dados_completos,
+            chaves_disponiveis: row.dados_completos && typeof row.dados_completos === 'object' ? Object.keys(row.dados_completos).slice(0, 10) : [],
+            tem_tomador: row.dados_completos?.tomador ? true : false,
+            tem_servico: row.dados_completos?.servico ? true : false,
+            valor_servicos: row.dados_completos?.servico?.valor_servicos,
+            tomador_razao_social: row.dados_completos?.tomador?.razao_social
+          });
         }
       } else {
         // Log se dados_completos estiver vazio
-        if (index === 0) {
-          console.warn('Debug NFSe - dados_completos está vazio/null para primeira nota');
-        }
+        console.warn(`⚠️ [LISTAR NFSe] Nota ${index + 1} (${row.referencia}) - dados_completos está vazio/null`);
       }
       return row;
     });
