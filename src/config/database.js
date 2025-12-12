@@ -632,14 +632,19 @@ async function listarNFSe(filtros = {}) {
     );
     
     // Parsear dados_completos se for string JSON
+    // No Vercel Postgres, JSONB pode vir como objeto ou string dependendo da versão
     const dadosParseados = result.rows.map(row => {
-      if (row.dados_completos && typeof row.dados_completos === 'string') {
-        try {
-          row.dados_completos = JSON.parse(row.dados_completos);
-        } catch (e) {
-          // Se não conseguir parsear, manter como está
-          console.warn('Erro ao parsear dados_completos:', e);
+      if (row.dados_completos) {
+        // Se for string, tentar parsear
+        if (typeof row.dados_completos === 'string') {
+          try {
+            row.dados_completos = JSON.parse(row.dados_completos);
+          } catch (e) {
+            // Se não conseguir parsear, manter como está
+            console.warn('Erro ao parsear dados_completos (NFSe):', e);
+          }
         }
+        // Se já for objeto, manter como está (Vercel Postgres retorna JSONB como objeto)
       }
       return row;
     });
@@ -1101,14 +1106,19 @@ async function listarNFe(filtros = {}) {
     );
     
     // Parsear dados_completos se for string JSON
+    // No Vercel Postgres, JSONB pode vir como objeto ou string dependendo da versão
     const dadosParseados = result.rows.map(row => {
-      if (row.dados_completos && typeof row.dados_completos === 'string') {
-        try {
-          row.dados_completos = JSON.parse(row.dados_completos);
-        } catch (e) {
-          // Se não conseguir parsear, manter como está
-          console.warn('Erro ao parsear dados_completos:', e);
+      if (row.dados_completos) {
+        // Se for string, tentar parsear
+        if (typeof row.dados_completos === 'string') {
+          try {
+            row.dados_completos = JSON.parse(row.dados_completos);
+          } catch (e) {
+            // Se não conseguir parsear, manter como está
+            console.warn('Erro ao parsear dados_completos (NFe):', e);
+          }
         }
+        // Se já for objeto, manter como está (Vercel Postgres retorna JSONB como objeto)
       }
       return row;
     });

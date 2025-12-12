@@ -195,21 +195,36 @@ async function listarTodasNotas(req, res) {
     };
     
     // Buscar NFSe e NFe em paralelo
-    const [resultadoNFSe, resultadoNFe] = await Promise.all([
-      listarNFSe(filtros),
-      listarNFe(filtros)
-    ]);
+    let resultadoNFSe, resultadoNFe;
+    try {
+      [resultadoNFSe, resultadoNFe] = await Promise.all([
+        listarNFSe(filtros),
+        listarNFe(filtros)
+      ]);
+    } catch (error) {
+      logger.error('Erro ao buscar notas do banco', {
+        error: error.message,
+        stack: error.stack
+      });
+      throw error;
+    }
     
     // Adicionar tipo_nota a cada item
-    const notasNFSe = (resultadoNFSe.dados || []).map(nota => ({
+    const notasNFSe = (resultadoNFSe?.dados || []).map(nota => ({
       ...nota,
       tipo_nota: 'nfse'
     }));
     
-    const notasNFe = (resultadoNFe.dados || []).map(nota => ({
+    const notasNFe = (resultadoNFe?.dados || []).map(nota => ({
       ...nota,
       tipo_nota: 'nfe'
     }));
+    
+    logger.debug('Notas encontradas', {
+      nfse_count: notasNFSe.length,
+      nfe_count: notasNFe.length,
+      total: notasNFSe.length + notasNFe.length
+    });
     
     // Combinar e ordenar por data (mais recente primeiro)
     const todasNotas = [...notasNFSe, ...notasNFe].sort((a, b) => {
