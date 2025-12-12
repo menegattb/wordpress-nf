@@ -383,12 +383,39 @@ function renderizarTabelaNotasEnviadas(notas) {
         
         // Parsear dados_completos se for string JSON
         let dadosCompletos = nota.dados_completos;
+        const tipoOriginal = typeof dadosCompletos;
+        
         if (typeof dadosCompletos === 'string') {
             try {
                 dadosCompletos = JSON.parse(dadosCompletos);
             } catch (e) {
                 console.warn('Erro ao parsear dados_completos:', e);
                 dadosCompletos = {};
+            }
+        }
+        
+        // Log para debug (apenas primeira nota)
+        if (notas.indexOf(nota) === 0) {
+            console.log('Debug Frontend - Nota:', referencia);
+            console.log('Debug Frontend - Tipo dados_completos original:', tipoOriginal);
+            console.log('Debug Frontend - Tipo após parse:', typeof dadosCompletos);
+            console.log('Debug Frontend - dados_completos existe?', !!dadosCompletos);
+            if (dadosCompletos && typeof dadosCompletos === 'object') {
+                console.log('Debug Frontend - Chaves disponíveis:', Object.keys(dadosCompletos).slice(0, 10));
+                if (tipoNota === 'nfse') {
+                    console.log('Debug Frontend - Tem tomador?', !!dadosCompletos.tomador);
+                    console.log('Debug Frontend - Tem servico?', !!dadosCompletos.servico);
+                    if (dadosCompletos.tomador) {
+                        console.log('Debug Frontend - Tomador keys:', Object.keys(dadosCompletos.tomador));
+                    }
+                    if (dadosCompletos.servico) {
+                        console.log('Debug Frontend - Servico keys:', Object.keys(dadosCompletos.servico));
+                        console.log('Debug Frontend - valor_servicos:', dadosCompletos.servico.valor_servicos);
+                    }
+                } else {
+                    console.log('Debug Frontend - Tem destinatario?', !!dadosCompletos.destinatario);
+                    console.log('Debug Frontend - valor_total:', dadosCompletos.valor_total);
+                }
             }
         }
         

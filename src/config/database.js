@@ -633,18 +633,35 @@ async function listarNFSe(filtros = {}) {
     
     // Parsear dados_completos se for string JSON
     // No Vercel Postgres, JSONB pode vir como objeto ou string dependendo da versão
-    const dadosParseados = result.rows.map(row => {
+    const dadosParseados = result.rows.map((row, index) => {
       if (row.dados_completos) {
+        const tipoOriginal = typeof row.dados_completos;
+        
         // Se for string, tentar parsear
-        if (typeof row.dados_completos === 'string') {
+        if (tipoOriginal === 'string') {
           try {
             row.dados_completos = JSON.parse(row.dados_completos);
           } catch (e) {
             // Se não conseguir parsear, manter como está
-            console.warn('Erro ao parsear dados_completos (NFSe):', e);
+            console.warn(`Erro ao parsear dados_completos (NFSe) - linha ${index}:`, e.message);
           }
         }
         // Se já for objeto, manter como está (Vercel Postgres retorna JSONB como objeto)
+        
+        // Log para debug (apenas primeira linha)
+        if (index === 0) {
+          console.log('Debug NFSe - Tipo dados_completos:', tipoOriginal, 'Tipo após processamento:', typeof row.dados_completos);
+          if (row.dados_completos && typeof row.dados_completos === 'object') {
+            console.log('Debug NFSe - Chaves disponíveis:', Object.keys(row.dados_completos).slice(0, 10));
+            console.log('Debug NFSe - Tem tomador?', !!row.dados_completos.tomador);
+            console.log('Debug NFSe - Tem servico?', !!row.dados_completos.servico);
+          }
+        }
+      } else {
+        // Log se dados_completos estiver vazio
+        if (index === 0) {
+          console.warn('Debug NFSe - dados_completos está vazio/null para primeira nota');
+        }
       }
       return row;
     });
@@ -1107,18 +1124,35 @@ async function listarNFe(filtros = {}) {
     
     // Parsear dados_completos se for string JSON
     // No Vercel Postgres, JSONB pode vir como objeto ou string dependendo da versão
-    const dadosParseados = result.rows.map(row => {
+    const dadosParseados = result.rows.map((row, index) => {
       if (row.dados_completos) {
+        const tipoOriginal = typeof row.dados_completos;
+        
         // Se for string, tentar parsear
-        if (typeof row.dados_completos === 'string') {
+        if (tipoOriginal === 'string') {
           try {
             row.dados_completos = JSON.parse(row.dados_completos);
           } catch (e) {
             // Se não conseguir parsear, manter como está
-            console.warn('Erro ao parsear dados_completos (NFe):', e);
+            console.warn(`Erro ao parsear dados_completos (NFe) - linha ${index}:`, e.message);
           }
         }
         // Se já for objeto, manter como está (Vercel Postgres retorna JSONB como objeto)
+        
+        // Log para debug (apenas primeira linha)
+        if (index === 0) {
+          console.log('Debug NFe - Tipo dados_completos:', tipoOriginal, 'Tipo após processamento:', typeof row.dados_completos);
+          if (row.dados_completos && typeof row.dados_completos === 'object') {
+            console.log('Debug NFe - Chaves disponíveis:', Object.keys(row.dados_completos).slice(0, 10));
+            console.log('Debug NFe - Tem destinatario?', !!row.dados_completos.destinatario);
+            console.log('Debug NFe - Tem valor_total?', !!row.dados_completos.valor_total);
+          }
+        }
+      } else {
+        // Log se dados_completos estiver vazio
+        if (index === 0) {
+          console.warn('Debug NFe - dados_completos está vazio/null para primeira nota');
+        }
       }
       return row;
     });
