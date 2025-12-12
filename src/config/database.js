@@ -631,8 +631,21 @@ async function listarNFSe(filtros = {}) {
       paramsQuery
     );
     
+    // Parsear dados_completos se for string JSON
+    const dadosParseados = result.rows.map(row => {
+      if (row.dados_completos && typeof row.dados_completos === 'string') {
+        try {
+          row.dados_completos = JSON.parse(row.dados_completos);
+        } catch (e) {
+          // Se não conseguir parsear, manter como está
+          console.warn('Erro ao parsear dados_completos:', e);
+        }
+      }
+      return row;
+    });
+    
     return {
-      dados: result.rows,
+      dados: dadosParseados,
       total: total,
       limite: limite,
       offset: offset
@@ -1087,8 +1100,21 @@ async function listarNFe(filtros = {}) {
       paramsQuery
     );
     
+    // Parsear dados_completos se for string JSON
+    const dadosParseados = result.rows.map(row => {
+      if (row.dados_completos && typeof row.dados_completos === 'string') {
+        try {
+          row.dados_completos = JSON.parse(row.dados_completos);
+        } catch (e) {
+          // Se não conseguir parsear, manter como está
+          console.warn('Erro ao parsear dados_completos:', e);
+        }
+      }
+      return row;
+    });
+    
     return {
-      dados: result.rows,
+      dados: dadosParseados,
       total: total,
       limite: limite,
       offset: offset

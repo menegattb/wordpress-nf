@@ -381,17 +381,32 @@ function renderizarTabelaNotasEnviadas(notas) {
             ? '<span class="badge badge-info">NFe</span>' 
             : '<span class="badge badge-success">NFSe</span>';
         
+        // Parsear dados_completos se for string JSON
+        let dadosCompletos = nota.dados_completos;
+        if (typeof dadosCompletos === 'string') {
+            try {
+                dadosCompletos = JSON.parse(dadosCompletos);
+            } catch (e) {
+                console.warn('Erro ao parsear dados_completos:', e);
+                dadosCompletos = {};
+            }
+        }
+        
         // Extrair cliente baseado no tipo de nota
         let cliente = '-';
         if (tipoNota === 'nfe') {
             // NFe: dados_completos.destinatario.nome_destinatario
-            cliente = nota.dados_completos?.destinatario?.nome_destinatario || 
-                     nota.dados_completos?.destinatario?.razao_social || 
+            cliente = dadosCompletos?.destinatario?.nome_destinatario || 
+                     dadosCompletos?.destinatario?.razao_social || 
+                     nota.nome_destinatario ||
+                     nota.razao_social ||
                      '-';
         } else {
             // NFSe: dados_completos.tomador.razao_social ou nome
-            cliente = nota.dados_completos?.tomador?.razao_social || 
-                     nota.dados_completos?.tomador?.nome || 
+            cliente = dadosCompletos?.tomador?.razao_social || 
+                     dadosCompletos?.tomador?.nome || 
+                     nota.razao_social ||
+                     nota.nome ||
                      '-';
         }
         
@@ -399,13 +414,20 @@ function renderizarTabelaNotasEnviadas(notas) {
         let valor = 0;
         if (tipoNota === 'nfe') {
             // NFe: dados_completos.valor_total
-            valor = nota.dados_completos?.valor_total || 0;
+            valor = dadosCompletos?.valor_total || 
+                   nota.valor_total || 
+                   0;
         } else {
             // NFSe: dados_completos.servico.valor_servicos ou valor_total
-            valor = nota.dados_completos?.servico?.valor_servicos || 
-                   nota.dados_completos?.valor_total || 
+            valor = dadosCompletos?.servico?.valor_servicos || 
+                   dadosCompletos?.valor_total || 
+                   nota.valor_servicos ||
+                   nota.valor_total ||
                    0;
         }
+        
+        // Garantir que valor seja numérico
+        valor = parseFloat(valor) || 0;
         
         const ambiente = nota.ambiente || 'homologacao';
         const ambienteLabel = ambiente === 'producao' ? 'Produção' : 'Homologação';
