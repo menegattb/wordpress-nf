@@ -166,10 +166,41 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     dataEmissao = `${ano}-${mes}-${dia}`;
   }
   
-  // Calcular valor total dos serviços
-  const valorServicos = dadosPedido.valor_servicos || 
-    (dadosPedido.servicos || []).reduce((sum, s) => sum + parseFloat(s.total || s.valor_total || 0), 0) ||
-    parseFloat(dadosPedido.valor_total || 0);
+  // Calcular valor total dos serviços (sem desconto - base de cálculo)
+  // IMPORTANTE: Para NFSe, usar o valor bruto sem desconto para evitar erro de dedução (A2)
+  // O erro A2 ocorre quando há dedução na base de cálculo e o item não permite dedução
+  let valorServicos;
+  
+  if (dadosPedido.valor_servicos) {
+    // Se já tiver valor_servicos explícito, usar ele
+    valorServicos = parseFloat(dadosPedido.valor_servicos);
+  } else if (dadosPedido.servicos && dadosPedido.servicos.length > 0) {
+    // Calcular a partir dos serviços - usar subtotal (sem desconto) sempre
+    valorServicos = dadosPedido.servicos.reduce((sum, s) => {
+      // Priorizar subtotal (sem desconto), depois total, depois valor_total
+      const valorItem = parseFloat(s.subtotal || s.total || s.valor_total || 0);
+      return sum + valorItem;
+    }, 0);
+  } else {
+    // Usar valor_total do pedido (mas verificar se não tem desconto aplicado)
+    // Se houver desconto_total, somar de volta ao valor_total para obter o valor bruto
+    const valorTotal = parseFloat(dadosPedido.valor_total || 0);
+    const descontoTotal = parseFloat(dadosPedido.desconto_total || dadosPedido.valor_desconto || 0);
+    valorServicos = valorTotal + descontoTotal; // Valor bruto = total + desconto
+  }
+  
+  // Garantir que valor_servicos não seja negativo e tenha exatamente 2 casas decimais
+  const valorServicosFinal = Math.max(0, parseFloat(valorServicos.toFixed(2)));
+  
+  // Log para debug
+  logger.mapping('Cálculo do valor dos serviços', {
+    pedido_id: dadosPedido.pedido_id,
+    valor_servicos_informado: dadosPedido.valor_servicos,
+    valor_total: dadosPedido.valor_total,
+    desconto_total: dadosPedido.desconto_total || dadosPedido.valor_desconto,
+    valor_servicos_calculado: valorServicos,
+    valor_servicos_final: valorServicosFinal
+  });
   
   // Mapear tomador com estrutura correta
   // Extrair e limpar CEP - garantir que sempre tenha 8 dígitos
@@ -340,13 +371,27 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     
     // Serviço (singular, conforme código funcionando)
     servico: {
-      valor_servicos: parseFloat(valorServicos.toFixed(2)),
+      valor_servicos: valorServicosFinal,
       discriminacao: discriminacao,
-      item_lista_servico: configFiscal?.item_lista_servico || '70101', // Removido zero à esquerda (5 caracteres)
+      // Item da lista de serviço: formato correto é 5 dígitos sem pontos (ex: 07010)
+      // IMPORTANTE: Para Ipojuca/PE, o formato deve ser exatamente 5 dígitos
+      // Se vier com 6 dígitos (070101), remover o último dígito ou ajustar conforme necessário
+      item_lista_servico: (() => {
+        let item = (configFiscal?.item_lista_servico || '70101').toString().replace(/\./g, '').replace(/\s/g, '');
+        // Se tiver 6 dígitos (ex: 070101), usar apenas os 5 primeiros
+        if (item.length === 6) {
+          item = item.substring(0, 5);
+        }
+        // Garantir exatamente 5 dígitos (pode precisar adicionar zero à esquerda)
+        return item.padStart(5, '0').substring(0, 5);
+      })(),
       codigo_tributario_municipio: configFiscal?.codigo_tributario_municipio || '101',
       codigo_municipio: configEmitente.codigo_municipio,
-      aliquota: configFiscal?.aliquota || 3,
+      aliquota: parseFloat((configFiscal?.aliquota || 3).toFixed(2)),
       iss_retido: false
+      // NOTA: Não enviar base_calculo e valor_iss explicitamente
+      // A Focus NFe calcula automaticamente baseado em valor_servicos e aliquota
+      // Enviar esses campos pode causar erro A2 (dedução não permitida) se o item não permitir
     }
   };
   
@@ -356,10 +401,16 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     nfse.prestador.inscricao_municipal = configEmitente.inscricao_municipal.replace(/\D/g, ''); // Remover formatação (pontos, traços)
   }
   
+  // Log do item da lista de serviço para debug
+  const itemListaServicoFinal = nfse.servico.item_lista_servico;
   logger.mapping('Mapeamento para Focus NFSe concluído', {
     pedido_id: dadosPedido.pedido_id,
     tomador: tomador.razao_social,
-    valor_servicos: valorServicos
+    valor_servicos: valorServicosFinal,
+    item_lista_servico: itemListaServicoFinal,
+    item_lista_servico_original: configFiscal?.item_lista_servico || '70101',
+    aliquota: nfse.servico.aliquota,
+    codigo_tributario: nfse.servico.codigo_tributario_municipio
   });
   
   return nfse;
