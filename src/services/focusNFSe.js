@@ -260,24 +260,48 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
     });
     
     // Salvar no banco de dados
-    const nfse = await salvarNFSe({
-      pedido_id: dadosPedido.pedido_id_db || null,
-      referencia: referencia,
-      chave_nfse: response.data.chave_nfse || null,
-      status_focus: response.data.status || 'processando_autorizacao',
-      status_sefaz: response.data.status_sefaz || null,
-      mensagem_sefaz: response.data.mensagem_sefaz || null,
-      caminho_xml: response.data.caminho_xml || null,
-      caminho_pdf: response.data.caminho_pdf || null,
-      dados_completos: response.data,
-      ambiente: apiConfig.ambiente || 'homologacao'
+    logger.focusNFe('emitir_nfse', 'Tentando salvar NFSe no banco de dados', {
+      pedido_id: dadosPedido.pedido_id,
+      pedido_id_db: dadosPedido.pedido_id_db,
+      referencia,
+      ambiente: apiConfig.ambiente || 'homologacao',
+      tem_dados_completos: !!response.data,
+      dados_completos_keys: response.data ? Object.keys(response.data).slice(0, 10) : []
     });
     
-    logger.focusNFe('emitir_nfse', 'NFSe registrada no banco de dados', {
-      pedido_id: dadosPedido.pedido_id,
-      referencia,
-      status: response.data.status
-    });
+    let nfse;
+    try {
+      nfse = await salvarNFSe({
+        pedido_id: dadosPedido.pedido_id_db || null,
+        referencia: referencia,
+        chave_nfse: response.data.chave_nfse || null,
+        status_focus: response.data.status || 'processando_autorizacao',
+        status_sefaz: response.data.status_sefaz || null,
+        mensagem_sefaz: response.data.mensagem_sefaz || null,
+        caminho_xml: response.data.caminho_xml || null,
+        caminho_pdf: response.data.caminho_pdf || null,
+        dados_completos: response.data,
+        ambiente: apiConfig.ambiente || 'homologacao'
+      });
+      
+      logger.focusNFe('emitir_nfse', 'NFSe registrada no banco de dados com sucesso', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        nfse_id: nfse?.id,
+        status: response.data.status,
+        ambiente: apiConfig.ambiente || 'homologacao'
+      });
+    } catch (dbError) {
+      logger.error('ERRO CRÍTICO ao salvar NFSe no banco de dados', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        erro: dbError.message,
+        stack: dbError.stack,
+        ambiente: apiConfig.ambiente || 'homologacao'
+      });
+      // Continuar mesmo com erro no banco, mas logar o erro
+      throw dbError;
+    }
     
     return {
       sucesso: true,

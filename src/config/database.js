@@ -421,6 +421,18 @@ async function salvarNFSe(nfse) {
   
   if (hasDatabase) {
     try {
+      // Log antes de salvar
+      console.log('💾 [SALVAR NFSe] Tentando salvar:', {
+        referencia,
+        pedido_id,
+        ambiente: ambiente || null,
+        tem_dados_completos: !!dados_completos,
+        tipo_dados_completos: typeof dados_completos,
+        status_focus
+      });
+      
+      const dadosCompletosJson = dados_completos ? JSON.stringify(dados_completos) : null;
+      
       const result = await query(
         `INSERT INTO nfse (pedido_id, referencia, chave_nfse, status_focus, status_sefaz, mensagem_sefaz, caminho_xml, caminho_pdf, dados_completos, ambiente)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -444,12 +456,20 @@ async function salvarNFSe(nfse) {
           mensagem_sefaz,
           caminho_xml,
           caminho_pdf,
-          dados_completos ? JSON.stringify(dados_completos) : null,
+          dadosCompletosJson,
           ambiente || null
         ]
       );
       
-      return result.rows[0];
+      const notaSalva = result.rows[0];
+      console.log('✅ [SALVAR NFSe] Nota salva com sucesso:', {
+        id: notaSalva?.id,
+        referencia: notaSalva?.referencia,
+        ambiente: notaSalva?.ambiente,
+        created_at: notaSalva?.created_at
+      });
+      
+      return notaSalva;
     } catch (error) {
       // Se a tabela não existir, tentar criar executando migrations
       if (error.message && error.message.includes('does not exist')) {
