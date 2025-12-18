@@ -1121,8 +1121,69 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
 
 // Intervalos de polling (em ms)
 let pollingInterval = null;
+let pollingIntervalServico = null;
 let pollingNotasInterval = null;
 const POLLING_DELAY = 30000; // 30 segundos
+
+/**
+ * Verifica se o pedido contém produtos "Livro Faíscas"
+ */
+function pedidoContemLivroFaiscas(pedido) {
+    const categoriasLivro = ['livro faíscas', 'livro faiscas', 'livros faíscas', 'livros faiscas'];
+    
+    // Extrair dados do pedido (pode estar em dados_pedido)
+    const dadosPedido = typeof pedido.dados_pedido === 'string' 
+        ? JSON.parse(pedido.dados_pedido) 
+        : pedido.dados_pedido || pedido;
+    
+    if (!dadosPedido.line_items && !pedido.line_items) {
+        return false;
+    }
+    
+    const lineItems = dadosPedido.line_items || pedido.line_items || [];
+    
+    for (const item of lineItems) {
+        // Verificar categorias do item
+        if (item.categories && Array.isArray(item.categories)) {
+            for (const cat of item.categories) {
+                const nomeCategoria = (typeof cat === 'string' ? cat : cat.name || '').toLowerCase();
+                if (categoriasLivro.some(c => nomeCategoria.includes(c))) {
+                    return true;
+                }
+            }
+        }
+        // Verificar categoria direta
+        if (item.category) {
+            const nomeCategoria = (typeof item.category === 'string' ? item.category : item.category.name || '').toLowerCase();
+            if (categoriasLivro.some(c => nomeCategoria.includes(c))) {
+                return true;
+            }
+        }
+        // Verificar nome do produto como fallback
+        if (item.name) {
+            const nomeProduto = item.name.toLowerCase();
+            if (categoriasLivro.some(c => nomeProduto.includes(c))) {
+                return true;
+            }
+        }
+    }
+    
+    // Verificar também usando extrairCategoriasPedido do Components
+    if (window.Components && typeof window.Components.extrairCategoriasPedido === 'function') {
+        const categorias = window.Components.extrairCategoriasPedido(pedido);
+        const temLivroFaiscas = categorias.some(cat => {
+            const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            return (catLower.includes('livro') && catLower.includes('faiscas')) ||
+                   catLower === 'livro faiscas' ||
+                   catLower.includes('livro faiscas');
+        });
+        if (temLivroFaiscas) {
+            return true;
+        }
+    }
+    
+    return false;
+}
 
 async function carregarPedidos() {
     const contentArea = document.getElementById('content-area');
@@ -1198,6 +1259,114 @@ async function carregarPedidos() {
             </div>
         `;
     }
+}
+
+/**
+ * Carrega seção de Pedidos Woo Serviço - Mostra apenas pedidos de serviço (excluindo Livro Faíscas)
+ */
+async function carregarPedidosServico() {
+    const contentArea = document.getElementById('content-area');
+    const meses = gerarListaMeses();
+    
+    // Mostrar tela inicial
+    contentArea.innerHTML = `
+        <div class="content-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h2 class="section-title" style="margin: 0;">Pedidos Woo Serviço</h2>
+                <div id="status-woocommerce-servico" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
+                    <span style="color: #666; font-size: 12px;">⏳ Carregando...</span>
+                </div>
+            </div>
+            <div style="text-align: center; padding: 40px;">
+                <div class="loading-spinner" style="width: 40px; height: 40px; margin: 0 auto 16px;"></div>
+                <p style="color: var(--color-gray-medium);">Carregando pedidos de serviço...</p>
+            </div>
+        </div>
+    `;
+    
+    try {
+        // 1. CARREGAR DO BANCO LOCAL (instantâneo)
+        atualizarStatusConexaoServico('Carregando do banco...', 'info');
+        
+        let todosPedidos = [];
+        const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
+        
+        if (resultadoBanco.sucesso && resultadoBanco.dados && resultadoBanco.dados.length > 0) {
+            todosPedidos = resultadoBanco.dados;
+            
+            // Filtrar apenas pedidos de serviço (excluir Livro Faíscas)
+            todosPedidos = todosPedidos.filter(pedido => {
+                return !pedidoContemLivroFaiscas(pedido);
+            });
+            
+            // Converter pedidos do banco para formato WooCommerce
+            todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
+            
+            // Ordenar por data
+            todosPedidos.sort((a, b) => {
+                const dataA = new Date(a.date_created || 0);
+                const dataB = new Date(b.date_created || 0);
+                return dataB - dataA;
+            });
+            
+            // Salvar no estado e renderizar IMEDIATAMENTE
+            estadoAtual.dados.meses = meses;
+            estadoAtual.dados.todosPedidosServico = todosPedidos;
+            estadoAtual.filtroMes = null;
+            estadoAtual.filtroStatus = null;
+            estadoAtual.filtroCategoria = null;
+            estadoAtual.agruparPorCategoria = false;
+            
+            renderizarTelaPedidosServico(todosPedidos, meses);
+            atualizarStatusConexaoServico(`✓ ${todosPedidos.length} pedidos de serviço carregados`, 'success');
+            
+            // 2. ATUALIZAR EM BACKGROUND (em lotes pequenos, sem bloquear)
+            sincronizarEmBackgroundServico();
+            
+        } else {
+            // Banco vazio - fazer primeira importação
+            atualizarStatusConexaoServico('Importando do WooCommerce...', 'info');
+            await importarPrimeiraVezServico(meses);
+        }
+        
+        // Iniciar polling
+        iniciarPollingPedidosServico();
+        
+    } catch (error) {
+        console.error('Erro ao carregar pedidos de serviço:', error);
+        atualizarStatusConexaoServico(`✗ Erro: ${error.message}`, 'error');
+        contentArea.innerHTML = `
+            <div class="content-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h2 class="section-title" style="margin: 0;">Pedidos Woo Serviço</h2>
+                    <div id="status-woocommerce-servico" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
+                        <span style="color: #dc3545; font-size: 12px;">✗ Erro: ${error.message}</span>
+                    </div>
+                </div>
+                <div class="empty-state">
+                    <p>Erro ao carregar pedidos de serviço: ${error.message}</p>
+                    <button class="btn btn-primary" onclick="carregarPedidosServico()" style="margin-top: 16px;">Tentar novamente</button>
+                </div>
+            </div>
+        `;
+    }
+}
+
+/**
+ * Atualiza status da conexão WooCommerce para a aba de serviço
+ */
+function atualizarStatusConexaoServico(mensagem, tipo = 'info') {
+    const statusEl = document.getElementById('status-woocommerce-servico');
+    if (!statusEl) return;
+    
+    const cores = {
+        success: '#28a745',
+        error: '#dc3545',
+        info: '#666',
+        warning: '#ffc107'
+    };
+    
+    statusEl.innerHTML = `<span style="color: ${cores[tipo] || cores.info}; font-size: 12px;">${mensagem}</span>`;
 }
 
 /**
