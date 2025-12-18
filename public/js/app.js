@@ -1277,7 +1277,7 @@ async function carregarPedidos() {
     contentArea.innerHTML = `
         <div class="content-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                <h2 class="section-title" style="margin: 0;">Pedidos WooCommerce</h2>
+                <h2 class="section-title" style="margin: 0;">Pedidos Woo Produtos</h2>
                 <div id="status-woocommerce" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
                     <span style="color: #666; font-size: 12px;">⏳ Carregando...</span>
                 </div>
@@ -1299,8 +1299,20 @@ async function carregarPedidos() {
         if (resultadoBanco.sucesso && resultadoBanco.dados && resultadoBanco.dados.length > 0) {
             todosPedidos = resultadoBanco.dados;
             
+            // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
+            todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
+            
+            // Filtrar apenas pedidos com "Livro Faíscas" (produtos)
+            todosPedidos = todosPedidos.filter(pedido => {
+                return pedidoContemLivroFaiscas(pedido);
+            });
+            
             // Ordenar por data
-            todosPedidos.sort((a, b) => new Date(b.date_created || 0) - new Date(a.date_created || 0));
+            todosPedidos.sort((a, b) => {
+                const dataA = new Date(a.date_created || 0);
+                const dataB = new Date(b.date_created || 0);
+                return dataB - dataA;
+            });
             
             // Salvar no estado e renderizar IMEDIATAMENTE
             estadoAtual.dados.meses = meses;
@@ -1311,7 +1323,7 @@ async function carregarPedidos() {
             estadoAtual.agruparPorCategoria = false;
             
             renderizarTelaPedidos(todosPedidos, meses);
-            atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos carregados`, 'success');
+            atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos de produto carregados`, 'success');
             
             // 2. ATUALIZAR EM BACKGROUND (em lotes pequenos, sem bloquear)
             sincronizarEmBackground();
@@ -1331,7 +1343,7 @@ async function carregarPedidos() {
         contentArea.innerHTML = `
             <div class="content-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h2 class="section-title" style="margin: 0;">Pedidos WooCommerce</h2>
+                    <h2 class="section-title" style="margin: 0;">Pedidos Woo Produtos</h2>
                     <div id="status-woocommerce" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
                         <span style="color: #dc3545; font-size: 12px;">✗ Erro: ${error.message}</span>
                     </div>
@@ -2148,8 +2160,21 @@ async function sincronizarEmBackground() {
             
             const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
             if (resultadoBanco.sucesso && resultadoBanco.dados) {
-                const todosPedidos = resultadoBanco.dados;
-                todosPedidos.sort((a, b) => new Date(b.date_created || 0) - new Date(a.date_created || 0));
+                let todosPedidos = resultadoBanco.dados;
+                
+                // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
+                todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
+                
+                // Filtrar apenas pedidos com "Livro Faíscas" (produtos)
+                todosPedidos = todosPedidos.filter(pedido => {
+                    return pedidoContemLivroFaiscas(pedido);
+                });
+                
+                todosPedidos.sort((a, b) => {
+                    const dataA = new Date(a.date_created || 0);
+                    const dataB = new Date(b.date_created || 0);
+                    return dataB - dataA;
+                });
                 
                 estadoAtual.dados.todosPedidos = todosPedidos;
                 
@@ -2162,7 +2187,7 @@ async function sincronizarEmBackground() {
                     estadoAtual.agruparPorCategoria
                 );
                 
-                atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos (${resultado.salvos} novos)`, 'success');
+                atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos de produto (${resultado.salvos} novos)`, 'success');
             }
         } else {
             // Sem pedidos novos - apenas atualizar status
@@ -2185,8 +2210,21 @@ async function importarPrimeiraVez(meses) {
     if (resultado.sucesso) {
         const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
         if (resultadoBanco.sucesso && resultadoBanco.dados) {
-            const todosPedidos = resultadoBanco.dados;
-            todosPedidos.sort((a, b) => new Date(b.date_created || 0) - new Date(a.date_created || 0));
+            let todosPedidos = resultadoBanco.dados;
+            
+            // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
+            todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
+            
+            // Filtrar apenas pedidos com "Livro Faíscas" (produtos)
+            todosPedidos = todosPedidos.filter(pedido => {
+                return pedidoContemLivroFaiscas(pedido);
+            });
+            
+            todosPedidos.sort((a, b) => {
+                const dataA = new Date(a.date_created || 0);
+                const dataB = new Date(b.date_created || 0);
+                return dataB - dataA;
+            });
             
             estadoAtual.dados.meses = meses;
             estadoAtual.dados.todosPedidos = todosPedidos;
@@ -2196,7 +2234,7 @@ async function importarPrimeiraVez(meses) {
             estadoAtual.agruparPorCategoria = false;
             
             renderizarTelaPedidos(todosPedidos, meses);
-            atualizarStatusConexao(`✓ ${resultado.salvos} pedidos importados`, 'success');
+            atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos de produto importados`, 'success');
         }
     } else {
         throw new Error(resultado.erro || 'Erro ao importar pedidos');
@@ -2418,11 +2456,26 @@ async function forcarAtualizacaoWooCommerce() {
             // Recarregar do banco
             const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 1000 });
             if (resultadoBanco.sucesso && resultadoBanco.dados) {
-                resultadoBanco.dados.sort((a, b) => new Date(b.date_created || 0) - new Date(a.date_created || 0));
-                estadoAtual.dados.todosPedidos = resultadoBanco.dados;
+                let todosPedidos = resultadoBanco.dados;
+                
+                // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
+                todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
+                
+                // Filtrar apenas pedidos com "Livro Faíscas" (produtos)
+                todosPedidos = todosPedidos.filter(pedido => {
+                    return pedidoContemLivroFaiscas(pedido);
+                });
+                
+                todosPedidos.sort((a, b) => {
+                    const dataA = new Date(a.date_created || 0);
+                    const dataB = new Date(b.date_created || 0);
+                    return dataB - dataA;
+                });
+                
+                estadoAtual.dados.todosPedidos = todosPedidos;
                 
                 renderizarTelaPedidos(
-                    resultadoBanco.dados,
+                    todosPedidos,
                     estadoAtual.dados.meses,
                     estadoAtual.filtroStatus,
                     estadoAtual.filtroCategoria,
@@ -2537,7 +2590,7 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
     const html = `
         <div class="content-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                <h2 class="section-title" style="margin: 0;">Pedidos WooCommerce</h2>
+                <h2 class="section-title" style="margin: 0;">Pedidos Woo Produtos</h2>
                 <div style="display: flex; gap: 12px; align-items: center;">
                     <button 
                         type="button" 
