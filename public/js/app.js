@@ -135,8 +135,14 @@ function atualizarSidebarAtivo(secao) {
  */
 async function carregarSecao(secao) {
     // Parar polling anterior se mudar de seção
-    if (estadoAtual.secaoAtiva === 'pedidos-woocommerce') {
+    if (estadoAtual.secaoAtiva === 'pedidos') {
         pararPollingPedidos();
+    }
+    if (estadoAtual.secaoAtiva === 'pedidos-servico') {
+        if (pollingIntervalServico) {
+            clearInterval(pollingIntervalServico);
+            pollingIntervalServico = null;
+        }
     }
     if (estadoAtual.secaoAtiva === 'notas-enviadas') {
         pararPollingNotas();
@@ -179,6 +185,9 @@ async function carregarSecao(secao) {
             break;
         case 'pedidos':
             await carregarPedidos();
+            break;
+        case 'pedidos-servico':
+            await carregarPedidosServico();
             break;
         default:
             contentArea.innerHTML = '<div class="content-section"><h2>Seção não encontrada</h2></div>';
@@ -1001,7 +1010,12 @@ function agruparPedidosPorMes(pedidos) {
     const grupos = {};
     
     pedidos.forEach(pedido => {
-        const data = new Date(pedido.date_created || pedido.created_at);
+        // Extrair dados do pedido (pode estar em dados_pedido)
+        const dadosPedido = typeof pedido.dados_pedido === 'string' 
+            ? JSON.parse(pedido.dados_pedido) 
+            : pedido.dados_pedido || pedido;
+        
+        const data = new Date(dadosPedido.date_created || pedido.date_created || pedido.created_at);
         const mesAno = `${data.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}`;
         const chave = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`;
         
@@ -1016,7 +1030,7 @@ function agruparPedidosPorMes(pedidos) {
         
         grupos[chave].pedidos.push(pedido);
         grupos[chave].quantidade++;
-        grupos[chave].total += parseFloat(pedido.total || 0);
+        grupos[chave].total += parseFloat(dadosPedido.total || pedido.total || 0);
     });
     
     return grupos;
@@ -1184,6 +1198,450 @@ async function carregarPedidos() {
             </div>
         `;
     }
+}
+
+/**
+ * Renderiza a tela de pedidos de serviço com accordion de meses
+ * Baseado em renderizarTelaPedidos, mas com título "Pedidos Woo Serviço"
+ */
+function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtroCategoria = null, agruparPorCategoria = false) {
+    const contentArea = document.getElementById('content-area');
+    
+    // Verificar se Components está disponível
+    if (!window.Components || typeof window.Components.renderizarTabelaPedidos !== 'function') {
+        console.error('Components não está disponível. Aguardando carregamento...');
+        setTimeout(() => renderizarTelaPedidosServico(pedidos, meses, filtroStatus, filtroCategoria, agruparPorCategoria), 100);
+        return;
+    }
+    
+    // Debug: verificar se pedidos está definido
+    console.log('renderizarTelaPedidosServico chamado:', {
+        totalPedidos: pedidos ? pedidos.length : 0,
+        meses: meses ? meses.length : 0,
+        filtroStatus,
+        filtroCategoria,
+        agruparPorCategoria
+    });
+    
+    // Garantir que pedidos é um array
+    if (!pedidos || !Array.isArray(pedidos)) {
+        console.error('Pedidos não é um array válido:', pedidos);
+        pedidos = [];
+    }
+    
+    // Extrair todas as categorias únicas de TODOS os pedidos (para o filtro mostrar todas as opções)
+    const todasCategorias = new Set();
+    pedidos.forEach(pedido => {
+        const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
+        if (categorias.length > 0) {
+            categorias.forEach(cat => todasCategorias.add(cat));
+        } else {
+            todasCategorias.add('Sem categoria');
+        }
+    });
+    const categoriasOrdenadas = Array.from(todasCategorias).sort();
+    
+    // Aplicar filtros
+    let pedidosFiltrados = [...pedidos];
+    
+    if (filtroStatus && filtroStatus !== 'todos') {
+        pedidosFiltrados = pedidosFiltrados.filter(p => {
+            const dadosPedido = typeof p.dados_pedido === 'string' ? JSON.parse(p.dados_pedido) : (p.dados_pedido || p);
+            return (dadosPedido.status || 'pending') === filtroStatus;
+        });
+    }
+    
+    if (filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.length > 0) {
+        pedidosFiltrados = pedidosFiltrados.filter(pedido => {
+            const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
+            if (categorias.length === 0) {
+                return filtroCategoria.includes('sem-categoria');
+            }
+            // Verificar se alguma categoria do pedido está na lista de filtros
+            return categorias.some(cat => {
+                const categoriaNormalizada = cat.toLowerCase().replace(/\s+/g, '-');
+                return filtroCategoria.includes(categoriaNormalizada);
+            });
+        });
+    }
+    
+    // Agrupar pedidos por mês
+    const pedidosPorMes = agruparPedidosPorMes(pedidosFiltrados);
+    const mesesOrdenados = meses.sort((a, b) => b.value.localeCompare(a.value));
+    
+    // Opções de status
+    const statusOptions = [
+        { value: 'todos', label: 'Todos os status' },
+        { value: 'pending', label: 'Pendente' },
+        { value: 'processing', label: 'Processando' },
+        { value: 'on-hold', label: 'Em espera' },
+        { value: 'completed', label: 'Concluído' },
+        { value: 'cancelled', label: 'Cancelado' },
+        { value: 'refunded', label: 'Reembolsado' },
+        { value: 'failed', label: 'Falhou' }
+    ];
+    
+    const html = `
+        <div class="content-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h2 class="section-title" style="margin: 0;">Pedidos Woo Serviço</h2>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <button 
+                        type="button" 
+                        class="btn btn-primary" 
+                        onclick="atualizarDadosWooCommerceServico()"
+                        id="btn-atualizar-woocommerce-servico"
+                        style="padding: 8px 16px; font-size: 14px;">
+                        Recarregar do WooCommerce
+                    </button>
+                <div id="status-woocommerce-servico" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
+                        <span style="color: #28a745; font-size: 12px;">✓ ${pedidosFiltrados.length} pedidos ${filtroStatus || filtroCategoria ? 'filtrados' : 'carregados'}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Filtros -->
+            <div style="background-color: var(--color-gray-light); padding: 16px; border-radius: 8px; margin-bottom: 24px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">Status:</label>
+                    <select 
+                        id="filtro-status-pedidos-servico"
+                        onchange="aplicarFiltrosPedidosServico()"
+                        style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                        ${statusOptions.map(opt => `
+                            <option value="${opt.value}" ${filtroStatus === opt.value ? 'selected' : ''}>${opt.label}</option>
+                        `).join('')}
+                    </select>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">Categoria:</label>
+                    <select 
+                        id="filtro-categoria-pedidos-servico"
+                        multiple
+                        onchange="aplicarFiltrosPedidosServico()"
+                        style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; min-width: 200px;">
+                        <option value="todas" ${!filtroCategoria || filtroCategoria.length === 0 ? 'selected' : ''}>Todas as categorias</option>
+                        ${categoriasOrdenadas.map(cat => {
+                            const catNormalizada = cat.toLowerCase().replace(/\s+/g, '-');
+                            const selecionada = filtroCategoria && filtroCategoria.includes(catNormalizada);
+                            return `<option value="${catNormalizada}" ${selecionada ? 'selected' : ''}>${cat}</option>`;
+                        }).join('')}
+                    </select>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">
+                        <input 
+                            type="checkbox" 
+                            id="agrupar-por-categoria-servico"
+                            ${agruparPorCategoria ? 'checked' : ''}
+                            onchange="aplicarFiltrosPedidosServico()"
+                            style="margin-right: 4px;">
+                        Agrupar por categoria
+                    </label>
+                </div>
+                
+                ${(filtroStatus && filtroStatus !== 'todos') || (filtroCategoria && filtroCategoria.length > 0) ? `
+                    <button 
+                        type="button"
+                        class="btn btn-secondary"
+                        onclick="limparFiltrosPedidosServico()"
+                        style="padding: 6px 12px; font-size: 14px;">
+                        Limpar Filtros
+                    </button>
+                ` : ''}
+            </div>
+            
+            <!-- Accordion de meses -->
+            <div class="accordion" id="accordion-pedidos-servico">
+                ${mesesOrdenados.map(mes => {
+                    const pedidosMes = pedidosPorMes[mes.value] || [];
+                    const totalMes = pedidosMes.length;
+                    const totalValorMes = pedidosMes.reduce((sum, p) => {
+                        const dadosPedido = typeof p.dados_pedido === 'string' ? JSON.parse(p.dados_pedido) : (p.dados_pedido || p);
+                        return sum + parseFloat(dadosPedido.total || p.total || 0);
+                    }, 0);
+                    
+                    if (totalMes === 0 && filtroStatus && filtroStatus !== 'todos') {
+                        return '';
+                    }
+                    
+                    const mesId = `mes-${mes.value.replace(/-/g, '')}-servico`;
+                    const isOpen = !filtroStatus || filtroStatus === 'todos';
+                    
+                    return `
+                        <div class="accordion-item">
+                                <div class="accordion-header" onclick="toggleAccordionServico('${mesId}')">
+                                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                    <div>
+                                        <span class="accordion-icon" id="icon-${mesId}">${isOpen ? '▼' : '▶'}</span>
+                                        <strong>${mes.label}</strong>
+                                        <span style="margin-left: 12px; color: var(--color-gray-medium); font-size: 14px;">
+                                            (${totalMes} pedido${totalMes !== 1 ? 's' : ''} - ${formatarValor(totalValorMes)})
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="accordion-content" id="${mesId}" style="display: ${isOpen ? 'block' : 'none'};">
+                                ${totalMes > 0 ? window.Components.renderizarTabelaPedidos(pedidosMes, agruparPorCategoria) : `
+                                    <div class="empty-state">
+                                        <p>Nenhum pedido encontrado para este mês.</p>
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+    
+    contentArea.innerHTML = html;
+}
+
+/**
+ * Toggle accordion para pedidos serviço
+ */
+function toggleAccordionServico(mesId) {
+    const content = document.getElementById(mesId);
+    const icon = document.getElementById(`icon-${mesId}`);
+    
+    if (content && icon) {
+        const isOpen = content.style.display !== 'none';
+        content.style.display = isOpen ? 'none' : 'block';
+        icon.textContent = isOpen ? '▶' : '▼';
+    }
+}
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+    
+    contentArea.innerHTML = html;
+}
+
+/**
+ * Aplica filtros na aba de pedidos serviço
+ */
+function aplicarFiltrosPedidosServico() {
+    const filtroStatus = document.getElementById('filtro-status-pedidos-servico')?.value || null;
+    const filtroCategoriaEl = document.getElementById('filtro-categoria-pedidos-servico');
+    const agruparPorCategoria = document.getElementById('agrupar-por-categoria-servico')?.checked || false;
+    
+    let filtroCategoria = null;
+    if (filtroCategoriaEl) {
+        const selecionadas = Array.from(filtroCategoriaEl.selectedOptions).map(opt => opt.value);
+        if (selecionadas.length > 0 && !selecionadas.includes('todas')) {
+            filtroCategoria = selecionadas;
+        }
+    }
+    
+    estadoAtual.filtroStatus = filtroStatus === 'todos' ? null : filtroStatus;
+    estadoAtual.filtroCategoria = filtroCategoria;
+    estadoAtual.agruparPorCategoria = agruparPorCategoria;
+    
+    renderizarTelaPedidosServico(
+        estadoAtual.dados.todosPedidosServico || [],
+        estadoAtual.dados.meses || [],
+        estadoAtual.filtroStatus,
+        estadoAtual.filtroCategoria,
+        estadoAtual.agruparPorCategoria
+    );
+}
+
+/**
+ * Limpa filtros na aba de pedidos serviço
+ */
+function limparFiltrosPedidosServico() {
+    estadoAtual.filtroStatus = null;
+    estadoAtual.filtroCategoria = null;
+    estadoAtual.agruparPorCategoria = false;
+    
+    renderizarTelaPedidosServico(
+        estadoAtual.dados.todosPedidosServico || [],
+        estadoAtual.dados.meses || [],
+        null,
+        null,
+        false
+    );
+}
+
+/**
+ * Atualiza dados do WooCommerce para a aba de serviço
+ */
+async function atualizarDadosWooCommerceServico() {
+    const statusBar = document.getElementById('status-woocommerce-servico');
+    if (statusBar) {
+        statusBar.innerHTML = '<span style="color: #666; font-size: 12px;">⏳ Recarregando pedidos do WooCommerce...</span>';
+    }
+    
+    try {
+        // Recarregar pedidos diretamente do WooCommerce (sem salvar no banco)
+        await carregarPedidosServico();
+    } catch (error) {
+        console.error('Erro ao atualizar dados WooCommerce (serviço):', error);
+        if (statusBar) {
+            statusBar.innerHTML = `<span style="color: #dc3545; font-size: 12px;">✗ Erro: ${error.message}</span>`;
+        }
+    }
+}
+
+// Expor funções globalmente
+window.aplicarFiltrosPedidosServico = aplicarFiltrosPedidosServico;
+window.limparFiltrosPedidosServico = limparFiltrosPedidosServico;
+window.atualizarDadosWooCommerceServico = atualizarDadosWooCommerceServico;
+window.carregarPedidosServico = carregarPedidosServico;
+
+/**
+ * Sincroniza pedidos de serviço do WooCommerce em background
+ */
+async function sincronizarEmBackgroundServico() {
+    try {
+        const resultado = await API.Pedidos.sincronizarDoWooCommerce(1, 50);
+        
+        if (resultado.sucesso && resultado.salvos > 0) {
+            atualizarStatusConexaoServico(`🔄 ${resultado.salvos} novos pedidos encontrados`, 'info');
+            
+            const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
+            if (resultadoBanco.sucesso && resultadoBanco.dados) {
+                let todosPedidos = resultadoBanco.dados;
+                
+                // Filtrar apenas pedidos de serviço
+                todosPedidos = todosPedidos.filter(pedido => {
+                    const dadosPedido = typeof pedido.dados_pedido === 'string' 
+                        ? JSON.parse(pedido.dados_pedido) 
+                        : pedido.dados_pedido || pedido;
+                    return !pedidoContemLivroFaiscas(dadosPedido);
+                });
+                
+                todosPedidos.sort((a, b) => {
+                    const dataA = a.dados_pedido?.date_created || a.date_created || 0;
+                    const dataB = b.dados_pedido?.date_created || b.date_created || 0;
+                    return new Date(dataB) - new Date(dataA);
+                });
+                
+                estadoAtual.dados.todosPedidosServico = todosPedidos;
+                
+                renderizarTelaPedidosServico(
+                    todosPedidos,
+                    estadoAtual.dados.meses,
+                    estadoAtual.filtroStatus,
+                    estadoAtual.filtroCategoria,
+                    estadoAtual.agruparPorCategoria
+                );
+            }
+        }
+    } catch (error) {
+        console.error('Erro na sincronização em background (serviço):', error);
+    }
+}
+
+/**
+ * Importa pedidos pela primeira vez (apenas serviços)
+ */
+async function importarPrimeiraVezServico(meses) {
+    const resultado = await API.Pedidos.sincronizarTodosDoWooCommerce((progresso) => {
+        atualizarStatusConexaoServico(`Importando página ${progresso.pagina}... (${progresso.salvos} pedidos)`, 'info');
+    });
+    
+    if (resultado.sucesso) {
+        const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
+        if (resultadoBanco.sucesso && resultadoBanco.dados) {
+            let todosPedidos = resultadoBanco.dados;
+            
+            // Filtrar apenas pedidos de serviço
+            todosPedidos = todosPedidos.filter(pedido => {
+                const dadosPedido = typeof pedido.dados_pedido === 'string' 
+                    ? JSON.parse(pedido.dados_pedido) 
+                    : pedido.dados_pedido || pedido;
+                return !pedidoContemLivroFaiscas(dadosPedido);
+            });
+            
+            todosPedidos.sort((a, b) => {
+                const dataA = a.dados_pedido?.date_created || a.date_created || 0;
+                const dataB = b.dados_pedido?.date_created || b.date_created || 0;
+                return new Date(dataB) - new Date(dataA);
+            });
+            
+            estadoAtual.dados.meses = meses;
+            estadoAtual.dados.todosPedidosServico = todosPedidos;
+            estadoAtual.filtroMes = null;
+            estadoAtual.filtroStatus = null;
+            estadoAtual.filtroCategoria = null;
+            estadoAtual.agruparPorCategoria = false;
+            
+            renderizarTelaPedidosServico(todosPedidos, meses);
+            atualizarStatusConexaoServico(`✓ ${todosPedidos.length} pedidos de serviço importados`, 'success');
+        }
+    } else {
+        throw new Error(resultado.erro || 'Erro ao importar pedidos');
+    }
+}
+
+/**
+ * Inicia polling para verificar novos pedidos de serviço
+ */
+function iniciarPollingPedidosServico() {
+    // Parar polling anterior se existir
+    if (pollingIntervalServico) {
+        clearInterval(pollingIntervalServico);
+    }
+    
+    console.log('🔄 Iniciando polling para novos pedidos de serviço (a cada 30s)');
+    
+    pollingIntervalServico = setInterval(async () => {
+        try {
+            // Verificar se ainda estamos na seção de pedidos serviço
+            if (estadoAtual.secaoAtiva !== 'pedidos-servico') {
+                clearInterval(pollingIntervalServico);
+                pollingIntervalServico = null;
+                return;
+            }
+            
+            // Buscar pedidos atualizados do banco
+            const resultado = await API.Pedidos.listarDoBanco({ limite: 1000 });
+            
+            if (resultado.sucesso && resultado.dados) {
+                // Filtrar apenas pedidos de serviço
+                let pedidosServico = resultado.dados.filter(pedido => {
+                    const dadosPedido = typeof pedido.dados_pedido === 'string' 
+                        ? JSON.parse(pedido.dados_pedido) 
+                        : pedido.dados_pedido || pedido;
+                    return !pedidoContemLivroFaiscas(dadosPedido);
+                });
+                
+                const novosTotal = pedidosServico.length;
+                const atualTotal = estadoAtual.dados.todosPedidosServico?.length || 0;
+                
+                // Se tem novos pedidos, atualizar a lista
+                if (novosTotal > atualTotal) {
+                    console.log(`🔔 Novos pedidos de serviço detectados: ${novosTotal - atualTotal}`);
+                    
+                    pedidosServico.sort((a, b) => {
+                        const dataA = a.dados_pedido?.date_created || a.date_created || 0;
+                        const dataB = b.dados_pedido?.date_created || b.date_created || 0;
+                        return new Date(dataB) - new Date(dataA);
+                    });
+                    
+                    estadoAtual.dados.todosPedidosServico = pedidosServico;
+                    
+                    // Re-renderizar mantendo filtros
+                    renderizarTelaPedidosServico(
+                        pedidosServico, 
+                        estadoAtual.dados.meses,
+                        estadoAtual.filtroStatus,
+                        estadoAtual.filtroCategoria,
+                        estadoAtual.agruparPorCategoria
+                    );
+                }
+            }
+        } catch (error) {
+            console.error('Erro no polling de pedidos serviço:', error);
+        }
+    }, POLLING_DELAY);
 }
 
 /**
