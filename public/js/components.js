@@ -926,6 +926,212 @@ function renderizarFormularioPesquisa(onSubmit, onClear) {
     `;
 }
 
+/**
+ * Renderiza tabela de backups de XMLs
+ */
+function renderBackups(backups, mensagem = null, notasNFe = []) {
+    // Função auxiliar para obter URL completa do XML
+    function obterUrlXml(caminhoXml, ambiente) {
+        if (!caminhoXml) return '#';
+        if (caminhoXml.startsWith('http')) return caminhoXml;
+        const baseUrl = ambiente === 'producao' 
+            ? 'https://api.focusnfe.com.br'
+            : 'https://homologacao.focusnfe.com.br';
+        return `${baseUrl}${caminhoXml}`;
+    }
+    
+    let htmlBackups = '';
+    
+    if (!backups || backups.length === 0) {
+        const mensagemExibicao = mensagem || 'Nenhum backup disponível no momento.';
+        htmlBackups = `
+            <div class="content-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h2 class="section-title" style="margin: 0;">Backups XML - Notas de Produto</h2>
+                </div>
+                <div class="empty-state">
+                    <p style="color: var(--color-gray-medium);">${mensagemExibicao}</p>
+                    <p style="color: var(--color-gray-medium); font-size: 14px; margin-top: 8px;">
+                        Os backups são gerados mensalmente (dia 1) e semanalmente (sábados) pela Focus NFe.
+                    </p>
+                    <p style="color: var(--color-gray-medium); font-size: 12px; margin-top: 8px;">
+                        <strong>Importante:</strong> Os backups só estarão disponíveis após a emissão de notas fiscais de produto (NFe) e após o primeiro backup ser gerado pela Focus NFe.
+                    </p>
+                </div>
+            </div>
+        `;
+    } else {
+
+        let rows = '';
+        backups.forEach(backup => {
+            rows += `
+                <tr>
+                    <td style="font-weight: 600;">${backup.mesFormatado}</td>
+                    <td>
+                        <span class="badge badge-info">${backup.tipo}</span>
+                    </td>
+                    <td>
+                        ${backup.xmls ? `
+                            <a 
+                                href="${backup.xmls}" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                class="btn btn-sm btn-primary"
+                                style="text-decoration: none; display: inline-block;"
+                                download
+                            >
+                                📥 Baixar XMLs
+                            </a>
+                        ` : '<span style="color: var(--color-gray-medium);">-</span>'}
+                    </td>
+                    <td>
+                        ${backup.danfes ? `
+                            <a 
+                                href="${backup.danfes}" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                class="btn btn-sm btn-secondary"
+                                style="text-decoration: none; display: inline-block;"
+                                download
+                            >
+                                📥 Baixar DANFEs
+                            </a>
+                        ` : '<span style="color: var(--color-gray-medium);">-</span>'}
+                    </td>
+                </tr>
+            `;
+        });
+
+        htmlBackups = `
+            <div class="content-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h2 class="section-title" style="margin: 0;">Backups XML - Notas de Produto</h2>
+                    <div style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
+                        <span style="color: #28a745; font-size: 12px;">✓ ${backups.length} backup(s) disponível(is)</span>
+                    </div>
+                </div>
+                
+                <div style="background-color: var(--color-gray-light); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                    <p style="margin: 0; color: var(--color-gray-dark); font-size: 14px;">
+                        <strong>Informações:</strong> Os backups são gerados automaticamente pela Focus NFe. 
+                        Backups mensais são gerados no dia 1 de cada mês. 
+                        Backups semanais são gerados todo sábado com as notas emitidas até então.
+                    </p>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Mês</th>
+                                <th>Tipo</th>
+                                <th>Arquivo XML</th>
+                                <th>Arquivo DANFE</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Seção de notas individuais
+    let notasHtml = '';
+    if (notasNFe && notasNFe.length > 0) {
+        const dataAtual = new Date();
+        const mesAtual = String(dataAtual.getMonth() + 1).padStart(2, '0');
+        const anoAtual = dataAtual.getFullYear();
+        
+        let notasRows = '';
+        notasNFe.forEach(nota => {
+            const dataNota = new Date(nota.created_at);
+            const urlXml = obterUrlXml(nota.caminho_xml, nota.ambiente);
+            notasRows += `
+                <tr>
+                    <td style="font-family: monospace; font-size: 12px;">${nota.chave_nfe || '-'}</td>
+                    <td>${nota.referencia}</td>
+                    <td>${dataNota.toLocaleDateString('pt-BR')}</td>
+                    <td>
+                        <a 
+                            href="${urlXml}" 
+                            target="_blank"
+                            class="btn btn-sm btn-primary"
+                            style="text-decoration: none; display: inline-block;"
+                            download
+                        >
+                            📥 Baixar XML
+                        </a>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        notasHtml = `
+            <div class="content-section" style="margin-top: 32px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin: 0;">Notas Individuais do Mês Atual (${mesAtual}/${anoAtual})</h3>
+                    <div style="padding: 4px 12px; background-color: #e7f3ff; border-radius: 4px; border: 1px solid #b3d9ff;">
+                        <span style="color: #0066cc; font-size: 12px;">📄 ${notasNFe.length} nota(s) autorizada(s)</span>
+                    </div>
+                </div>
+                
+                <div style="background-color: #fff3cd; padding: 12px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #ffc107;">
+                    <p style="margin: 0; color: #856404; font-size: 13px;">
+                        <strong>💡 Dica:</strong> Você pode baixar os XMLs individuais abaixo ou baixar todos de uma vez em um arquivo ZIP.
+                    </p>
+                </div>
+                
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Chave NFe</th>
+                                <th>Referência</th>
+                                <th>Data</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${notasRows}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div style="margin-top: 16px;">
+                    <a 
+                        href="/api/backups/baixar-todos-xmls" 
+                        class="btn btn-success"
+                        style="text-decoration: none; display: inline-block;"
+                        download
+                    >
+                        📦 Baixar Todos os XMLs em ZIP
+                    </a>
+                    <span style="margin-left: 12px; color: var(--color-gray-medium); font-size: 13px;">
+                        (${notasNFe.length} arquivo(s))
+                    </span>
+                </div>
+            </div>
+        `;
+    } else if (backups && backups.length === 0) {
+        // Se não há backups E não há notas individuais, mostrar mensagem alternativa
+        notasHtml = `
+            <div class="content-section" style="margin-top: 32px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin: 0;">Notas Individuais do Mês Atual</h3>
+                </div>
+                <div class="empty-state">
+                    <p style="color: var(--color-gray-medium);">Nenhuma nota autorizada encontrada para o mês atual.</p>
+                </div>
+            </div>
+        `;
+    }
+    
+    return htmlBackups + notasHtml;
+}
+
 // Exportar funções globalmente
 window.Components = {
     formatarData,
@@ -942,7 +1148,8 @@ window.Components = {
     renderizarTabelaNotasEnviadas,
     renderizarFiltrosBuscarNotas,
     renderizarTabelaBuscarNotas,
-    extrairCategoriasPedido
+    extrairCategoriasPedido,
+    renderBackups
 };
 
 // Debug: confirmar que Components foi carregado

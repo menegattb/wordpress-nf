@@ -14,6 +14,7 @@ const nfseRoutes = require('./src/routes/nfse');
 const pedidoRoutes = require('./src/routes/pedidos');
 const woocommerceRoutes = require('./src/routes/woocommerce');
 const configRoutes = require('./src/routes/config');
+const backupRoutes = require('./src/routes/backups');
 
 // Importar middleware de autenticação
 const { requireAuth, checkAuth } = require('./src/middleware/auth');
@@ -105,6 +106,7 @@ app.use('/api/nfse', nfseRoutes); // requireAuth comentado
 app.use('/api/pedidos', pedidoRoutes); // requireAuth comentado
 app.use('/api/woocommerce', woocommerceRoutes); // requireAuth comentado
 app.use('/api/config', configRoutes); // requireAuth comentado
+app.use('/api/backups', backupRoutes); // requireAuth comentado
 
 // Função auxiliar para ler ambiente do .env
 function lerAmbienteDoEnv() {

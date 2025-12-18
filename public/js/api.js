@@ -416,11 +416,35 @@ const ConfigAPI = {
     }
 };
 
+/**
+ * API de Backups
+ */
+const BackupsAPI = {
+    /**
+     * Lista backups de XMLs disponíveis
+     */
+    async listar() {
+        return await apiRequest('/api/backups');
+    },
+    
+    /**
+     * Lista notas NFe autorizadas para download de XMLs individuais
+     */
+    async listarNotasNFe(mes, ano) {
+        const params = new URLSearchParams();
+        if (mes) params.append('mes', mes);
+        if (ano) params.append('ano', ano);
+        const query = params.toString();
+        return await apiRequest(`/api/backups/notas-nfe${query ? '?' + query : ''}`);
+    }
+};
+
 // Exportar APIs
 window.API = {
     NFSe: NFSeAPI,
     Pedidos: PedidosAPI,
     WooCommerce: WooCommerceAPI,
-    Config: ConfigAPI
+    Config: ConfigAPI,
+    Backups: BackupsAPI
 };
 

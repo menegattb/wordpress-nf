@@ -168,6 +168,9 @@ async function carregarSecao(secao) {
         case 'conexao-focus':
             await carregarConexaoFocus();
             break;
+        case 'backups-xml':
+            await carregarBackups();
+            break;
         case 'notas-enviadas':
             await carregarNotasEnviadas();
             break;
@@ -4786,6 +4789,71 @@ function toggleLogsMes(mes) {
 }
 
 // Exportar funções globalmente
+/**
+ * Carrega a seção de backups XML
+ */
+async function carregarBackups() {
+    const contentArea = document.getElementById('content-area');
+    
+    // Mostrar loading
+    contentArea.innerHTML = `
+        <div class="content-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h2 class="section-title" style="margin: 0;">Backups XML - Notas de Produto</h2>
+            </div>
+            <div style="text-align: center; padding: 40px;">
+                <div class="loading-spinner" style="width: 40px; height: 40px; margin: 0 auto 16px;"></div>
+                <p style="color: var(--color-gray-medium);">Carregando backups...</p>
+            </div>
+        </div>
+    `;
+    
+    try {
+        const resultado = await API.Backups.listar();
+        const resultadoNotas = await API.Backups.listarNotasNFe();
+        
+        console.log('Resultado da API de backups:', resultado);
+        console.log('Notas NFe encontradas:', resultadoNotas);
+        
+        if (resultado.sucesso) {
+            // Aceitar array vazio como sucesso válido
+            const backups = resultado.backups || [];
+            const notasNFe = resultadoNotas.sucesso ? (resultadoNotas.notas || []) : [];
+            const html = window.Components.renderBackups(backups, resultado.mensagem, notasNFe);
+            contentArea.innerHTML = html;
+        } else {
+            contentArea.innerHTML = `
+                <div class="content-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                        <h2 class="section-title" style="margin: 0;">Backups XML - Notas de Produto</h2>
+                    </div>
+                    <div class="empty-state">
+                        <p style="color: #dc3545;">Erro ao carregar backups</p>
+                        <p style="color: var(--color-gray-medium); font-size: 14px; margin-top: 8px;">
+                            ${resultado.erro || resultado.mensagem || 'Erro desconhecido'}
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Erro ao carregar backups:', error);
+        contentArea.innerHTML = `
+            <div class="content-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h2 class="section-title" style="margin: 0;">Backups XML - Notas de Produto</h2>
+                </div>
+                <div class="empty-state">
+                    <p style="color: #dc3545;">Erro ao carregar backups</p>
+                    <p style="color: var(--color-gray-medium); font-size: 14px; margin-top: 8px;">
+                        ${error.message || 'Erro desconhecido'}
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+}
+
 window.carregarSecao = carregarSecao;
 window.toggleLogsServidor = toggleLogsServidor;
 window.carregarLogsServidor = carregarLogsServidor;
