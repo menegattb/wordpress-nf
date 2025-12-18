@@ -192,14 +192,26 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
   // Garantir que valor_servicos não seja negativo e tenha exatamente 2 casas decimais
   const valorServicosFinal = Math.max(0, parseFloat(valorServicos.toFixed(2)));
   
-  // Log para debug
+  // Validar que valor_servicos é maior que zero
+  if (valorServicosFinal <= 0) {
+    throw new Error(`Valor dos serviços deve ser maior que zero. Valor calculado: ${valorServicosFinal}`);
+  }
+  
+  // Log detalhado para debug
   logger.mapping('Cálculo do valor dos serviços', {
     pedido_id: dadosPedido.pedido_id,
     valor_servicos_informado: dadosPedido.valor_servicos,
     valor_total: dadosPedido.valor_total,
     desconto_total: dadosPedido.desconto_total || dadosPedido.valor_desconto,
     valor_servicos_calculado: valorServicos,
-    valor_servicos_final: valorServicosFinal
+    valor_servicos_final: valorServicosFinal,
+    servicos_count: dadosPedido.servicos?.length || 0,
+    servicos_subtotais: dadosPedido.servicos?.map(s => ({
+      nome: s.nome,
+      subtotal: s.subtotal,
+      total: s.total,
+      valor_usado: s.subtotal || s.total || 0
+    })) || []
   });
   
   // Mapear tomador com estrutura correta
@@ -377,21 +389,36 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
       // IMPORTANTE: Para Ipojuca/PE, o formato deve ser exatamente 5 dígitos
       // Se vier com 6 dígitos (070101), remover o último dígito ou ajustar conforme necessário
       item_lista_servico: (() => {
-        let item = (configFiscal?.item_lista_servico || '70101').toString().replace(/\./g, '').replace(/\s/g, '');
+        // Obter valor do config, remover tudo que não é dígito
+        let item = (configFiscal?.item_lista_servico || '70101').toString();
+        // Remover pontos, espaços, traços e qualquer caractere não numérico
+        item = item.replace(/\D/g, '');
+        
         // Se tiver 6 dígitos (ex: 070101), usar apenas os 5 primeiros
         if (item.length === 6) {
           item = item.substring(0, 5);
         }
-        // Garantir exatamente 5 dígitos (pode precisar adicionar zero à esquerda)
-        return item.padStart(5, '0').substring(0, 5);
+        
+        // Garantir exatamente 5 dígitos (adicionar zeros à esquerda se necessário)
+        item = item.padStart(5, '0');
+        
+        // Garantir que não tenha mais de 5 dígitos
+        item = item.substring(0, 5);
+        
+        // Validar que é exatamente 5 dígitos numéricos
+        if (!/^\d{5}$/.test(item)) {
+          throw new Error(`Item da lista de serviço inválido. Deve ter exatamente 5 dígitos. Valor recebido: ${configFiscal?.item_lista_servico || '70101'}`);
+        }
+        
+        return item;
       })(),
       codigo_tributario_municipio: configFiscal?.codigo_tributario_municipio || '101',
       codigo_municipio: configEmitente.codigo_municipio,
       aliquota: parseFloat((configFiscal?.aliquota || 3).toFixed(2)),
       iss_retido: false
-      // NOTA: Não enviar base_calculo e valor_iss explicitamente
+      // IMPORTANTE: NÃO enviar base_calculo e valor_iss
       // A Focus NFe calcula automaticamente baseado em valor_servicos e aliquota
-      // Enviar esses campos pode causar erro A2 (dedução não permitida) se o item não permitir
+      // Enviar esses campos causa erro A2 (dedução não permitida) e E183/E182 (valores inválidos)
     }
   };
   
@@ -399,6 +426,30 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
   // Baseado no WSDL de Ipojuca/PE fornecido pelo suporte Focus NFe
   if (configEmitente.inscricao_municipal && configEmitente.inscricao_municipal.trim() !== '') {
     nfse.prestador.inscricao_municipal = configEmitente.inscricao_municipal.replace(/\D/g, ''); // Remover formatação (pontos, traços)
+  }
+  
+  // Validação final antes de retornar
+  // Garantir que não há campos proibidos no objeto servico
+  const camposProibidos = ['base_calculo', 'valor_iss', 'base_calculo_iss'];
+  camposProibidos.forEach(campo => {
+    if (nfse.servico[campo] !== undefined) {
+      logger.warn(`Campo proibido encontrado e removido: ${campo}`, {
+        service: 'mapeador',
+        action: 'mapeamento',
+        pedido_id: dadosPedido.pedido_id
+      });
+      delete nfse.servico[campo];
+    }
+  });
+  
+  // Validar formato final do item_lista_servico
+  if (!/^\d{5}$/.test(nfse.servico.item_lista_servico)) {
+    throw new Error(`Item da lista de serviço deve ter exatamente 5 dígitos. Valor: ${nfse.servico.item_lista_servico}`);
+  }
+  
+  // Validar que valor_servicos é positivo
+  if (nfse.servico.valor_servicos <= 0) {
+    throw new Error(`Valor dos serviços deve ser maior que zero. Valor: ${nfse.servico.valor_servicos}`);
   }
   
   // Log do item da lista de serviço para debug
@@ -411,6 +462,17 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     item_lista_servico_original: configFiscal?.item_lista_servico || '70101',
     aliquota: nfse.servico.aliquota,
     codigo_tributario: nfse.servico.codigo_tributario_municipio
+  });
+  
+  // Log final do payload antes de retornar
+  logger.mapping('Payload NFSe validado e pronto para envio', {
+    pedido_id: dadosPedido.pedido_id,
+    item_lista_servico: nfse.servico.item_lista_servico,
+    valor_servicos: nfse.servico.valor_servicos,
+    aliquota: nfse.servico.aliquota,
+    tem_base_calculo: nfse.servico.base_calculo !== undefined,
+    tem_valor_iss: nfse.servico.valor_iss !== undefined,
+    servico_keys: Object.keys(nfse.servico)
   });
   
   return nfse;
