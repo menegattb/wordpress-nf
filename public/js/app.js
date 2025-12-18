@@ -1117,17 +1117,29 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
         dateCreated = new Date().toISOString();
     }
     
+    // Obter nome completo do cliente
+    const nomeCompleto = dados.nome || '';
+    const nomePartes = nomeCompleto.split(' ');
+    const firstName = nomePartes[0] || '';
+    const lastName = nomePartes.slice(1).join(' ') || '';
+    
+    // Calcular total se não existir
+    let totalPedido = dados.valor_total || dados.valor_servicos || dados.total || 0;
+    if (!totalPedido && dados.servicos && Array.isArray(dados.servicos)) {
+        totalPedido = dados.servicos.reduce((sum, s) => sum + parseFloat(s.total || s.valor_unitario || 0), 0);
+    }
+    
     // Converter para formato WooCommerce
-    return {
+    const pedidoConvertido = {
         id: parseInt(pedidoBanco.pedido_id) || pedidoBanco.pedido_id,
         number: pedidoBanco.pedido_id,
         date_created: dateCreated,
-        total: String(dados.valor_total || dados.valor_servicos || dados.total || '0'),
+        total: parseFloat(totalPedido) || 0, // Manter como número para cálculos
         status: pedidoBanco.status || dados.status_wc || 'pending',
         billing: {
-            first_name: dados.nome ? dados.nome.split(' ')[0] : '',
-            last_name: dados.nome ? dados.nome.split(' ').slice(1).join(' ') : '',
-            company: dados.razao_social || '',
+            first_name: firstName,
+            last_name: lastName,
+            company: dados.razao_social || dados.nome || '',
             email: dados.email || '',
             phone: dados.telefone || '',
             address_1: dados.endereco?.rua || '',
@@ -1140,18 +1152,24 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
         line_items: (dados.servicos || []).map(servico => ({
             id: servico.codigo || servico.numero_item,
             name: servico.nome || servico.discriminacao || 'Serviço',
-            quantity: servico.quantidade || 1,
-            price: servico.valor_unitario || 0,
-            total: servico.total || servico.valor_unitario || 0,
-            subtotal: servico.subtotal || servico.total || servico.valor_unitario || 0,
-            categories: servico.categorias || [],
-            category: servico.categorias && servico.categorias.length > 0 ? servico.categorias[0] : null
+            quantity: parseFloat(servico.quantidade) || 1,
+            price: parseFloat(servico.valor_unitario) || 0,
+            total: parseFloat(servico.total || servico.valor_unitario) || 0,
+            subtotal: parseFloat(servico.subtotal || servico.total || servico.valor_unitario) || 0,
+            categories: Array.isArray(servico.categorias) ? servico.categorias : (servico.categoria ? [servico.categoria] : []),
+            category: servico.categorias && Array.isArray(servico.categorias) && servico.categorias.length > 0 
+                ? servico.categorias[0] 
+                : (servico.categoria || null)
         })),
-        shipping_total: String(dados.frete || '0'),
-        discount_total: String(dados.desconto_total || '0'),
+        shipping_total: parseFloat(dados.frete) || 0,
+        discount_total: parseFloat(dados.desconto_total) || 0,
         payment_method: dados.forma_pagamento || 'pix',
-        customer_note: dados.observacoes || ''
+        customer_note: dados.observacoes || '',
+        // Preservar dados_pedido original para referência
+        dados_pedido: dados
     };
+    
+    return pedidoConvertido;
 }
 
 // Intervalos de polling (em ms)
