@@ -3,6 +3,7 @@ const focusNFeBackups = require('../services/focusNFeBackups');
 const { listarNFe } = require('../config/database');
 const archiver = require('archiver');
 const axios = require('axios');
+const xmlFormatter = require('xml-formatter');
 
 /**
  * Lista backups de XMLs disponíveis
@@ -92,6 +93,33 @@ function determinarTipoBackup(mes) {
   // Por enquanto, todos são mensais
   // Se necessário, podemos adicionar lógica para identificar backups semanais
   return 'Mensal';
+}
+
+/**
+ * Formata XML para melhor legibilidade
+ */
+function formatarXml(xmlString) {
+  try {
+    if (!xmlString || typeof xmlString !== 'string') {
+      return xmlString;
+    }
+    
+    // Usar xml-formatter para formatar o XML
+    const formatted = xmlFormatter(xmlString, {
+      indentation: '  ',
+      filter: (node) => node.type !== 'Comment',
+      collapseContent: true,
+      lineSeparator: '\n'
+    });
+    
+    return formatted;
+  } catch (error) {
+    logger.warn('Erro ao formatar XML, retornando original', {
+      erro: error.message
+    });
+    // Se falhar, retornar original
+    return xmlString;
+  }
 }
 
 /**
@@ -291,18 +319,20 @@ async function baixarTodosXmls(req, res) {
           ? caminhoXml 
           : `${baseUrl}${caminhoXml}`;
         
-        // Baixar XML da Focus NFe
+        // Baixar XML da Focus NFe como texto para poder formatar
         const response = await axios.get(urlXml, {
           auth: {
             username: apiConfig.token,
             password: ''
           },
-          responseType: 'stream',
+          responseType: 'text',
           timeout: 30000
         });
         
+        // Formatar XML antes de adicionar ao ZIP
+        const xmlFormatado = formatarXml(response.data);
         const nomeArquivo = `${nota.chave_nfe || nota.referencia}.xml`;
-        archive.append(response.data, { name: nomeArquivo });
+        archive.append(xmlFormatado, { name: nomeArquivo });
         sucesso++;
       } catch (error) {
         logger.warn('Erro ao baixar XML individual', {
