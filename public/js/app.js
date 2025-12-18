@@ -1347,13 +1347,14 @@ async function carregarPedidosServico() {
         if (resultadoBanco.sucesso && resultadoBanco.dados && resultadoBanco.dados.length > 0) {
             todosPedidos = resultadoBanco.dados;
             
-            // Filtrar apenas pedidos de serviço (excluir Livro Faíscas)
+            // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
+            // Isso garante que pedidoContemLivroFaiscas tenha acesso aos dados convertidos
+            todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
+            
+            // Filtrar apenas pedidos de serviço (excluir Livro Faíscas) DEPOIS da conversão
             todosPedidos = todosPedidos.filter(pedido => {
                 return !pedidoContemLivroFaiscas(pedido);
             });
-            
-            // Converter pedidos do banco para formato WooCommerce
-            todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
             
             // Ordenar por data
             todosPedidos.sort((a, b) => {
@@ -1966,18 +1967,18 @@ async function sincronizarEmBackgroundServico() {
             if (resultadoBanco.sucesso && resultadoBanco.dados) {
                 let todosPedidos = resultadoBanco.dados;
                 
-                // Filtrar apenas pedidos de serviço
+                // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
+                todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
+                
+                // Filtrar apenas pedidos de serviço (excluir Livro Faíscas) DEPOIS da conversão
                 todosPedidos = todosPedidos.filter(pedido => {
-                    const dadosPedido = typeof pedido.dados_pedido === 'string' 
-                        ? JSON.parse(pedido.dados_pedido) 
-                        : pedido.dados_pedido || pedido;
-                    return !pedidoContemLivroFaiscas(dadosPedido);
+                    return !pedidoContemLivroFaiscas(pedido);
                 });
                 
                 todosPedidos.sort((a, b) => {
-                    const dataA = a.dados_pedido?.date_created || a.date_created || 0;
-                    const dataB = b.dados_pedido?.date_created || b.date_created || 0;
-                    return new Date(dataB) - new Date(dataA);
+                    const dataA = new Date(a.date_created || 0);
+                    const dataB = new Date(b.date_created || 0);
+                    return dataB - dataA;
                 });
                 
                 estadoAtual.dados.todosPedidosServico = todosPedidos;
@@ -2009,18 +2010,18 @@ async function importarPrimeiraVezServico(meses) {
         if (resultadoBanco.sucesso && resultadoBanco.dados) {
             let todosPedidos = resultadoBanco.dados;
             
-            // Filtrar apenas pedidos de serviço
+            // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
+            todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
+            
+            // Filtrar apenas pedidos de serviço (excluir Livro Faíscas) DEPOIS da conversão
             todosPedidos = todosPedidos.filter(pedido => {
-                const dadosPedido = typeof pedido.dados_pedido === 'string' 
-                    ? JSON.parse(pedido.dados_pedido) 
-                    : pedido.dados_pedido || pedido;
-                return !pedidoContemLivroFaiscas(dadosPedido);
+                return !pedidoContemLivroFaiscas(pedido);
             });
             
             todosPedidos.sort((a, b) => {
-                const dataA = a.dados_pedido?.date_created || a.date_created || 0;
-                const dataB = b.dados_pedido?.date_created || b.date_created || 0;
-                return new Date(dataB) - new Date(dataA);
+                const dataA = new Date(a.date_created || 0);
+                const dataB = new Date(b.date_created || 0);
+                return dataB - dataA;
             });
             
             estadoAtual.dados.meses = meses;
@@ -2062,12 +2063,12 @@ function iniciarPollingPedidosServico() {
             const resultado = await API.Pedidos.listarDoBanco({ limite: 1000 });
             
             if (resultado.sucesso && resultado.dados) {
-                // Filtrar apenas pedidos de serviço
-                let pedidosServico = resultado.dados.filter(pedido => {
-                    const dadosPedido = typeof pedido.dados_pedido === 'string' 
-                        ? JSON.parse(pedido.dados_pedido) 
-                        : pedido.dados_pedido || pedido;
-                    return !pedidoContemLivroFaiscas(dadosPedido);
+                // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
+                let todosPedidos = resultado.dados.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
+                
+                // Filtrar apenas pedidos de serviço (excluir Livro Faíscas) DEPOIS da conversão
+                let pedidosServico = todosPedidos.filter(pedido => {
+                    return !pedidoContemLivroFaiscas(pedido);
                 });
                 
                 const novosTotal = pedidosServico.length;
@@ -2078,9 +2079,9 @@ function iniciarPollingPedidosServico() {
                     console.log(`🔔 Novos pedidos de serviço detectados: ${novosTotal - atualTotal}`);
                     
                     pedidosServico.sort((a, b) => {
-                        const dataA = a.dados_pedido?.date_created || a.date_created || 0;
-                        const dataB = b.dados_pedido?.date_created || b.date_created || 0;
-                        return new Date(dataB) - new Date(dataA);
+                        const dataA = new Date(a.date_created || 0);
+                        const dataB = new Date(b.date_created || 0);
+                        return dataB - dataA;
                     });
                     
                     estadoAtual.dados.todosPedidosServico = pedidosServico;
