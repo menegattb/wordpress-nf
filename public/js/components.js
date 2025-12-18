@@ -1089,6 +1089,26 @@ function renderBackups(backups, mensagem = null, notasNFe = []) {
                     </div>
                 </div>
                 
+                ${notasNFe?.notasPorMes && notasNFe.notasPorMes.length > 1 ? `
+                    <div style="margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid #dee2e6;">
+                        <p style="margin: 0 0 12px 0; color: var(--color-gray-dark); font-weight: 600; font-size: 14px;">
+                            📅 Baixar por mês:
+                        </p>
+                        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                            ${notasNFe.notasPorMes.map(mesInfo => `
+                                <a 
+                                    href="/api/backups/baixar-todos-xmls?mes=${mesInfo.mes}&ano=${mesInfo.ano}" 
+                                    class="btn btn-sm btn-primary"
+                                    style="text-decoration: none; display: inline-block; color: white; background-color: #007bff; border-color: #007bff;"
+                                    download
+                                >
+                                    📥 ${mesInfo.mesFormatado} (${mesInfo.total} arquivo${mesInfo.total !== 1 ? 's' : ''})
+                                </a>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+                
                 <div style="background-color: #fff3cd; padding: 12px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #ffc107;">
                     <p style="margin: 0; color: #856404; font-size: 13px;">
                         <strong>💡 Dica:</strong> Você pode baixar os XMLs individuais abaixo ou baixar todos de uma vez em um arquivo ZIP.
@@ -1116,7 +1136,7 @@ function renderBackups(backups, mensagem = null, notasNFe = []) {
                         <a 
                             href="/api/backups/baixar-todos-xmls" 
                             class="btn btn-success"
-                            style="text-decoration: none; display: inline-block;"
+                            style="text-decoration: none; display: inline-block; color: white;"
                             download
                         >
                             📦 Baixar Todos os XMLs em ZIP
@@ -1125,26 +1145,6 @@ function renderBackups(backups, mensagem = null, notasNFe = []) {
                             (${notasArray.length} arquivo(s))
                         </span>
                     </div>
-                    
-                    ${notasNFe?.notasPorMes && notasNFe.notasPorMes.length > 1 ? `
-                        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #dee2e6;">
-                            <p style="margin: 0 0 12px 0; color: var(--color-gray-dark); font-weight: 600; font-size: 14px;">
-                                📅 Baixar por mês:
-                            </p>
-                            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                                ${notasNFe.notasPorMes.map(mesInfo => `
-                                    <a 
-                                        href="/api/backups/baixar-todos-xmls?mes=${mesInfo.mes}&ano=${mesInfo.ano}" 
-                                        class="btn btn-sm btn-outline-primary"
-                                        style="text-decoration: none; display: inline-block;"
-                                        download
-                                    >
-                                        📥 ${mesInfo.mesFormatado} (${mesInfo.total} arquivo${mesInfo.total !== 1 ? 's' : ''})
-                                    </a>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
                 </div>
             </div>
         `;
