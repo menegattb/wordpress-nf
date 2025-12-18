@@ -1099,7 +1099,7 @@ function atualizarStatusConexao(mensagem, tipo = 'info') {
 function converterPedidoBancoParaWooCommerce(pedidoBanco) {
     // O backend pode retornar dados já extraídos de dados_pedido ou o formato original
     // Verificar se os dados já estão no formato WooCommerce (tem billing, line_items, etc)
-    if (pedidoBanco.billing && pedidoBanco.line_items) {
+    if (pedidoBanco.billing && pedidoBanco.line_items && pedidoBanco.date_created) {
         // Já está no formato WooCommerce, retornar como está
         return pedidoBanco;
     }
@@ -1115,11 +1115,22 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
         }
     }
     
-    // Se dados_pedido não existe mas o pedido tem campos diretos (formato do backend)
-    if (!dados || Object.keys(dados).length === 0) {
-        // Tentar usar os campos diretos do pedidoBanco
-        dados = pedidoBanco;
+    // Se dados_pedido não existe ou está vazio, o backend pode ter extraído os dados diretamente
+    // Nesse caso, usar os campos diretos do pedidoBanco
+    if (!dados || Object.keys(dados).length === 0 || (!dados.nome && !dados.servicos && !dados.valor_total)) {
+        // O backend extraiu dados_pedido usando spread, então os campos estão diretamente no objeto
+        dados = {
+            ...pedidoBanco,
+            // Garantir que temos os campos esperados
+            nome: pedidoBanco.nome || '',
+            servicos: pedidoBanco.servicos || [],
+            valor_total: pedidoBanco.valor_total || pedidoBanco.valor_servicos || 0,
+            endereco: pedidoBanco.endereco || {}
+        };
     }
+    
+    // Obter pedido_id - pode estar em diferentes lugares
+    const pedidoId = pedidoBanco.pedido_id || pedidoBanco._id_banco || pedidoBanco.id || pedidoBanco.number;
     
     // Obter data de criação - tentar múltiplas fontes
     let dateCreated = dados.data_pedido || dados.data_emissao || dados.date_created || pedidoBanco.created_at || pedidoBanco.date_created;
@@ -1144,8 +1155,8 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
     
     // Converter para formato WooCommerce
     const pedidoConvertido = {
-        id: parseInt(pedidoBanco.pedido_id) || pedidoBanco.pedido_id,
-        number: pedidoBanco.pedido_id,
+        id: parseInt(pedidoId) || pedidoId,
+        number: pedidoId,
         date_created: dateCreated,
         total: parseFloat(totalPedido) || 0, // Manter como número para cálculos
         status: pedidoBanco.status || dados.status_wc || 'pending',
