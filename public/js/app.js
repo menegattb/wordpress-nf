@@ -1104,29 +1104,31 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
         return pedidoBanco;
     }
     
-    // Parsear dados_pedido se for string JSON
-    let dados = pedidoBanco.dados_pedido || {};
-    if (typeof dados === 'string') {
-        try {
-            dados = JSON.parse(dados);
-        } catch (e) {
-            console.warn('Erro ao parsear dados_pedido:', e);
-            dados = {};
+    // O backend pode retornar dados de duas formas:
+    // 1. Com dados_pedido como objeto/string JSON (formato original do banco)
+    // 2. Com dados já extraídos usando spread (formato do listarPedidosBanco)
+    
+    let dados = {};
+    
+    // Tentar obter dados_pedido primeiro
+    if (pedidoBanco.dados_pedido) {
+        dados = pedidoBanco.dados_pedido;
+        if (typeof dados === 'string') {
+            try {
+                dados = JSON.parse(dados);
+            } catch (e) {
+                console.warn('Erro ao parsear dados_pedido:', e);
+                dados = {};
+            }
         }
     }
     
-    // Se dados_pedido não existe ou está vazio, o backend pode ter extraído os dados diretamente
+    // Se dados_pedido não existe ou está vazio, o backend extraiu os dados diretamente
     // Nesse caso, usar os campos diretos do pedidoBanco
-    if (!dados || Object.keys(dados).length === 0 || (!dados.nome && !dados.servicos && !dados.valor_total)) {
+    if (!dados || Object.keys(dados).length === 0 || (!dados.nome && !dados.servicos && !dados.valor_total && !dados.endereco)) {
         // O backend extraiu dados_pedido usando spread, então os campos estão diretamente no objeto
-        dados = {
-            ...pedidoBanco,
-            // Garantir que temos os campos esperados
-            nome: pedidoBanco.nome || '',
-            servicos: pedidoBanco.servicos || [],
-            valor_total: pedidoBanco.valor_total || pedidoBanco.valor_servicos || 0,
-            endereco: pedidoBanco.endereco || {}
-        };
+        // Usar pedidoBanco diretamente como dados
+        dados = pedidoBanco;
     }
     
     // Obter pedido_id - pode estar em diferentes lugares
