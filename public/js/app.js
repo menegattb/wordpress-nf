@@ -1108,12 +1108,21 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
         }
     }
     
+    // Obter data de criação - tentar múltiplas fontes
+    let dateCreated = dados.data_pedido || dados.data_emissao || dados.date_created || pedidoBanco.created_at || pedidoBanco.date_created;
+    
+    // Se não encontrou data válida, usar data atual como fallback
+    if (!dateCreated || (new Date(dateCreated)).toString() === 'Invalid Date') {
+        console.warn('Pedido sem data válida, usando data atual:', pedidoBanco.pedido_id);
+        dateCreated = new Date().toISOString();
+    }
+    
     // Converter para formato WooCommerce
     return {
         id: parseInt(pedidoBanco.pedido_id) || pedidoBanco.pedido_id,
         number: pedidoBanco.pedido_id,
-        date_created: dados.data_pedido || dados.data_emissao || pedidoBanco.created_at,
-        total: String(dados.valor_total || dados.valor_servicos || '0'),
+        date_created: dateCreated,
+        total: String(dados.valor_total || dados.valor_servicos || dados.total || '0'),
         status: pedidoBanco.status || dados.status_wc || 'pending',
         billing: {
             first_name: dados.nome ? dados.nome.split(' ')[0] : '',
