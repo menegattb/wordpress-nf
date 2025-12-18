@@ -1040,13 +1040,24 @@ function renderBackups(backups, mensagem = null, notasNFe = []) {
     
     // Seção de notas individuais
     let notasHtml = '';
-    if (notasNFe && notasNFe.length > 0) {
-        const dataAtual = new Date();
-        const mesAtual = String(dataAtual.getMonth() + 1).padStart(2, '0');
-        const anoAtual = dataAtual.getFullYear();
+    // notasNFe pode ser um array ou um objeto com {notas: [], meses: []}
+    const notasArray = Array.isArray(notasNFe) ? notasNFe : (notasNFe?.notas || []);
+    const mesesBusca = notasNFe?.meses || [];
+    
+    if (notasArray && notasArray.length > 0) {
+        // Determinar título baseado nos meses buscados
+        let tituloSecao = 'Notas Individuais';
+        if (mesesBusca && mesesBusca.length > 0) {
+            tituloSecao = `Notas Individuais (${mesesBusca.join(' e ')})`;
+        } else {
+            const dataAtual = new Date();
+            const mesAtual = String(dataAtual.getMonth() + 1).padStart(2, '0');
+            const anoAtual = dataAtual.getFullYear();
+            tituloSecao = `Notas Individuais (${mesAtual}/${anoAtual})`;
+        }
         
         let notasRows = '';
-        notasNFe.forEach(nota => {
+        notasArray.forEach(nota => {
             const dataNota = new Date(nota.created_at);
             const urlXml = obterUrlXml(nota.caminho_xml, nota.ambiente);
             notasRows += `
@@ -1072,9 +1083,9 @@ function renderBackups(backups, mensagem = null, notasNFe = []) {
         notasHtml = `
             <div class="content-section" style="margin-top: 32px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <h3 style="margin: 0;">Notas Individuais do Mês Atual (${mesAtual}/${anoAtual})</h3>
+                    <h3 style="margin: 0;">${tituloSecao}</h3>
                     <div style="padding: 4px 12px; background-color: #e7f3ff; border-radius: 4px; border: 1px solid #b3d9ff;">
-                        <span style="color: #0066cc; font-size: 12px;">📄 ${notasNFe.length} nota(s) autorizada(s)</span>
+                        <span style="color: #0066cc; font-size: 12px;">📄 ${notasArray.length} nota(s) autorizada(s)</span>
                     </div>
                 </div>
                 
@@ -1110,7 +1121,7 @@ function renderBackups(backups, mensagem = null, notasNFe = []) {
                         📦 Baixar Todos os XMLs em ZIP
                     </a>
                     <span style="margin-left: 12px; color: var(--color-gray-medium); font-size: 13px;">
-                        (${notasNFe.length} arquivo(s))
+                        (${notasArray.length} arquivo(s))
                     </span>
                 </div>
             </div>

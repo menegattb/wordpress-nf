@@ -96,22 +96,46 @@ function determinarTipoBackup(mes) {
 
 /**
  * Lista notas NFe autorizadas para download de XMLs
+ * Busca dos últimos 2 meses (mês atual e mês anterior)
  */
 async function listarNotasNFeParaDownload(req, res) {
   try {
     const { mes, ano } = req.query;
     const dataAtual = new Date();
-    const mesAtual = mes || String(dataAtual.getMonth() + 1).padStart(2, '0');
-    const anoAtual = ano || dataAtual.getFullYear();
     
-    // Buscar todas as NFe autorizadas do mês
-    const dataInicio = `${anoAtual}-${mesAtual}-01`;
-    const ultimoDia = new Date(anoAtual, parseInt(mesAtual), 0).getDate();
-    const dataFim = `${anoAtual}-${mesAtual}-${ultimoDia}`;
+    // Se não especificar mês/ano, buscar dos últimos 2 meses
+    let dataInicio, dataFim, mesesBusca;
+    
+    if (mes && ano) {
+      // Buscar apenas do mês especificado
+      dataInicio = `${ano}-${mes.padStart(2, '0')}-01`;
+      const ultimoDia = new Date(parseInt(ano), parseInt(mes), 0).getDate();
+      dataFim = `${ano}-${mes.padStart(2, '0')}-${ultimoDia}`;
+      mesesBusca = [`${mes.padStart(2, '0')}/${ano}`];
+    } else {
+      // Buscar dos últimos 2 meses (mês atual e anterior)
+      const mesAtual = dataAtual.getMonth() + 1;
+      const anoAtual = dataAtual.getFullYear();
+      
+      // Mês anterior
+      const mesAnterior = mesAtual === 1 ? 12 : mesAtual - 1;
+      const anoAnterior = mesAtual === 1 ? anoAtual - 1 : anoAtual;
+      
+      // Data início: primeiro dia do mês anterior
+      dataInicio = `${anoAnterior}-${String(mesAnterior).padStart(2, '0')}-01`;
+      
+      // Data fim: último dia do mês atual
+      const ultimoDiaAtual = new Date(anoAtual, mesAtual, 0).getDate();
+      dataFim = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-${ultimoDiaAtual}`;
+      
+      mesesBusca = [
+        `${String(mesAnterior).padStart(2, '0')}/${anoAnterior}`,
+        `${String(mesAtual).padStart(2, '0')}/${anoAtual}`
+      ];
+    }
     
     logger.info('🔄 [BACKUPS] Listando notas NFe para download', {
-      mes: mesAtual,
-      ano: anoAtual,
+      meses: mesesBusca,
       data_inicio: dataInicio,
       data_fim: dataFim
     });
@@ -156,8 +180,11 @@ async function listarNotasNFeParaDownload(req, res) {
         };
       }),
       total: notasComXml.length,
-      mes: mesAtual,
-      ano: anoAtual
+      meses: mesesBusca,
+      periodo: {
+        inicio: dataInicio,
+        fim: dataFim
+      }
     });
   } catch (error) {
     logger.error('Erro ao listar notas NFe para download', {
@@ -173,22 +200,45 @@ async function listarNotasNFeParaDownload(req, res) {
 
 /**
  * Baixa todos os XMLs das notas NFe autorizadas em um ZIP
+ * Busca dos últimos 2 meses (mês atual e mês anterior)
  */
 async function baixarTodosXmls(req, res) {
   try {
     const { mes, ano } = req.query;
     const dataAtual = new Date();
-    const mesAtual = mes || String(dataAtual.getMonth() + 1).padStart(2, '0');
-    const anoAtual = ano || dataAtual.getFullYear();
     
-    // Buscar todas as NFe autorizadas do mês
-    const dataInicio = `${anoAtual}-${mesAtual}-01`;
-    const ultimoDia = new Date(anoAtual, parseInt(mesAtual), 0).getDate();
-    const dataFim = `${anoAtual}-${mesAtual}-${ultimoDia}`;
+    // Se não especificar mês/ano, buscar dos últimos 2 meses
+    let dataInicio, dataFim, nomeArquivo;
+    
+    if (mes && ano) {
+      // Buscar apenas do mês especificado
+      const mesFormatado = mes.padStart(2, '0');
+      dataInicio = `${ano}-${mesFormatado}-01`;
+      const ultimoDia = new Date(parseInt(ano), parseInt(mes), 0).getDate();
+      dataFim = `${ano}-${mesFormatado}-${ultimoDia}`;
+      nomeArquivo = `xmls_nfe_${mesFormatado}_${ano}.zip`;
+    } else {
+      // Buscar dos últimos 2 meses (mês atual e anterior)
+      const mesAtual = dataAtual.getMonth() + 1;
+      const anoAtual = dataAtual.getFullYear();
+      
+      // Mês anterior
+      const mesAnterior = mesAtual === 1 ? 12 : mesAtual - 1;
+      const anoAnterior = mesAtual === 1 ? anoAtual - 1 : anoAtual;
+      
+      // Data início: primeiro dia do mês anterior
+      dataInicio = `${anoAnterior}-${String(mesAnterior).padStart(2, '0')}-01`;
+      
+      // Data fim: último dia do mês atual
+      const ultimoDiaAtual = new Date(anoAtual, mesAtual, 0).getDate();
+      dataFim = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-${ultimoDiaAtual}`;
+      
+      nomeArquivo = `xmls_nfe_${String(mesAnterior).padStart(2, '0')}_${anoAnterior}_a_${String(mesAtual).padStart(2, '0')}_${anoAtual}.zip`;
+    }
     
     logger.info('🔄 [BACKUPS] Gerando ZIP com todos os XMLs', {
-      mes: mesAtual,
-      ano: anoAtual
+      data_inicio: dataInicio,
+      data_fim: dataFim
     });
     
     const resultado = await listarNFe({
@@ -221,7 +271,7 @@ async function baixarTodosXmls(req, res) {
     
     // Criar ZIP
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="xmls_nfe_${mesAtual}_${anoAtual}.zip"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
     
     const archive = archiver('zip', { zlib: { level: 9 } });
     archive.pipe(res);

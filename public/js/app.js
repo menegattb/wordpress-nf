@@ -4819,7 +4819,13 @@ async function carregarBackups() {
             // Aceitar array vazio como sucesso válido
             const backups = resultado.backups || [];
             const notasNFe = resultadoNotas.sucesso ? (resultadoNotas.notas || []) : [];
-            const html = window.Components.renderBackups(backups, resultado.mensagem, notasNFe);
+            const mesesBusca = resultadoNotas.sucesso ? (resultadoNotas.meses || []) : [];
+            // Passar informações adicionais junto com o array de notas
+            const notasComInfo = {
+                notas: notasNFe,
+                meses: mesesBusca
+            };
+            const html = window.Components.renderBackups(backups, resultado.mensagem, notasComInfo);
             contentArea.innerHTML = html;
         } else {
             contentArea.innerHTML = `
