@@ -1097,6 +1097,13 @@ function atualizarStatusConexao(mensagem, tipo = 'info') {
  * Converte pedido do banco de dados para formato WooCommerce (para compatibilidade com a interface)
  */
 function converterPedidoBancoParaWooCommerce(pedidoBanco) {
+    // O backend pode retornar dados já extraídos de dados_pedido ou o formato original
+    // Verificar se os dados já estão no formato WooCommerce (tem billing, line_items, etc)
+    if (pedidoBanco.billing && pedidoBanco.line_items) {
+        // Já está no formato WooCommerce, retornar como está
+        return pedidoBanco;
+    }
+    
     // Parsear dados_pedido se for string JSON
     let dados = pedidoBanco.dados_pedido || {};
     if (typeof dados === 'string') {
@@ -1106,6 +1113,12 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
             console.warn('Erro ao parsear dados_pedido:', e);
             dados = {};
         }
+    }
+    
+    // Se dados_pedido não existe mas o pedido tem campos diretos (formato do backend)
+    if (!dados || Object.keys(dados).length === 0) {
+        // Tentar usar os campos diretos do pedidoBanco
+        dados = pedidoBanco;
     }
     
     // Obter data de criação - tentar múltiplas fontes
