@@ -1378,7 +1378,7 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                                         <span class="accordion-icon" id="icon-${mesId}">${isOpen ? '▼' : '▶'}</span>
                                         <strong>${mes.label}</strong>
                                         <span style="margin-left: 12px; color: var(--color-gray-medium); font-size: 14px;">
-                                            (${totalMes} pedido${totalMes !== 1 ? 's' : ''} - ${formatarValor(totalValorMes)})
+                                            (${totalMes} pedido${totalMes !== 1 ? 's' : ''} - ${window.Components ? window.Components.formatarValor(totalValorMes) : 'R$ 0,00'})
                                         </span>
                                     </div>
                                 </div>
