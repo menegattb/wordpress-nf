@@ -1486,27 +1486,74 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                     <select 
                         id="filtro-status-pedidos-servico"
                         onchange="aplicarFiltrosPedidosServico()"
-                        style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                        style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; min-width: 180px;">
                         ${statusOptions.map(opt => `
-                            <option value="${opt.value}" ${filtroStatus === opt.value ? 'selected' : ''}>${opt.label}</option>
+                            <option value="${opt.value}" ${filtroStatus === opt.value ? 'selected' : ''}>
+                                ${opt.label}
+                            </option>
                         `).join('')}
                     </select>
                 </div>
                 
-                <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px; position: relative;">
                     <label style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">Categoria:</label>
-                    <select 
-                        id="filtro-categoria-pedidos-servico"
-                        multiple
-                        onchange="aplicarFiltrosPedidosServico()"
-                        style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; min-width: 200px;">
-                        <option value="todas" ${!filtroCategoria || filtroCategoria.length === 0 ? 'selected' : ''}>Todas as categorias</option>
-                        ${categoriasOrdenadas.map(cat => {
-                            const catNormalizada = cat.toLowerCase().replace(/\s+/g, '-');
-                            const selecionada = filtroCategoria && filtroCategoria.includes(catNormalizada);
-                            return `<option value="${catNormalizada}" ${selecionada ? 'selected' : ''}>${cat}</option>`;
-                        }).join('')}
-                    </select>
+                    <div style="position: relative;">
+                        <button 
+                            type="button"
+                            id="btn-filtro-categoria-servico"
+                            onclick="toggleDropdownCategoriasServico()"
+                            style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; min-width: 200px; background: white; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                            <span id="texto-filtro-categoria-servico">${filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.length > 0 ? `${filtroCategoria.length} categoria(s) selecionada(s)` : 'Todas as categorias'}</span>
+                            <span style="margin-left: 8px;">▼</span>
+                        </button>
+                        <div 
+                            id="dropdown-categorias-servico"
+                            style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; max-height: 300px; overflow-y: auto; min-width: 250px; padding: 8px;">
+                            <div style="padding: 8px; border-bottom: 1px solid #eee;">
+                                <label style="display: flex; align-items: center; cursor: pointer; font-weight: 600;">
+                                    <input 
+                                        type="checkbox" 
+                                        class="checkbox-categoria-todas-servico"
+                                        onchange="toggleTodasCategoriasServico(this)"
+                                        style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
+                                        ${!filtroCategoria || filtroCategoria.length === 0 ? 'checked' : ''}>
+                                    <span>Todas as categorias</span>
+                                </label>
+                            </div>
+                            ${categoriasOrdenadas.map(cat => {
+                                const catId = cat.toLowerCase().replace(/\s+/g, '-');
+                                const isSelected = filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.includes(catId);
+                                return `
+                                    <div style="padding: 8px; border-bottom: 1px solid #f0f0f0;">
+                                        <label style="display: flex; align-items: center; cursor: pointer;">
+                                            <input 
+                                                type="checkbox" 
+                                                class="checkbox-categoria-servico"
+                                                value="${catId}"
+                                                data-categoria="${cat}"
+                                                onchange="atualizarFiltroCategoriasServico()"
+                                                style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
+                                                ${isSelected ? 'checked' : ''}>
+                                            <span>${cat}</span>
+                                        </label>
+                                    </div>
+                                `;
+                            }).join('')}
+                            <div style="padding: 8px; border-top: 1px solid #eee;">
+                                <label style="display: flex; align-items: center; cursor: pointer;">
+                                    <input 
+                                        type="checkbox" 
+                                        class="checkbox-categoria-servico"
+                                        value="sem-categoria"
+                                        data-categoria="Sem categoria"
+                                        onchange="atualizarFiltroCategoriasServico()"
+                                        style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
+                                        ${filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.includes('sem-categoria') ? 'checked' : ''}>
+                                    <span>Sem categoria</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 
                 <div style="display: flex; align-items: center; gap: 8px;">
@@ -1516,12 +1563,12 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                             id="agrupar-por-categoria-servico"
                             ${agruparPorCategoria ? 'checked' : ''}
                             onchange="aplicarFiltrosPedidosServico()"
-                            style="margin-right: 4px;">
+                            style="margin-right: 6px;">
                         Agrupar por categoria
                     </label>
                 </div>
                 
-                ${(filtroStatus && filtroStatus !== 'todos') || (filtroCategoria && filtroCategoria.length > 0) ? `
+                ${(filtroStatus || (filtroCategoria && filtroCategoria.length > 0) || agruparPorCategoria) ? `
                     <button 
                         type="button"
                         class="btn btn-secondary"
@@ -1532,46 +1579,88 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                 ` : ''}
             </div>
             
-            <!-- Accordion de meses -->
-            <div class="accordion" id="accordion-pedidos-servico">
+            <!-- Accordion de Meses -->
+            <div style="margin-bottom: 24px;">
                 ${mesesOrdenados.map(mes => {
-                    const pedidosMes = pedidosPorMes[mes.value] || [];
-                    const totalMes = pedidosMes.length;
-                    const totalValorMes = pedidosMes.reduce((sum, p) => {
-                        const dadosPedido = typeof p.dados_pedido === 'string' ? JSON.parse(p.dados_pedido) : (p.dados_pedido || p);
-                        return sum + parseFloat(dadosPedido.total || p.total || 0);
-                    }, 0);
-                    
-                    if (totalMes === 0 && filtroStatus && filtroStatus !== 'todos') {
-                        return '';
-                    }
-                    
-                    const mesId = `mes-${mes.value.replace(/-/g, '')}-servico`;
-                    const isOpen = !filtroStatus || filtroStatus === 'todos';
-                    
+                    const grupo = pedidosPorMes[mes.value] || { pedidos: [], total: 0, quantidade: 0 };
+                    const mesId = `mes-${mes.value.replace('-', '')}-servico`;
                     return `
-                        <div class="accordion-item">
-                                <div class="accordion-header" onclick="toggleAccordionServico('${mesId}')">
-                                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                                    <div>
-                                        <span class="accordion-icon" id="icon-${mesId}">${isOpen ? '▼' : '▶'}</span>
-                                        <strong>${mes.label}</strong>
-                                        <span style="margin-left: 12px; color: var(--color-gray-medium); font-size: 14px;">
-                                            (${totalMes} pedido${totalMes !== 1 ? 's' : ''} - ${window.Components ? window.Components.formatarValor(totalValorMes) : 'R$ 0,00'})
-                                        </span>
+                        <div style="border: 1px solid var(--color-border); border-radius: 8px; margin-bottom: 12px; overflow: hidden;">
+                    <button 
+                        type="button" 
+                                class="mes-accordion-header"
+                                onclick="toggleMesServico('${mesId}')"
+                                style="width: 100%; padding: 16px; background-color: var(--color-gray-light); border: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; text-align: left; font-size: 16px; font-weight: 600; color: var(--color-gray-dark);">
+                                <span>${mes.label}</span>
+                                <span id="icon-${mesId}" style="font-size: 20px; transition: transform 0.3s;">▼</span>
+                    </button>
+                            <div id="${mesId}" class="mes-accordion-content" style="display: none; padding: 0;">
+                                ${grupo.pedidos.length > 0 ? (window.Components && typeof window.Components.renderizarTabelaPedidos === 'function' ? window.Components.renderizarTabelaPedidos(grupo.pedidos, agruparPorCategoria) : '<div style="padding: 20px; text-align: center; color: #dc3545;">Erro: Components não disponível. Recarregue a página.</div>') : '<div style="padding: 20px; text-align: center; color: var(--color-gray-medium);">Nenhum pedido neste mês</div>'}
+                                ${grupo.pedidos.length > 0 ? `
+                                    <div style="padding: 16px; background-color: #f8f9fa; border-top: 1px solid var(--color-border);">
+                                        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; margin-bottom: 16px;">
+                                            <button 
+                                                type="button" 
+                                                class="btn btn-primary"
+                                                onclick="emitirNotasMesServico('${mes.value}')"
+                                                style="padding: 12px 32px; font-size: 16px; font-weight: 600;">
+                                                📄 Emitir Nota
+                                            </button>
+                                            <button 
+                                                type="button"
+                                                class="btn btn-secondary"
+                                                onclick="emitirNFTeste('auto')"
+                                                style="padding: 8px 16px; font-size: 12px; font-weight: 400; opacity: 0.7;">
+                                                🧪 Emitir Teste
+                                            </button>
+                                        </div>
+                                        <!-- Área de Logs -->
+                                        <div id="logs-mes-${mes.value.replace('-', '')}-servico" style="margin-top: 16px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;">
+                                            <div 
+                                                id="logs-header-${mes.value.replace('-', '')}-servico"
+                                                onclick="toggleLogsMesServico('${mes.value}')"
+                                                style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #f8f9fa; cursor: pointer; border-bottom: 1px solid #ddd; user-select: none;"
+                                                onmouseover="this.style.background='#e9ecef'"
+                                                onmouseout="this.style.background='#f8f9fa'">
+                                                <div style="display: flex; align-items: center; gap: 8px;">
+                                                    <span id="logs-icon-${mes.value.replace('-', '')}-servico" style="font-size: 12px; transition: transform 0.2s;">▼</span>
+                                                    <div style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">Log do Processo</div>
+                                                </div>
+                                                <button 
+                                                    type="button"
+                                                    onclick="event.stopPropagation(); carregarLogsMesServico('${mes.value}')"
+                                                    style="padding: 4px 12px; font-size: 12px; background: white; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
+                                                    onmouseover="this.style.background='#e9ecef'"
+                                                    onmouseout="this.style.background='white'">
+                                                    Atualizar
+                                                </button>
+                                            </div>
+                                            <div 
+                                                id="conteudo-logs-mes-${mes.value.replace('-', '')}-servico" 
+                                                style="display: none; background-color: #1e1e1e; color: #d4d4d4; padding: 12px; font-family: 'Courier New', monospace; font-size: 12px; max-height: 300px; overflow-y: auto; min-height: 60px;">
+                                                <div style="color: #888;">Carregando logs...</div>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
-                            <div class="accordion-content" id="${mesId}" style="display: ${isOpen ? 'block' : 'none'};">
-                                ${totalMes > 0 ? window.Components.renderizarTabelaPedidos(pedidosMes, agruparPorCategoria) : `
-                                    <div class="empty-state">
-                                        <p>Nenhum pedido encontrado para este mês.</p>
-                                    </div>
-                                `}
+                                ` : ''}
                             </div>
                         </div>
                     `;
                 }).join('')}
+            </div>
+            
+            <!-- Resumo -->
+            <div style="background-color: var(--color-gray-light); padding: 20px; border-radius: 8px; margin-bottom: 24px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+                    <div>
+                        <div style="font-size: 14px; color: var(--color-gray-medium); margin-bottom: 4px;">Total de Pedidos</div>
+                        <div style="font-size: 24px; font-weight: 600; color: var(--color-gray-dark);">${pedidos.length}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 14px; color: var(--color-gray-medium); margin-bottom: 4px;">Valor Total</div>
+                        <div style="font-size: 24px; font-weight: 600; color: var(--color-orange);">${window.Components ? window.Components.formatarValor(pedidos.reduce((sum, p) => sum + parseFloat(p.total || 0), 0)) : 'R$ 0,00'}</div>
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -1659,12 +1748,156 @@ async function atualizarDadosWooCommerceServico() {
     }
 }
 
+/**
+ * Toggle dropdown de categorias para serviço
+ */
+function toggleDropdownCategoriasServico() {
+    const dropdown = document.getElementById('dropdown-categorias-servico');
+    if (dropdown) {
+        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
+/**
+ * Toggle todas as categorias para serviço
+ */
+function toggleTodasCategoriasServico(checkbox) {
+    const checkboxes = document.querySelectorAll('.checkbox-categoria-servico');
+    checkboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+    atualizarFiltroCategoriasServico();
+}
+
+/**
+ * Atualiza filtro de categorias para serviço
+ */
+function atualizarFiltroCategoriasServico() {
+    const checkboxes = document.querySelectorAll('.checkbox-categoria-servico:checked');
+    const categorias = Array.from(checkboxes).map(cb => cb.value);
+    
+    const textoEl = document.getElementById('texto-filtro-categoria-servico');
+    if (textoEl) {
+        textoEl.textContent = categorias.length > 0 ? `${categorias.length} categoria(s) selecionada(s)` : 'Todas as categorias';
+    }
+    
+    const todasCheckbox = document.querySelector('.checkbox-categoria-todas-servico');
+    if (todasCheckbox) {
+        todasCheckbox.checked = categorias.length === 0;
+    }
+    
+    aplicarFiltrosPedidosServico();
+}
+
+/**
+ * Toggle mês no accordion para serviço
+ */
+function toggleMesServico(mesId) {
+    const content = document.getElementById(mesId);
+    const icon = document.getElementById(`icon-${mesId}`);
+    
+    if (!content || !icon) return;
+    
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        icon.textContent = '▼';
+    } else {
+        content.style.display = 'none';
+        icon.textContent = '▶';
+    }
+}
+
+/**
+ * Toggle logs do mês para serviço
+ */
+function toggleLogsMesServico(mes) {
+    const mesId = mes.replace('-', '');
+    const conteudo = document.getElementById(`conteudo-logs-mes-${mesId}-servico`);
+    const icon = document.getElementById(`logs-icon-${mesId}-servico`);
+    
+    if (conteudo && icon) {
+        const isOpen = conteudo.style.display !== 'none';
+        conteudo.style.display = isOpen ? 'none' : 'block';
+        icon.textContent = isOpen ? '▼' : '▲';
+    }
+}
+
+/**
+ * Carrega logs do mês para serviço
+ */
+function carregarLogsMesServico(mes) {
+    const mesId = mes.replace('-', '');
+    const conteudo = document.getElementById(`conteudo-logs-mes-${mesId}-servico`);
+    
+    if (!conteudo) return;
+    
+    conteudo.innerHTML = '<div style="color: #888;">Carregando logs...</div>';
+    
+    // Buscar logs do estado ou API
+    const logs = estadoAtual.logsMes?.[mes] || [];
+    
+    if (logs.length === 0) {
+        conteudo.innerHTML = '<div style="color: #888;">Nenhum log disponível para este mês.</div>';
+    } else {
+        conteudo.innerHTML = logs.map(log => {
+            const cor = log.tipo === 'erro' ? '#f44336' : log.tipo === 'sucesso' ? '#4caf50' : '#ff9800';
+            return `<div style="color: ${cor}; margin-bottom: 4px;">${log.mensagem}</div>`;
+        }).join('');
+    }
+}
+
+/**
+ * Emite notas do mês para serviço (apenas NFSe)
+ */
+async function emitirNotasMesServico(mes) {
+    console.log('Emitir Notas de Serviço para mês:', mes);
+    
+    // Buscar pedidos do mês que são de serviço
+    const pedidosMes = estadoAtual.dados.todosPedidosServico?.filter(pedido => {
+        const dataPedido = new Date(pedido.date_created);
+        const [ano, mesNum] = mes.split('-');
+        return dataPedido.getFullYear() === parseInt(ano) && 
+               (dataPedido.getMonth() + 1) === parseInt(mesNum);
+    }) || [];
+    
+    if (pedidosMes.length === 0) {
+        alert('Nenhum pedido de serviço encontrado para este mês.');
+        return;
+    }
+    
+    const pedidoIds = pedidosMes.map(p => String(p.id || p.number));
+    
+    if (!confirm(`Deseja emitir ${pedidoIds.length} nota(s) de serviço (NFSe) para o mês ${mes}?`)) {
+        return;
+    }
+    
+    try {
+        const resultado = await API.NFSe.emitirLote(pedidoIds, 'servico');
+        
+        if (resultado.sucesso) {
+            alert(`✓ ${resultado.sucesso} nota(s) emitida(s) com sucesso!`);
+            await carregarPedidosServico();
+        } else {
+            alert(`✗ Erro ao emitir notas: ${resultado.erro || 'Erro desconhecido'}`);
+        }
+    } catch (error) {
+        alert(`✗ Erro ao emitir notas: ${error.message}`);
+    }
+}
+
 // Expor funções globalmente
 window.aplicarFiltrosPedidosServico = aplicarFiltrosPedidosServico;
 window.limparFiltrosPedidosServico = limparFiltrosPedidosServico;
 window.atualizarDadosWooCommerceServico = atualizarDadosWooCommerceServico;
 window.carregarPedidosServico = carregarPedidosServico;
 window.toggleAccordionServico = toggleAccordionServico;
+window.toggleDropdownCategoriasServico = toggleDropdownCategoriasServico;
+window.toggleTodasCategoriasServico = toggleTodasCategoriasServico;
+window.atualizarFiltroCategoriasServico = atualizarFiltroCategoriasServico;
+window.toggleMesServico = toggleMesServico;
+window.toggleLogsMesServico = toggleLogsMesServico;
+window.carregarLogsMesServico = carregarLogsMesServico;
+window.emitirNotasMesServico = emitirNotasMesServico;
 
 /**
  * Sincroniza pedidos de serviço do WooCommerce em background
