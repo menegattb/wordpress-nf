@@ -1010,14 +1010,40 @@ function agruparPedidosPorMes(pedidos) {
     const grupos = {};
     
     pedidos.forEach(pedido => {
-        // Extrair dados do pedido (pode estar em dados_pedido)
-        const dadosPedido = typeof pedido.dados_pedido === 'string' 
-            ? JSON.parse(pedido.dados_pedido) 
-            : pedido.dados_pedido || pedido;
+        // Pedidos podem estar em formato WooCommerce (já convertidos) ou formato banco
+        let dateCreated = null;
+        let total = 0;
         
-        const data = new Date(dadosPedido.date_created || pedido.date_created || pedido.created_at);
-        const mesAno = `${data.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}`;
-        const chave = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`;
+        // Tentar obter data de diferentes formas
+        if (pedido.date_created) {
+            dateCreated = new Date(pedido.date_created);
+        } else if (pedido.created_at) {
+            dateCreated = new Date(pedido.created_at);
+        } else if (pedido.dados_pedido) {
+            const dadosPedido = typeof pedido.dados_pedido === 'string' 
+                ? JSON.parse(pedido.dados_pedido) 
+                : pedido.dados_pedido;
+            dateCreated = new Date(dadosPedido.date_created || dadosPedido.data_pedido || dadosPedido.data_emissao || dadosPedido.created_at);
+        }
+        
+        // Se não conseguiu obter data válida, pular este pedido
+        if (!dateCreated || isNaN(dateCreated.getTime())) {
+            console.warn('Pedido sem data válida:', pedido);
+            return;
+        }
+        
+        const mesAno = `${dateCreated.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}`;
+        const chave = `${dateCreated.getFullYear()}-${String(dateCreated.getMonth() + 1).padStart(2, '0')}`;
+        
+        // Obter total
+        if (pedido.total) {
+            total = parseFloat(pedido.total) || 0;
+        } else if (pedido.dados_pedido) {
+            const dadosPedido = typeof pedido.dados_pedido === 'string' 
+                ? JSON.parse(pedido.dados_pedido) 
+                : pedido.dados_pedido;
+            total = parseFloat(dadosPedido.total || dadosPedido.valor_total || dadosPedido.valor_servicos || 0);
+        }
         
         if (!grupos[chave]) {
             grupos[chave] = {
@@ -1030,7 +1056,7 @@ function agruparPedidosPorMes(pedidos) {
         
         grupos[chave].pedidos.push(pedido);
         grupos[chave].quantidade++;
-        grupos[chave].total += parseFloat(dadosPedido.total || pedido.total || 0);
+        grupos[chave].total += total;
     });
     
     return grupos;
