@@ -187,9 +187,32 @@ async function listarNotasNFeParaDownload(req, res) {
       return caminhoXml && nota.status_focus === 'autorizado';
     });
     
+    // Agrupar notas por mês para facilitar download por mês
+    const notasPorMes = {};
+    notasComXml.forEach(nota => {
+      const dataNota = new Date(nota.created_at);
+      const mes = String(dataNota.getMonth() + 1).padStart(2, '0');
+      const ano = dataNota.getFullYear();
+      const chaveMes = `${ano}-${mes}`;
+      
+      if (!notasPorMes[chaveMes]) {
+        notasPorMes[chaveMes] = {
+          mes: mes,
+          ano: ano,
+          mesFormatado: `${mes}/${ano}`,
+          total: 0,
+          notas: []
+        };
+      }
+      
+      notasPorMes[chaveMes].total++;
+      notasPorMes[chaveMes].notas.push(nota);
+    });
+    
     logger.info('✅ [BACKUPS] Notas NFe listadas para download', {
       total_encontradas: notas.length,
-      total_com_xml: notasComXml.length
+      total_com_xml: notasComXml.length,
+      meses_encontrados: Object.keys(notasPorMes).length
     });
     
     return res.json({
@@ -209,6 +232,7 @@ async function listarNotasNFeParaDownload(req, res) {
       }),
       total: notasComXml.length,
       meses: mesesBusca,
+      notasPorMes: Object.values(notasPorMes),
       periodo: {
         inicio: dataInicio,
         fim: dataFim

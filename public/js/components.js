@@ -1112,17 +1112,39 @@ function renderBackups(backups, mensagem = null, notasNFe = []) {
                 </div>
                 
                 <div style="margin-top: 16px;">
-                    <a 
-                        href="/api/backups/baixar-todos-xmls" 
-                        class="btn btn-success"
-                        style="text-decoration: none; display: inline-block;"
-                        download
-                    >
-                        📦 Baixar Todos os XMLs em ZIP
-                    </a>
-                    <span style="margin-left: 12px; color: var(--color-gray-medium); font-size: 13px;">
-                        (${notasArray.length} arquivo(s))
-                    </span>
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+                        <a 
+                            href="/api/backups/baixar-todos-xmls" 
+                            class="btn btn-success"
+                            style="text-decoration: none; display: inline-block;"
+                            download
+                        >
+                            📦 Baixar Todos os XMLs em ZIP
+                        </a>
+                        <span style="color: var(--color-gray-medium); font-size: 13px;">
+                            (${notasArray.length} arquivo(s))
+                        </span>
+                    </div>
+                    
+                    ${notasNFe?.notasPorMes && notasNFe.notasPorMes.length > 1 ? `
+                        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #dee2e6;">
+                            <p style="margin: 0 0 12px 0; color: var(--color-gray-dark); font-weight: 600; font-size: 14px;">
+                                📅 Baixar por mês:
+                            </p>
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                                ${notasNFe.notasPorMes.map(mesInfo => `
+                                    <a 
+                                        href="/api/backups/baixar-todos-xmls?mes=${mesInfo.mes}&ano=${mesInfo.ano}" 
+                                        class="btn btn-sm btn-outline-primary"
+                                        style="text-decoration: none; display: inline-block;"
+                                        download
+                                    >
+                                        📥 ${mesInfo.mesFormatado} (${mesInfo.total} arquivo${mesInfo.total !== 1 ? 's' : ''})
+                                    </a>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
                 </div>
             </div>
         `;

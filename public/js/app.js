@@ -4820,10 +4820,12 @@ async function carregarBackups() {
             const backups = resultado.backups || [];
             const notasNFe = resultadoNotas.sucesso ? (resultadoNotas.notas || []) : [];
             const mesesBusca = resultadoNotas.sucesso ? (resultadoNotas.meses || []) : [];
+            const notasPorMes = resultadoNotas.sucesso ? (resultadoNotas.notasPorMes || []) : [];
             // Passar informações adicionais junto com o array de notas
             const notasComInfo = {
                 notas: notasNFe,
-                meses: mesesBusca
+                meses: mesesBusca,
+                notasPorMes: notasPorMes
             };
             const html = window.Components.renderBackups(backups, resultado.mensagem, notasComInfo);
             contentArea.innerHTML = html;
