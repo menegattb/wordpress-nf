@@ -1045,16 +1045,8 @@ function renderBackups(backups, mensagem = null, notasNFe = []) {
     const mesesBusca = notasNFe?.meses || [];
     
     if (notasArray && notasArray.length > 0) {
-        // Determinar título baseado nos meses buscados
+        // Título fixo sem meses
         let tituloSecao = 'Notas Individuais';
-        if (mesesBusca && mesesBusca.length > 0) {
-            tituloSecao = `Notas Individuais (${mesesBusca.join(' e ')})`;
-        } else {
-            const dataAtual = new Date();
-            const mesAtual = String(dataAtual.getMonth() + 1).padStart(2, '0');
-            const anoAtual = dataAtual.getFullYear();
-            tituloSecao = `Notas Individuais (${mesAtual}/${anoAtual})`;
-        }
         
         let notasRows = '';
         notasArray.forEach(nota => {
