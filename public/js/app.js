@@ -1413,15 +1413,6 @@ function toggleAccordionServico(mesId) {
         icon.textContent = isOpen ? '▶' : '▼';
     }
 }
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-        </div>
-    `;
-    
-    contentArea.innerHTML = html;
-}
 
 /**
  * Aplica filtros na aba de pedidos serviço
