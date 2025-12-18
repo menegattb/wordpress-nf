@@ -2539,13 +2539,21 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
     }
     
     // Extrair todas as categorias únicas de TODOS os pedidos (para o filtro mostrar todas as opções)
+    // Para produtos, mostrar apenas categorias relacionadas a "Livro Faíscas"
     const todasCategorias = new Set();
     pedidos.forEach(pedido => {
         const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
         if (categorias.length > 0) {
-            categorias.forEach(cat => todasCategorias.add(cat));
-        } else {
-            todasCategorias.add('Sem categoria');
+            categorias.forEach(cat => {
+                // Incluir apenas categorias relacionadas a "Livro Faíscas"
+                const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                const isLivroFaiscas = (catLower.includes('livro') && catLower.includes('faiscas')) ||
+                                       catLower === 'livro faiscas' ||
+                                       catLower.includes('livro faiscas');
+                if (isLivroFaiscas) {
+                    todasCategorias.add(cat);
+                }
+            });
         }
     });
     const categoriasOrdenadas = Array.from(todasCategorias).sort();
