@@ -1494,6 +1494,7 @@ window.aplicarFiltrosPedidosServico = aplicarFiltrosPedidosServico;
 window.limparFiltrosPedidosServico = limparFiltrosPedidosServico;
 window.atualizarDadosWooCommerceServico = atualizarDadosWooCommerceServico;
 window.carregarPedidosServico = carregarPedidosServico;
+window.toggleAccordionServico = toggleAccordionServico;
 
 /**
  * Sincroniza pedidos de serviço do WooCommerce em background
