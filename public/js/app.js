@@ -1130,7 +1130,7 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
     }
     
     // Obter pedido_id - pode estar em diferentes lugares
-    const pedidoId = pedidoBanco.pedido_id || pedidoBanco._id_banco || pedidoBanco.id || pedidoBanco.number;
+    const pedidoId = pedidoBanco.pedido_id || dados.pedido_id || pedidoBanco._id_banco || pedidoBanco.id || pedidoBanco.number;
     
     // Obter data de criação - tentar múltiplas fontes
     let dateCreated = dados.data_pedido || dados.data_emissao || dados.date_created || pedidoBanco.created_at || pedidoBanco.date_created;
@@ -1155,11 +1155,11 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
     
     // Converter para formato WooCommerce
     const pedidoConvertido = {
-        id: parseInt(pedidoId) || pedidoId,
-        number: pedidoId,
+        id: parseInt(pedidoId) || pedidoId || '-',
+        number: pedidoId || '-',
         date_created: dateCreated,
         total: parseFloat(totalPedido) || 0, // Manter como número para cálculos
-        status: pedidoBanco.status || dados.status_wc || 'pending',
+        status: pedidoBanco.status || dados.status_wc || pedidoBanco._status_emissao || 'pending',
         billing: {
             first_name: firstName,
             last_name: lastName,
@@ -1190,7 +1190,12 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
         payment_method: dados.forma_pagamento || 'pix',
         customer_note: dados.observacoes || '',
         // Preservar dados_pedido original para referência
-        dados_pedido: dados
+        dados_pedido: dados,
+        // Preservar campos do backend
+        _id_banco: pedidoBanco._id_banco || pedidoBanco.id,
+        _status_emissao: pedidoBanco._status_emissao || pedidoBanco.status,
+        _tem_nfse: pedidoBanco._tem_nfse,
+        _tem_nfe: pedidoBanco._tem_nfe
     };
     
     return pedidoConvertido;
