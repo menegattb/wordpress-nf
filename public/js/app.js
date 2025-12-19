@@ -2627,7 +2627,7 @@ function iniciarPollingNotas() {
                     estadoAtual.dados.notasEnviadas = notas;
                     const tabelaArea = document.getElementById('tabela-notas-enviadas');
                     if (tabelaArea) {
-                        tabelaArea.innerHTML = window.Components.renderizarTabelaNotasEnviadas(notas);
+                        tabelaArea.innerHTML = await window.Components.renderizarTabelaNotasEnviadas(notas);
                     }
                     
                     // Atualizar paginação se necessário

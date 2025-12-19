@@ -357,7 +357,17 @@ function renderizarTabelaRequisicoes(requisicoes) {
 /**
  * Renderiza tabela de notas enviadas (NFSe e NFe)
  */
-function renderizarTabelaNotasEnviadas(notas) {
+async function renderizarTabelaNotasEnviadas(notas) {
+    // Buscar ambiente atual da configuração
+    let ambienteAtualConfig = 'homologacao';
+    try {
+        const configResult = await API.Config.buscarFocus();
+        if (configResult && configResult.sucesso && configResult.dados) {
+            ambienteAtualConfig = configResult.dados.ambiente || 'homologacao';
+        }
+    } catch (e) {
+        console.warn('Erro ao buscar configuração de ambiente:', e);
+    }
     if (!notas || notas.length === 0) {
         return `
             <div class="empty-state">
@@ -456,7 +466,8 @@ function renderizarTabelaNotasEnviadas(notas) {
         // Garantir que valor seja numérico
         valor = parseFloat(valor) || 0;
         
-        const ambiente = nota.ambiente || 'homologacao';
+        // Usar ambiente da nota se disponível, senão usar ambiente atual da configuração
+        const ambiente = nota.ambiente || ambienteAtualConfig;
         const ambienteLabel = ambiente === 'producao' ? 'Produção' : 'Homologação';
         const ambienteBadge = ambiente === 'producao' 
             ? '<span class="badge badge-success">Produção</span>' 
