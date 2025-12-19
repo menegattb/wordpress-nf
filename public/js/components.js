@@ -634,7 +634,7 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                             <button 
                                 type="button"
                                 class="btn btn-primary"
-                                onclick="emitirNFSePedido('${id}')"
+                                onclick="event.stopPropagation(); event.preventDefault(); emitirNFSePedido('${id}'); return false;"
                                 style="padding: 4px 12px; font-size: 12px; white-space: nowrap;">
                                 Emitir NF
                             </button>
@@ -687,7 +687,7 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                         <button 
                             type="button"
                             class="btn btn-primary"
-                            onclick="emitirNFSePedido('${id}')"
+                            onclick="event.stopPropagation(); event.preventDefault(); emitirNFSePedido('${id}'); return false;"
                             style="padding: 4px 12px; font-size: 12px; white-space: nowrap;">
                             Emitir NF
                         </button>
