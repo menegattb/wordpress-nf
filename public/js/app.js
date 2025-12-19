@@ -107,15 +107,19 @@ document.addEventListener('DOMContentLoaded', async () => {
  * Inicializa navegação da sidebar
  */
 function inicializarNavegacao() {
+    console.log('🔧 Inicializando navegação...');
     const sidebarItems = document.querySelectorAll('.sidebar-item');
+    console.log('🔧 Itens encontrados:', sidebarItems.length);
     sidebarItems.forEach(item => {
         item.addEventListener('click', () => {
             const secao = item.dataset.section;
+            console.log('🔧 Clicou em:', secao);
             if (secao) {
                 carregarSecao(secao);
             }
         });
     });
+    console.log('✅ Navegação inicializada!');
 }
 
 /**
