@@ -3885,6 +3885,16 @@ async function emitirNotasMes(mes) {
         // Recarregar dados
         await carregarPedidos();
         
+        // Garantir que o accordion do mês está expandido
+        const mesId = `mes-${mes.replace('-', '')}`;
+        const mesContent = document.getElementById(mesId);
+        if (mesContent && mesContent.style.display === 'none') {
+            toggleMes(mesId);
+        }
+        
+        // Aguardar um pouco para garantir que os logs foram salvos no banco
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
         // Carregar logs automaticamente após emissão
         // Expandir accordion de logs e carregar
         toggleLogsMes(mes);
@@ -3893,6 +3903,16 @@ async function emitirNotasMes(mes) {
     } catch (error) {
         console.error('Erro ao emitir notas:', error);
         adicionarLogMes(mes, 'erro', `Erro: ${error.message}`);
+        
+        // Garantir que o accordion do mês está expandido
+        const mesId = `mes-${mes.replace('-', '')}`;
+        const mesContent = document.getElementById(mesId);
+        if (mesContent && mesContent.style.display === 'none') {
+            toggleMes(mesId);
+        }
+        
+        // Aguardar um pouco antes de carregar logs
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Mesmo em caso de erro, tentar carregar logs
         toggleLogsMes(mes);
