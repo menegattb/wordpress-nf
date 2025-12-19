@@ -630,6 +630,15 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                         <td>${total}</td>
                         <td>${statusLabel}</td>
                         <td>${categoria}</td>
+                        <td>
+                            <button 
+                                type="button"
+                                class="btn btn-primary"
+                                onclick="emitirNFSePedido('${id}')"
+                                style="padding: 4px 12px; font-size: 12px; white-space: nowrap;">
+                                Emitir NF
+                            </button>
+                        </td>
                     </tr>
                 `;
             });
@@ -674,6 +683,15 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                     <td>${total}</td>
                     <td>${statusLabel}</td>
                     <td>${categoriaTexto}</td>
+                    <td>
+                        <button 
+                            type="button"
+                            class="btn btn-primary"
+                            onclick="emitirNFSePedido('${id}')"
+                            style="padding: 4px 12px; font-size: 12px; white-space: nowrap;">
+                            Emitir NF
+                        </button>
+                    </td>
                 </tr>
             `;
         });
@@ -703,6 +721,7 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                         <th>Total</th>
                         <th>Status</th>
                         <th>Categoria</th>
+                        <th style="width: 120px;">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
