@@ -412,7 +412,7 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
         
         return item;
       })(),
-      codigo_tributario_municipio: configFiscal?.codigo_tributario_municipio || '101',
+      codigo_tributario_municipio: String(configFiscal?.codigo_tributario_municipio || '101'),
       codigo_municipio: configEmitente.codigo_municipio,
       aliquota: parseFloat((configFiscal?.aliquota || 3).toFixed(2)),
       iss_retido: false
@@ -428,20 +428,6 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     nfse.prestador.inscricao_municipal = configEmitente.inscricao_municipal.replace(/\D/g, ''); // Remover formatação (pontos, traços)
   }
   
-  // Validação final antes de retornar
-  // Garantir que não há campos proibidos no objeto servico
-  const camposProibidos = ['base_calculo', 'valor_iss', 'base_calculo_iss'];
-  camposProibidos.forEach(campo => {
-    if (nfse.servico[campo] !== undefined) {
-      logger.warn(`Campo proibido encontrado e removido: ${campo}`, {
-        service: 'mapeador',
-        action: 'mapeamento',
-        pedido_id: dadosPedido.pedido_id
-      });
-      delete nfse.servico[campo];
-    }
-  });
-  
   // Validar formato final do item_lista_servico
   if (!/^\d{5}$/.test(nfse.servico.item_lista_servico)) {
     throw new Error(`Item da lista de serviço deve ter exatamente 5 dígitos. Valor: ${nfse.servico.item_lista_servico}`);
@@ -452,30 +438,33 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     throw new Error(`Valor dos serviços deve ser maior que zero. Valor: ${nfse.servico.valor_servicos}`);
   }
   
+  // Sanitizar payload antes de retornar
+  const nfseSanitizado = sanitizarPayloadNFSe(nfse);
+  
   // Log do item da lista de serviço para debug
-  const itemListaServicoFinal = nfse.servico.item_lista_servico;
+  const itemListaServicoFinal = nfseSanitizado.servico.item_lista_servico;
   logger.mapping('Mapeamento para Focus NFSe concluído', {
     pedido_id: dadosPedido.pedido_id,
     tomador: tomador.razao_social,
     valor_servicos: valorServicosFinal,
     item_lista_servico: itemListaServicoFinal,
     item_lista_servico_original: configFiscal?.item_lista_servico || '70101',
-    aliquota: nfse.servico.aliquota,
-    codigo_tributario: nfse.servico.codigo_tributario_municipio
+    aliquota: nfseSanitizado.servico.aliquota,
+    codigo_tributario: nfseSanitizado.servico.codigo_tributario_municipio
   });
   
   // Log final do payload antes de retornar
   logger.mapping('Payload NFSe validado e pronto para envio', {
     pedido_id: dadosPedido.pedido_id,
-    item_lista_servico: nfse.servico.item_lista_servico,
-    valor_servicos: nfse.servico.valor_servicos,
-    aliquota: nfse.servico.aliquota,
-    tem_base_calculo: nfse.servico.base_calculo !== undefined,
-    tem_valor_iss: nfse.servico.valor_iss !== undefined,
-    servico_keys: Object.keys(nfse.servico)
+    item_lista_servico: nfseSanitizado.servico.item_lista_servico,
+    valor_servicos: nfseSanitizado.servico.valor_servicos,
+    aliquota: nfseSanitizado.servico.aliquota,
+    tem_base_calculo: nfseSanitizado.servico.base_calculo !== undefined,
+    tem_valor_iss: nfseSanitizado.servico.valor_iss !== undefined,
+    servico_keys: Object.keys(nfseSanitizado.servico)
   });
   
-  return nfse;
+  return nfseSanitizado;
 }
 
 /**

@@ -43,7 +43,7 @@ module.exports = {
     inscricao_estadual: process.env.EMITENTE_INSCRICAO_ESTADUAL || '128257946'
   },
   fiscal: {
-    item_lista_servico: process.env.ITEM_LISTA_SERVICO || '70101', // Removido zero à esquerda (5 caracteres)
+    item_lista_servico: process.env.ITEM_LISTA_SERVICO || '1401', // Código padrão para serviços de psicologia (5 dígitos)
     codigo_tributario_municipio: process.env.CODIGO_TRIBUTARIO_MUNICIPIO || '101',
     aliquota: parseFloat(process.env.ALIQUOTA || '3'),
     tomador_municipio: process.env.TOMADOR_MUNICIPIO || process.env.PRESTADOR_MUNICIPIO || '2607208',

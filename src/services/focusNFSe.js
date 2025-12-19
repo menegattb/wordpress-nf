@@ -152,6 +152,24 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
     const nfseData = await mapearPedidoParaNFSe(dadosPedido, configEmitente, fiscalConfig, tipoNF);
     const tempoMapeamento = Date.now() - inicioMapeamento;
     
+    // Validação final: verificar que não há campos proibidos no payload
+    const camposProibidos = ['base_calculo', 'valor_iss', 'base_calculo_iss', 'valor_deducao', 'deducao', 'reducao'];
+    const camposEncontrados = camposProibidos.filter(campo => 
+      nfseData.servico && nfseData.servico[campo] !== undefined
+    );
+    
+    if (camposEncontrados.length > 0) {
+      logger.error('ERRO CRÍTICO: Campos proibidos encontrados no payload após sanitização', {
+        service: 'focusNFe',
+        action: 'emitir_nfse',
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        campos_proibidos: camposEncontrados,
+        servico_keys: Object.keys(nfseData.servico || {})
+      });
+      throw new Error(`Campos proibidos encontrados no payload: ${camposEncontrados.join(', ')}. Isso não deveria acontecer após sanitização.`);
+    }
+    
     logger.focusNFe('emitir_nfse', 'Dados mapeados com sucesso', {
       pedido_id: dadosPedido.pedido_id,
       referencia,
@@ -162,7 +180,8 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
         tomador_cpf_cnpj: nfseData.tomador?.cpf || nfseData.tomador?.cnpj,
         valor_servicos: nfseData.servico?.valor_servicos,
         item_lista_servico: nfseData.servico?.item_lista_servico,
-        discriminacao: nfseData.servico?.discriminacao?.substring(0, 50) + (nfseData.servico?.discriminacao?.length > 50 ? '...' : '')
+        discriminacao: nfseData.servico?.discriminacao?.substring(0, 50) + (nfseData.servico?.discriminacao?.length > 50 ? '...' : ''),
+        servico_keys: Object.keys(nfseData.servico || {})
       }
     });
     
