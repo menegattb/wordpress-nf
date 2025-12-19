@@ -1763,6 +1763,24 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
     `;
     
     contentArea.innerHTML = html;
+    
+    // Carregar logs automaticamente para todos os meses após renderizar
+    setTimeout(() => {
+        mesesOrdenados.forEach(mes => {
+            const mesId = mes.value.replace('-', '');
+            const logsContainer = document.getElementById(`conteudo-logs-mes-${mesId}-servico`);
+            if (logsContainer) {
+                // Garantir que está visível
+                logsContainer.style.display = 'block';
+                const icon = document.getElementById(`logs-icon-${mesId}-servico`);
+                if (icon) {
+                    icon.textContent = '▲';
+                }
+                // Carregar logs
+                carregarLogsMesServico(mes.value);
+            }
+        });
+    }, 500); // Pequeno delay para garantir que o DOM está pronto
 }
 
 /**
