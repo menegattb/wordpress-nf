@@ -89,6 +89,8 @@ function createApiClient() {
  * Emite uma NFSe
  */
 async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipoNF = 'servico') {
+  const inicioEmissao = Date.now(); // Marcar início da emissão para calcular tempo total
+  
   // Obter configuração da API antes do try para estar disponível no catch
   let apiConfig = null;
   try {
