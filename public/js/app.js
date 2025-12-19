@@ -1720,7 +1720,7 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                                                 onmouseover="this.style.background='#e9ecef'"
                                                 onmouseout="this.style.background='#f8f9fa'">
                                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                                    <span id="logs-icon-${mes.value.replace('-', '')}-servico" style="font-size: 12px; transition: transform 0.2s;">▼</span>
+                                                    <span id="logs-icon-${mes.value.replace('-', '')}-servico" style="font-size: 12px; transition: transform 0.2s;">▲</span>
                                                     <div style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">Log do Processo</div>
                                                 </div>
                                                 <button 
@@ -1734,7 +1734,7 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                                             </div>
                                             <div 
                                                 id="conteudo-logs-mes-${mes.value.replace('-', '')}-servico" 
-                                                style="display: none; background-color: #1e1e1e; color: #d4d4d4; padding: 12px; font-family: 'Courier New', monospace; font-size: 12px; max-height: 300px; overflow-y: auto; min-height: 60px;">
+                                                style="display: block; background-color: #1e1e1e; color: #d4d4d4; padding: 12px; font-family: 'Courier New', monospace; font-size: 12px; max-height: 300px; overflow-y: auto; min-height: 60px;">
                                                 <div style="color: #888;">Carregando logs...</div>
                                             </div>
                                         </div>
@@ -1912,10 +1912,12 @@ function toggleLogsMesServico(mes) {
     const conteudo = document.getElementById(`conteudo-logs-mes-${mesId}-servico`);
     const icon = document.getElementById(`logs-icon-${mesId}-servico`);
     
+    // Logs sempre ficam abertos na aba de serviço - apenas recarrega ao clicar
     if (conteudo && icon) {
-        const isOpen = conteudo.style.display !== 'none';
-        conteudo.style.display = isOpen ? 'none' : 'block';
-        icon.textContent = isOpen ? '▼' : '▲';
+        conteudo.style.display = 'block';
+        icon.textContent = '▲';
+        // Recarregar logs automaticamente ao clicar
+        carregarLogsMesServico(mes);
     }
 }
 
