@@ -2215,6 +2215,7 @@ window.toggleMesServico = toggleMesServico;
 window.toggleLogsMesServico = toggleLogsMesServico;
 window.carregarLogsMesServico = carregarLogsMesServico;
 window.emitirNotasMesServico = emitirNotasMesServico;
+window.adicionarLogMesServico = adicionarLogMesServico;
 
 /**
  * Sincroniza pedidos de serviço do WooCommerce em background
