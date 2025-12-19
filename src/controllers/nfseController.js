@@ -14,56 +14,87 @@ const configFiscal = config.fiscal;
 /**
  * Emite NFSe em lote para múltiplos pedidos
  */
+/**
+ * Emite NFSe em lote para múltiplos pedidos
+ */
 async function emitirNFSeLote(req, res) {
   try {
     const { pedido_ids, tipo_nf } = req.body;
-    
+
     if (!pedido_ids || !Array.isArray(pedido_ids) || pedido_ids.length === 0) {
       return res.status(400).json({
         sucesso: false,
         erro: 'Lista de pedido_ids é obrigatória'
       });
     }
-    
+
+    // Default para servico se não especificado
     const tipoNF = tipo_nf || 'servico';
+
+    // SE FOR SERVIÇO, USAR PROCESSO ASSÍNCRONO
+    if (tipoNF === 'servico') {
+      const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+
+      logger.info(`Recebida solicitação de emissão assíncrona`, {
+        job_id: jobId,
+        total_pedidos: pedido_ids.length,
+        tipo_nf: tipoNF
+      });
+
+      // Retornar IMEDIATAMENTE (Fire and Forget)
+      res.status(202).json({
+        sucesso: true,
+        processamento_async: true,
+        job_id: jobId,
+        mensagem: 'Processamento iniciado em segundo plano',
+        total_pedidos: pedido_ids.length
+      });
+
+      // Iniciar processamento em background (sem await)
+      processarLoteAsync(pedido_ids, tipoNF, jobId).catch(err => {
+        logger.error(`Erro fatal no processamento do job ${jobId}`, {
+          erro: err.message,
+          stack: err.stack
+        });
+      });
+
+      return;
+    }
+
+    // SE FOR PRODUTO (NFe), MANTER FLUXO SÍNCRONO ORIGINAL
     const inicioLote = Date.now();
-    const tipoNotaLabel = tipoNF === 'produto' ? 'NFe' : 'NFSe';
-    
+    const tipoNotaLabel = 'NFe';
+
     logger.info(`Iniciando emissão em lote de ${tipoNotaLabel}`, {
       total: pedido_ids.length,
       tipo_nf: tipoNF,
       timestamp: new Date().toISOString(),
-      pedido_ids: pedido_ids.slice(0, 10) // Log apenas primeiros 10 para não poluir
+      pedido_ids: pedido_ids.slice(0, 10)
     });
-    
+
     const resultados = [];
     let sucesso = 0;
     let erros = 0;
-    
+
     for (let i = 0; i < pedido_ids.length; i++) {
       const pedidoId = pedido_ids[i];
       const inicioPedido = Date.now();
-      
+
       try {
         logger.info(`[${i + 1}/${pedido_ids.length}] Processando pedido`, {
           pedido_id: pedidoId,
           tipo_nf: tipoNF,
           progresso: `${i + 1}/${pedido_ids.length}`
         });
-        
-        // Buscar pedido do WooCommerce
-        logger.debug(`[${i + 1}/${pedido_ids.length}] Buscando pedido no WooCommerce`, {
-          pedido_id: pedidoId
-        });
-        
+
         const resultadoWC = await buscarPedidoWC(pedidoId);
-        
+
         if (!resultadoWC.sucesso) {
           logger.warn(`[${i + 1}/${pedido_ids.length}] Erro ao buscar pedido do WooCommerce`, {
             pedido_id: pedidoId,
             erro: resultadoWC.erro || 'Erro desconhecido'
           });
-          
+
           resultados.push({
             pedido_id: pedidoId,
             sucesso: false,
@@ -72,55 +103,28 @@ async function emitirNFSeLote(req, res) {
           erros++;
           continue;
         }
-        
-        logger.debug(`[${i + 1}/${pedido_ids.length}] Pedido encontrado no WooCommerce`, {
-          pedido_id: pedidoId,
-          cliente: resultadoWC.pedido?.billing?.first_name + ' ' + resultadoWC.pedido?.billing?.last_name || resultadoWC.pedido?.billing?.company,
-          valor_total: resultadoWC.pedido?.total
-        });
-        
-        // Mapear para formato interno
-        logger.debug(`[${i + 1}/${pedido_ids.length}] Mapeando dados do pedido`, {
-          pedido_id: pedidoId
-        });
-        
+
         const pedidoMapeado = mapearWooCommerceParaPedido(resultadoWC.pedido);
-        
-        logger.debug(`[${i + 1}/${pedido_ids.length}] Dados mapeados com sucesso`, {
-          pedido_id: pedidoId,
-          cliente: pedidoMapeado.nome || pedidoMapeado.razao_social,
-          valor_total: pedidoMapeado.valor_total || pedidoMapeado.valor_servicos,
-          quantidade_servicos: pedidoMapeado.servicos?.length || 0
-        });
-        
-        // Emitir NFSe ou NFe baseado no tipo_nf
+
         logger.info(`[${i + 1}/${pedido_ids.length}] Emitindo ${tipoNotaLabel}`, {
           pedido_id: pedidoId,
           tipo_nf: tipoNF,
           cliente: pedidoMapeado.nome || pedidoMapeado.razao_social
         });
-        
-        let resultadoNFSe;
-        
-        if (tipoNF === 'produto') {
-          // Emitir NFe de produto
-          resultadoNFSe = await emitirNFe(pedidoMapeado, config.emitente, configFiscal);
-        } else {
-          // Emitir NFSe de serviço
-          resultadoNFSe = await emitirNFSe(pedidoMapeado, config.emitente, configFiscal, tipoNF);
-        }
-        
+
+        // Sempre emitir NFe pois tipoNF !== 'servico' aqui
+        const resultadoNFSe = await emitirNFe(pedidoMapeado, config.emitente, configFiscal);
+
         const tempoPedido = Date.now() - inicioPedido;
-        
+
         if (resultadoNFSe.sucesso) {
           logger.info(`[${i + 1}/${pedido_ids.length}] ${tipoNotaLabel} emitida com sucesso`, {
             pedido_id: pedidoId,
             referencia: resultadoNFSe.referencia,
             status: resultadoNFSe.status,
-            numero_rps: resultadoNFSe.numero || resultadoNFSe.chave_nfse || null,
             tempo_processamento_ms: tempoPedido
           });
-          
+
           resultados.push({
             pedido_id: pedidoId,
             sucesso: true,
@@ -133,10 +137,9 @@ async function emitirNFSeLote(req, res) {
           logger.error(`[${i + 1}/${pedido_ids.length}] Erro ao emitir ${tipoNotaLabel}`, {
             pedido_id: pedidoId,
             erro: resultadoNFSe.erro || 'Erro desconhecido',
-            referencia: resultadoNFSe.referencia || null,
             tempo_processamento_ms: tempoPedido
           });
-          
+
           resultados.push({
             pedido_id: pedidoId,
             sucesso: false,
@@ -144,17 +147,17 @@ async function emitirNFSeLote(req, res) {
           });
           erros++;
         }
-        
+
       } catch (error) {
         const tempoPedido = Date.now() - inicioPedido;
-        
+
         logger.error(`[${i + 1}/${pedido_ids.length}] Erro ao processar pedido`, {
           pedido_id: pedidoId,
           error: error.message,
           stack: error.stack,
           tempo_processamento_ms: tempoPedido
         });
-        
+
         resultados.push({
           pedido_id: pedidoId,
           sucesso: false,
@@ -163,19 +166,17 @@ async function emitirNFSeLote(req, res) {
         erros++;
       }
     }
-    
+
     const tempoTotal = Date.now() - inicioLote;
-    
+
     logger.info('Emissão em lote concluída', {
       total: pedido_ids.length,
       sucesso,
       erros,
       tempo_total_ms: tempoTotal,
-      tempo_medio_ms: pedido_ids.length > 0 ? Math.round(tempoTotal / pedido_ids.length) : 0,
-      taxa_sucesso: pedido_ids.length > 0 ? ((sucesso / pedido_ids.length) * 100).toFixed(2) + '%' : '0%',
       tipo_nf: tipoNF
     });
-    
+
     res.json({
       sucesso: true,
       total: pedido_ids.length,
@@ -184,12 +185,12 @@ async function emitirNFSeLote(req, res) {
       erros: erros,
       resultados: resultados
     });
-    
+
   } catch (error) {
     logger.error('Erro ao emitir NFSe em lote', {
       error: error.message
     });
-    
+
     res.status(500).json({
       sucesso: false,
       erro: error.message
@@ -198,16 +199,119 @@ async function emitirNFSeLote(req, res) {
 }
 
 /**
+ * Função auxiliar para processar lote em background
+ */
+async function processarLoteAsync(pedido_ids, tipoNF, jobId) {
+  const inicioLote = Date.now();
+  const tipoNotaLabel = 'NFSe'; // Async é apenas para serviço
+  let sucesso = 0;
+  let erros = 0;
+
+  logger.info(`[JOB:${jobId}] Iniciando processamento background`, {
+    job_id: jobId,
+    total: pedido_ids.length,
+    tipo: tipoNotaLabel
+  });
+
+  for (let i = 0; i < pedido_ids.length; i++) {
+    const pedidoId = pedido_ids[i];
+    const progresso = `[${i + 1}/${pedido_ids.length}]`;
+
+    // Pequeno delay para não sobrecarregar API e permitir logging visível
+    if (i > 0) await new Promise(r => setTimeout(r, 1000));
+
+    try {
+      logger.info(`${progresso} Processando pedido ${pedidoId}`, {
+        job_id: jobId,
+        pedido_id: pedidoId,
+        progresso_atual: i + 1,
+        total: pedido_ids.length,
+        status_job: 'em_andamento'
+      });
+
+      const resultadoWC = await buscarPedidoWC(pedidoId);
+
+      if (!resultadoWC.sucesso) {
+        logger.error(`${progresso} Erro ao buscar pedido ${pedidoId}`, {
+          job_id: jobId,
+          pedido_id: pedidoId,
+          erro: resultadoWC.erro
+        });
+        erros++;
+        continue;
+      }
+
+      const pedidoMapeado = mapearWooCommerceParaPedido(resultadoWC.pedido);
+
+      // Emitir NFSe
+      const resultadoNFSe = await emitirNFSe(pedidoMapeado, config.emitente, configFiscal, tipoNF);
+
+      if (resultadoNFSe.sucesso) {
+        logger.info(`${progresso} NFSe emitida com sucesso para ${pedidoId}`, {
+          job_id: jobId,
+          pedido_id: pedidoId,
+          referencia: resultadoNFSe.referencia,
+          status: resultadoNFSe.status,
+          numero: resultadoNFSe.numero || resultadoNFSe.chave_nfse
+        });
+        sucesso++;
+
+        // Atualizar status no banco local se possível
+        if (pedidoMapeado.id || pedidoId) {
+          try {
+            // Tentar atualizar status no banco se a função estiver disponível
+            if (atualizarPedido) {
+              await atualizarPedido(pedidoId, {
+                status: 'emitida',
+                referencia: resultadoNFSe.referencia
+              });
+            }
+          } catch (e) {
+            logger.warn(`Erro ao atualizar status local do pedido ${pedidoId}`, { erro: e.message });
+          }
+        }
+      } else {
+        logger.error(`${progresso} Falha na emissão para ${pedidoId}`, {
+          job_id: jobId,
+          pedido_id: pedidoId,
+          erro: resultadoNFSe.erro
+        });
+        erros++;
+      }
+
+    } catch (error) {
+      logger.error(`${progresso} Erro não tratado para ${pedidoId}`, {
+        job_id: jobId,
+        pedido_id: pedidoId,
+        erro: error.message,
+        stack: error.stack
+      });
+      erros++;
+    }
+  }
+
+  const tempoTotal = Date.now() - inicioLote;
+  logger.info(`[JOB:${jobId}] Processamento concluído`, {
+    job_id: jobId,
+    total: pedido_ids.length,
+    sucessos: sucesso,
+    erros: erros,
+    tempo_ms: tempoTotal,
+    status_job: 'concluido'
+  });
+}
+
+/**
  * Emite NFSe manualmente
  */
 async function emitirNFSeManual(req, res) {
   try {
     const dadosPedido = req.body;
-    
+
     logger.focusNFe('emitir_nfse_manual', 'Emissão manual de NFSe solicitada', {
       pedido_id: dadosPedido.pedido_id
     });
-    
+
     // Validar documento
     if (dadosPedido.cpf_cnpj) {
       const documento = validarCPFCNPJ(dadosPedido.cpf_cnpj);
@@ -218,24 +322,24 @@ async function emitirNFSeManual(req, res) {
         });
       }
     }
-    
+
     // Emitir NFSe
     const resultado = await emitirNFSe(dadosPedido, config.emitente, configFiscal);
-    
+
     if (resultado.sucesso && dadosPedido.pedido_id_db) {
       // Atualizar status do pedido
       await atualizarPedido(dadosPedido.pedido_id_db, {
         status: resultado.status === 'autorizado' ? 'emitida' : 'processando'
       });
     }
-    
+
     res.json(resultado);
-    
+
   } catch (error) {
     logger.error('Erro ao emitir NFSe manual', {
       error: error.message
     });
-    
+
     res.status(500).json({
       erro: error.message
     });
@@ -248,19 +352,19 @@ async function emitirNFSeManual(req, res) {
 async function consultarStatus(req, res) {
   try {
     const { referencia } = req.params;
-    
+
     logger.focusNFe('consultar_status', 'Consulta de status solicitada', {
       referencia
     });
-    
+
     const resultado = await consultarNFSe(referencia);
     res.json(resultado);
-    
+
   } catch (error) {
     logger.error('Erro ao consultar status', {
       error: error.message
     });
-    
+
     res.status(500).json({
       erro: error.message
     });
@@ -274,25 +378,25 @@ async function cancelar(req, res) {
   try {
     const { referencia } = req.params;
     const { justificativa } = req.body;
-    
+
     if (!justificativa) {
       return res.status(400).json({
         erro: 'Justificativa é obrigatória'
       });
     }
-    
+
     logger.focusNFe('cancelar_nfse', 'Cancelamento solicitado', {
       referencia
     });
-    
+
     const resultado = await cancelarNFSe(referencia, justificativa);
     res.json(resultado);
-    
+
   } catch (error) {
     logger.error('Erro ao cancelar NFSe', {
       error: error.message
     });
-    
+
     res.status(500).json({
       erro: error.message
     });
@@ -306,27 +410,27 @@ async function emitirTeste(req, res) {
   try {
     const { tipo_nf } = req.body;
     const tipoNF = tipo_nf || 'servico';
-    
+
     logger.info('Emissão de teste solicitada', {
       tipo_nf: tipoNF
     });
-    
+
     // Dados de teste - nome varia a cada execução
     const nomesTeste = ['João Silva', 'Maria Santos', 'Pedro Oliveira', 'Ana Costa', 'Carlos Souza'];
     const nomeAleatorio = nomesTeste[Math.floor(Math.random() * nomesTeste.length)];
-    
+
     const dadosTeste = {
       pedido_id: `TEST-${Date.now()}`,
       data_pedido: new Date().toISOString(),
       data_emissao: new Date().toISOString().split('T')[0],
-      
+
       // Dados do cliente
       nome: nomeAleatorio,
       razao_social: nomeAleatorio,
       cpf_cnpj: '09762992911',
       email: 'teste@exemplo.com',
       telefone: '11999999999',
-      
+
       // Endereço (usando Ipojuca/PE para consistência)
       endereco: {
         rua: 'Rua Teste',
@@ -338,7 +442,7 @@ async function emitirTeste(req, res) {
         cep: '55590000',
         pais: 'Brasil'
       },
-      
+
       // Serviços/Produtos
       servicos: tipoNF === 'produto' ? [
         {
@@ -364,16 +468,16 @@ async function emitirTeste(req, res) {
           discriminacao: 'Serviço de Teste'
         }
       ],
-      
+
       valor_total: 100.00,
       valor_servicos: tipoNF === 'servico' ? 100.00 : undefined,
       frete: 0,
       valor_desconto: 0,
       metodo_pagamento: 'teste'
     };
-    
+
     let resultado;
-    
+
     if (tipoNF === 'produto') {
       // Emitir NFe de produto
       resultado = await emitirNFe(dadosTeste, config.emitente, configFiscal);
@@ -381,14 +485,14 @@ async function emitirTeste(req, res) {
       // Emitir NFSe de serviço
       resultado = await emitirNFSe(dadosTeste, config.emitente, configFiscal, tipoNF);
     }
-    
+
     res.json(resultado);
-    
+
   } catch (error) {
     logger.error('Erro ao emitir NF de teste', {
       error: error.message
     });
-    
+
     res.status(500).json({
       sucesso: false,
       erro: error.message
@@ -402,10 +506,10 @@ async function emitirTeste(req, res) {
 async function buscarNotas(req, res) {
   try {
     const { referencia, chave, data_inicio, data_fim, status, tipo_nota, apenas_banco_local } = req.query;
-    
+
     // Se apenas_banco_local não for enviado ou for 'false', buscar na Focus NFe
     const apenasBancoLocal = apenas_banco_local === 'true' || apenas_banco_local === '1';
-    
+
     logger.info('🔍 [BUSCAR NOTAS] Busca de notas solicitada', {
       referencia,
       chave,
@@ -419,7 +523,7 @@ async function buscarNotas(req, res) {
       ip: req.ip,
       user_agent: req.get('user-agent')
     });
-    
+
     // Preparar filtros
     const filtros = {};
     if (referencia) filtros.referencia = referencia;
@@ -427,13 +531,13 @@ async function buscarNotas(req, res) {
     if (data_inicio) filtros.data_inicio = data_inicio;
     if (data_fim) filtros.data_fim = data_fim;
     if (status) filtros.status = status;
-    
+
     // Se apenas_banco_local for true, buscar apenas do banco local (notas recebidas via webhook)
     if (apenasBancoLocal) {
       logger.info('🔍 [BUSCAR NOTAS] Buscando apenas do banco local (notas recebidas via webhook)');
-      
+
       const promises = [];
-      
+
       // Buscar NFSe do banco local
       if (!tipo_nota || tipo_nota === 'nfse') {
         promises.push(
@@ -458,7 +562,7 @@ async function buscarNotas(req, res) {
             })
         );
       }
-      
+
       // Buscar NFe do banco local
       if (!tipo_nota || tipo_nota === 'nfe') {
         promises.push(
@@ -483,12 +587,12 @@ async function buscarNotas(req, res) {
             })
         );
       }
-      
+
       const resultados = await Promise.all(promises);
-      
+
       // Processar e combinar resultados (mesmo código de antes)
       const todasNotas = [];
-      
+
       resultados.forEach(({ tipo, origem, resultado }) => {
         if (resultado && resultado.sucesso) {
           const notas = resultado.dados || [];
@@ -501,11 +605,11 @@ async function buscarNotas(req, res) {
           });
         }
       });
-      
+
       // Remover duplicatas por referência
       const notasUnicas = [];
       const referenciasVistas = new Set();
-      
+
       todasNotas.forEach(nota => {
         const ref = nota.referencia || nota.ref;
         if (ref && !referenciasVistas.has(ref)) {
@@ -515,11 +619,11 @@ async function buscarNotas(req, res) {
           notasUnicas.push(nota);
         }
       });
-      
+
       logger.info('✅ [BUSCAR NOTAS] Busca do banco local concluída', {
         total_encontradas: notasUnicas.length
       });
-      
+
       return res.json({
         sucesso: true,
         dados: notasUnicas,
@@ -527,14 +631,14 @@ async function buscarNotas(req, res) {
         origem: 'banco_local'
       });
     }
-    
+
     // Buscar na Focus NFe e banco local em paralelo
     // IMPORTANTE: Buscar em AMBOS os ambientes (homologação E produção)
     const promises = [];
-    
+
     // Salvar ambiente atual
     const ambienteAtual = process.env.FOCUS_NFE_AMBIENTE || 'homologacao';
-    
+
     logger.info('🔍 [BUSCAR NOTAS] Iniciando buscas paralelas', {
       buscar_nfse: !tipo_nota || tipo_nota === 'nfse',
       buscar_nfe: !tipo_nota || tipo_nota === 'nfe',
@@ -542,11 +646,11 @@ async function buscarNotas(req, res) {
       ambiente_atual: ambienteAtual,
       buscando_ambos_ambientes: true
     });
-    
+
     // Buscar NFSe
     if (!tipo_nota || tipo_nota === 'nfse') {
       logger.info('🔍 [BUSCAR NOTAS] Buscando NFSe em ambos os ambientes...');
-      
+
       // Buscar NFSe em HOMOLOGAÇÃO
       const buscarNFSeHomologacao = () => {
         const ambienteOriginal = process.env.FOCUS_NFE_AMBIENTE;
@@ -578,7 +682,7 @@ async function buscarNotas(req, res) {
             return { tipo: 'nfse', origem: 'focus_nfe', ambiente: 'homologacao', resultado: { sucesso: false, erro: err.message, erro_completo: err.toString() } };
           });
       };
-      
+
       // Buscar NFSe em PRODUÇÃO
       const buscarNFSeProducao = () => {
         const ambienteOriginal = process.env.FOCUS_NFE_AMBIENTE;
@@ -610,7 +714,7 @@ async function buscarNotas(req, res) {
             return { tipo: 'nfse', origem: 'focus_nfe', ambiente: 'producao', resultado: { sucesso: false, erro: err.message, erro_completo: err.toString() } };
           });
       };
-      
+
       promises.push(
         buscarNFSeHomologacao(),
         buscarNFSeProducao(),
@@ -635,11 +739,11 @@ async function buscarNotas(req, res) {
           })
       );
     }
-    
+
     // Buscar NFe
     if (!tipo_nota || tipo_nota === 'nfe') {
       logger.info('🔍 [BUSCAR NOTAS] Buscando NFe em ambos os ambientes...');
-      
+
       // Buscar NFe em HOMOLOGAÇÃO
       const buscarNFeHomologacao = () => {
         const ambienteOriginal = process.env.FOCUS_NFE_AMBIENTE;
@@ -671,7 +775,7 @@ async function buscarNotas(req, res) {
             return { tipo: 'nfe', origem: 'focus_nfe', ambiente: 'homologacao', resultado: { sucesso: false, erro: err.message, erro_completo: err.toString() } };
           });
       };
-      
+
       // Buscar NFe em PRODUÇÃO
       const buscarNFeProducao = () => {
         const ambienteOriginal = process.env.FOCUS_NFE_AMBIENTE;
@@ -703,7 +807,7 @@ async function buscarNotas(req, res) {
             return { tipo: 'nfe', origem: 'focus_nfe', ambiente: 'producao', resultado: { sucesso: false, erro: err.message, erro_completo: err.toString() } };
           });
       };
-      
+
       promises.push(
         buscarNFeHomologacao(),
         buscarNFeProducao(),
@@ -728,7 +832,7 @@ async function buscarNotas(req, res) {
           })
       );
     }
-    
+
     const resultados = await Promise.allSettled(promises);
     logger.info('🔍 [BUSCAR NOTAS] Todas as buscas concluídas', {
       total_resultados: resultados.length,
@@ -752,7 +856,7 @@ async function buscarNotas(req, res) {
         }
       })
     });
-    
+
     // Converter resultados para formato esperado
     const resultadosProcessados = resultados.map(r => {
       if (r.status === 'fulfilled') {
@@ -772,10 +876,10 @@ async function buscarNotas(req, res) {
         };
       }
     });
-    
+
     // Processar e combinar resultados
     const todasNotas = [];
-    
+
     resultadosProcessados.forEach(({ tipo, origem, ambiente, resultado }) => {
       logger.debug('🔍 [BUSCAR NOTAS] Processando resultado', {
         tipo,
@@ -787,19 +891,19 @@ async function buscarNotas(req, res) {
         total_notas: resultado?.notas?.length || resultado?.dados?.length || 0,
         erro: resultado?.erro || null
       });
-      
+
       if (resultado && resultado.sucesso) {
-        const notas = origem === 'focus_nfe' 
+        const notas = origem === 'focus_nfe'
           ? (resultado.notas || [])
           : (resultado.dados || []);
-        
+
         logger.info('🔍 [BUSCAR NOTAS] Processando notas encontradas', {
           tipo,
           origem,
           ambiente,
           total_notas: notas.length
         });
-        
+
         notas.forEach(nota => {
           // Adicionar metadados
           const notaCompleta = {
@@ -809,22 +913,22 @@ async function buscarNotas(req, res) {
             referencia: nota.referencia || nota.ref || nota.referencia,
             ambiente: nota.ambiente || ambiente || resultado.ambiente || 'homologacao'
           };
-          
+
           // Aplicar filtro de referência se especificado
           if (referencia && notaCompleta.referencia && !notaCompleta.referencia.includes(referencia)) {
             return; // Pular esta nota
           }
-          
+
           // Aplicar filtro de chave se especificado
           if (chave) {
-            const chaveNota = notaCompleta.chave_nfe || notaCompleta.chave_nfse || 
-                             notaCompleta.chave || 
-                             (notaCompleta.dados_completos && (notaCompleta.dados_completos.chave_nfe || notaCompleta.dados_completos.chave_nfse));
+            const chaveNota = notaCompleta.chave_nfe || notaCompleta.chave_nfse ||
+              notaCompleta.chave ||
+              (notaCompleta.dados_completos && (notaCompleta.dados_completos.chave_nfe || notaCompleta.dados_completos.chave_nfse));
             if (!chaveNota || !chaveNota.includes(chave)) {
               return; // Pular esta nota
             }
           }
-          
+
           todasNotas.push(notaCompleta);
         });
       } else {
@@ -837,7 +941,7 @@ async function buscarNotas(req, res) {
         });
       }
     });
-    
+
     logger.info('🔍 [BUSCAR NOTAS] Total de notas coletadas antes de remover duplicatas', {
       total: todasNotas.length,
       por_origem: {
@@ -849,11 +953,11 @@ async function buscarNotas(req, res) {
         producao: todasNotas.filter(n => n.ambiente === 'producao').length
       }
     });
-    
+
     // Remover duplicatas (mesma referência e tipo)
     const notasUnicas = [];
     const visto = new Set();
-    
+
     todasNotas.forEach(nota => {
       const key = `${nota.tipo_nota}-${nota.referencia}`;
       if (!visto.has(key)) {
@@ -870,49 +974,49 @@ async function buscarNotas(req, res) {
         }
       }
     });
-    
+
     // Ordenar por data (mais recente primeiro)
     notasUnicas.sort((a, b) => {
       const dataA = new Date(a.created_at || a.data_emissao || 0);
       const dataB = new Date(b.created_at || b.data_emissao || 0);
       return dataB - dataA;
     });
-    
+
     // Contar por tipo e origem
     const estatisticas = {
       total: notasUnicas.length,
       por_tipo: {},
       por_origem: {}
     };
-    
+
     notasUnicas.forEach(nota => {
       const tipo = nota.tipo_nota || 'desconhecido';
       const origem = nota.origem || 'desconhecido';
-      
+
       estatisticas.por_tipo[tipo] = (estatisticas.por_tipo[tipo] || 0) + 1;
       estatisticas.por_origem[origem] = (estatisticas.por_origem[origem] || 0) + 1;
     });
-    
+
     logger.info('✅ [BUSCAR NOTAS] Busca de notas concluída com sucesso', {
       total_encontradas: notasUnicas.length,
       tipo_nota,
       filtros_aplicados: filtros,
       estatisticas
     });
-    
+
     res.json({
       sucesso: true,
       dados: notasUnicas,
       total: notasUnicas.length
     });
-    
+
   } catch (error) {
     logger.error('❌ [BUSCAR NOTAS] Erro ao buscar notas', {
       error: error.message,
       stack: error.stack,
       filtros_aplicados: req.query
     });
-    
+
     res.status(500).json({
       sucesso: false,
       erro: error.message
@@ -927,7 +1031,7 @@ async function cancelarNota(req, res) {
   try {
     const { referencia } = req.params;
     const { tipo_nota, justificativa, ambiente } = req.body;
-    
+
     logger.info('🚫 [CANCELAR NOTA] Cancelamento de nota solicitado', {
       referencia,
       tipo_nota,
@@ -936,7 +1040,7 @@ async function cancelarNota(req, res) {
       user_agent: req.get('user-agent'),
       timestamp: new Date().toISOString()
     });
-    
+
     if (!justificativa) {
       logger.warn('🚫 [CANCELAR NOTA] Justificativa não fornecida', {
         referencia,
@@ -946,7 +1050,7 @@ async function cancelarNota(req, res) {
         erro: 'Justificativa é obrigatória'
       });
     }
-    
+
     if (justificativa.length < 15) {
       logger.warn('🚫 [CANCELAR NOTA] Justificativa muito curta', {
         referencia,
@@ -957,7 +1061,7 @@ async function cancelarNota(req, res) {
         erro: 'Justificativa deve ter no mínimo 15 caracteres'
       });
     }
-    
+
     if (justificativa.length > 255) {
       logger.warn('🚫 [CANCELAR NOTA] Justificativa muito longa', {
         referencia,
@@ -968,7 +1072,7 @@ async function cancelarNota(req, res) {
         erro: 'Justificativa deve ter no máximo 255 caracteres'
       });
     }
-    
+
     if (!tipo_nota || (tipo_nota !== 'nfe' && tipo_nota !== 'nfse')) {
       logger.warn('🚫 [CANCELAR NOTA] Tipo de nota inválido', {
         referencia,
@@ -978,14 +1082,14 @@ async function cancelarNota(req, res) {
         erro: 'tipo_nota é obrigatório e deve ser "nfe" ou "nfse"'
       });
     }
-    
+
     logger.info('📤 [CANCELAR NOTA] Enviando requisição de cancelamento para Focus NFe', {
       referencia,
       tipo_nota,
       ambiente: ambiente || 'não especificado',
       justificativa_preview: justificativa.substring(0, 50) + (justificativa.length > 50 ? '...' : '')
     });
-    
+
     // Se ambiente foi especificado, usar temporariamente
     const ambienteOriginal = process.env.FOCUS_NFE_AMBIENTE;
     if (ambiente && (ambiente === 'homologacao' || ambiente === 'producao')) {
@@ -995,10 +1099,10 @@ async function cancelarNota(req, res) {
         ambiente_temporario: ambiente
       });
     }
-    
+
     let resultado;
     const inicioCancelamento = Date.now();
-    
+
     try {
       if (tipo_nota === 'nfe') {
         resultado = await cancelarNFe(referencia, justificativa);
@@ -1014,9 +1118,9 @@ async function cancelarNota(req, res) {
         });
       }
     }
-    
+
     const tempoDecorrido = Date.now() - inicioCancelamento;
-    
+
     if (resultado.sucesso) {
       logger.info('✅ [CANCELAR NOTA] Nota cancelada com sucesso', {
         referencia,
@@ -1038,9 +1142,9 @@ async function cancelarNota(req, res) {
         timestamp: new Date().toISOString()
       });
     }
-    
+
     res.json(resultado);
-    
+
   } catch (error) {
     logger.error('❌ [CANCELAR NOTA] Erro ao processar cancelamento', {
       referencia: req.params.referencia,
@@ -1049,7 +1153,7 @@ async function cancelarNota(req, res) {
       stack: error.stack,
       timestamp: new Date().toISOString()
     });
-    
+
     res.status(500).json({
       sucesso: false,
       erro: error.message
@@ -1064,7 +1168,7 @@ async function cancelarNotaPorChave(req, res) {
   try {
     const { chave_nfe } = req.params;
     const { justificativa, ambiente } = req.body;
-    
+
     logger.info('🚫 [CANCELAR POR CHAVE] Cancelamento de nota por chave solicitado', {
       chave_nfe,
       justificativa_length: justificativa?.length || 0,
@@ -1073,30 +1177,30 @@ async function cancelarNotaPorChave(req, res) {
       user_agent: req.get('user-agent'),
       timestamp: new Date().toISOString()
     });
-    
+
     if (!justificativa) {
       return res.status(400).json({
         erro: 'Justificativa é obrigatória'
       });
     }
-    
+
     if (justificativa.length < 15) {
       return res.status(400).json({
         erro: 'Justificativa deve ter no mínimo 15 caracteres'
       });
     }
-    
+
     if (justificativa.length > 255) {
       return res.status(400).json({
         erro: 'Justificativa deve ter no máximo 255 caracteres'
       });
     }
-    
+
     // Buscar nota pela chave no banco local
     let nota = await buscarNFePorChave(chave_nfe);
     let referencia = null;
     let ambienteNota = ambiente || 'producao'; // Padrão produção para notas por chave
-    
+
     if (nota) {
       referencia = nota.referencia;
       ambienteNota = nota.ambiente || ambienteNota;
@@ -1110,24 +1214,24 @@ async function cancelarNotaPorChave(req, res) {
       logger.info('🔍 [CANCELAR POR CHAVE] Nota não encontrada no banco local, buscando na Focus NFe', {
         chave_nfe
       });
-      
+
       // Tentar buscar em ambos os ambientes
       const ambientesParaBuscar = ambiente ? [ambiente] : ['producao', 'homologacao'];
-      
+
       for (const amb of ambientesParaBuscar) {
         try {
           const ambienteOriginal = process.env.FOCUS_NFE_AMBIENTE;
           process.env.FOCUS_NFE_AMBIENTE = amb;
-          
+
           logger.info(`🔍 [CANCELAR POR CHAVE] Buscando notas no ambiente ${amb}`, {
             chave_nfe,
             ambiente: amb
           });
-          
+
           // Listar todas as notas e procurar pela chave
           // Tentar buscar sem filtros primeiro, depois com filtros de data se necessário
           let resultado = await listarTodasNFe({});
-          
+
           logger.info(`🔍 [CANCELAR POR CHAVE] Resultado da busca no ambiente ${amb}`, {
             ambiente: amb,
             sucesso: resultado.sucesso,
@@ -1136,23 +1240,23 @@ async function cancelarNotaPorChave(req, res) {
             erro: resultado.erro || null,
             erro_status: resultado.erro_status || null
           });
-          
+
           // Se retornou 0 notas mas não houve erro, pode ser que a API não retornou todas
           // Tentar buscar com filtro de data (últimos 30 dias) para ver se retorna algo
           if (resultado.sucesso && (!resultado.notas || resultado.notas.length === 0) && !resultado.erro) {
             logger.info(`🔍 [CANCELAR POR CHAVE] Nenhuma nota encontrada, tentando buscar dos últimos 30 dias`, {
               ambiente: amb
             });
-            
+
             const dataFim = new Date();
             const dataInicio = new Date();
             dataInicio.setDate(dataInicio.getDate() - 30); // Últimos 30 dias
-            
+
             const resultadoComData = await listarTodasNFe({
               data_inicio: dataInicio.toISOString().split('T')[0],
               data_fim: dataFim.toISOString().split('T')[0]
             });
-            
+
             if (resultadoComData.sucesso && resultadoComData.notas && resultadoComData.notas.length > 0) {
               logger.info(`🔍 [CANCELAR POR CHAVE] Encontradas ${resultadoComData.notas.length} notas nos últimos 30 dias`, {
                 ambiente: amb
@@ -1160,7 +1264,7 @@ async function cancelarNotaPorChave(req, res) {
               resultado = resultadoComData;
             }
           }
-          
+
           if (resultado.sucesso && resultado.notas && resultado.notas.length > 0) {
             logger.debug(`🔍 [CANCELAR POR CHAVE] Procurando chave em ${resultado.notas.length} notas`, {
               ambiente: amb,
@@ -1170,12 +1274,12 @@ async function cancelarNotaPorChave(req, res) {
                 chave_nfe: n.chave_nfe || n.chave || n.dados_completos?.chave_nfe
               }))
             });
-            
+
             const notaEncontrada = resultado.notas.find(n => {
               const chaveNota = n.chave_nfe || n.chave || (n.dados_completos && n.dados_completos.chave_nfe);
               return chaveNota === chave_nfe;
             });
-            
+
             if (notaEncontrada) {
               referencia = notaEncontrada.referencia || notaEncontrada.ref;
               ambienteNota = amb;
@@ -1204,7 +1308,7 @@ async function cancelarNotaPorChave(req, res) {
               total_notas: resultado.notas?.length || 0
             });
           }
-          
+
           process.env.FOCUS_NFE_AMBIENTE = ambienteOriginal;
         } catch (error) {
           logger.error('❌ [CANCELAR POR CHAVE] Erro ao buscar no ambiente', {
@@ -1215,7 +1319,7 @@ async function cancelarNotaPorChave(req, res) {
         }
       }
     }
-    
+
     if (!referencia) {
       logger.error('❌ [CANCELAR POR CHAVE] Nota não encontrada', {
         chave_nfe,
@@ -1238,20 +1342,20 @@ async function cancelarNotaPorChave(req, res) {
         exemplo: 'DELETE /api/nfse/cancelar/PED-123 com body: { "tipo_nota": "nfe", "justificativa": "...", "ambiente": "producao" }'
       });
     }
-    
+
     // Agora cancelar usando a referência encontrada
     logger.info('📤 [CANCELAR POR CHAVE] Cancelando nota pela referência encontrada', {
       chave_nfe,
       referencia,
       ambiente: ambienteNota
     });
-    
+
     const ambienteOriginal = process.env.FOCUS_NFE_AMBIENTE;
     process.env.FOCUS_NFE_AMBIENTE = ambienteNota;
-    
+
     try {
       const resultado = await cancelarNFe(referencia, justificativa);
-      
+
       res.json({
         ...resultado,
         chave_nfe,
@@ -1261,14 +1365,14 @@ async function cancelarNotaPorChave(req, res) {
     } finally {
       process.env.FOCUS_NFE_AMBIENTE = ambienteOriginal;
     }
-    
+
   } catch (error) {
     logger.error('❌ [CANCELAR POR CHAVE] Erro ao processar cancelamento por chave', {
       error: error.message,
       stack: error.stack,
       chave_nfe: req.params.chave_nfe
     });
-    
+
     res.status(500).json({
       sucesso: false,
       erro: error.message
@@ -1283,23 +1387,23 @@ async function cancelarNotaPorChave(req, res) {
 async function sincronizarNotas(req, res) {
   try {
     const { tipo_nota } = req.query;
-    
+
     logger.info('🔄 [SINCRONIZAR] Iniciando sincronização de notas da Focus NFe', {
       tipo_nota: tipo_nota || 'ambos'
     });
-    
+
     const resultados = {
       nfse: { importadas: 0, erros: 0 },
       nfe: { importadas: 0, erros: 0 }
     };
-    
+
     // Sincronizar NFSe
     if (!tipo_nota || tipo_nota === 'nfse') {
       try {
         const notasFocus = await listarTodasNFSe();
         if (notasFocus.sucesso && notasFocus.dados) {
           const { salvarNFSe, buscarNFSePorReferencia } = require('../config/database');
-          
+
           for (const nota of notasFocus.dados) {
             try {
               // Verificar se já existe no banco local
@@ -1332,14 +1436,14 @@ async function sincronizarNotas(req, res) {
         logger.error('🔄 [SINCRONIZAR] Erro ao listar NFSe da Focus NFe', { erro: err.message });
       }
     }
-    
+
     // Sincronizar NFe
     if (!tipo_nota || tipo_nota === 'nfe') {
       try {
         const notasFocus = await listarTodasNFe();
         if (notasFocus.sucesso && notasFocus.dados) {
           const { salvarNFe, buscarNFePorReferencia } = require('../config/database');
-          
+
           for (const nota of notasFocus.dados) {
             try {
               // Verificar se já existe no banco local
@@ -1372,20 +1476,20 @@ async function sincronizarNotas(req, res) {
         logger.error('🔄 [SINCRONIZAR] Erro ao listar NFe da Focus NFe', { erro: err.message });
       }
     }
-    
+
     logger.info('🔄 [SINCRONIZAR] Sincronização concluída', resultados);
-    
+
     res.json({
       sucesso: true,
       mensagem: 'Sincronização concluída',
       resultados
     });
-    
+
   } catch (error) {
     logger.error('🔄 [SINCRONIZAR] Erro na sincronização', {
       error: error.message
     });
-    
+
     res.status(500).json({
       sucesso: false,
       erro: error.message
@@ -1399,17 +1503,17 @@ async function sincronizarNotas(req, res) {
 async function atualizarStatusPendentes(req, res) {
   try {
     logger.info('🔄 [ATUALIZAR STATUS] Iniciando atualização de notas pendentes');
-    
+
     const { listarNFSe: listarNFSeDB, listarNFe: listarNFeDB, atualizarNFSe, atualizarNFe } = require('../config/database');
-    
+
     let atualizadas = 0;
     let erros = 0;
     const detalhes = [];
-    
+
     // Buscar NFSe pendentes
     const nfsePendentes = await listarNFSeDB({ status_focus: 'processando_autorizacao', limite: 100 });
     const listaNFSe = nfsePendentes.dados || nfsePendentes || [];
-    
+
     for (const nota of listaNFSe) {
       try {
         const resultado = await consultarNFSe(nota.referencia);
@@ -1428,11 +1532,11 @@ async function atualizarStatusPendentes(req, res) {
         erros++;
       }
     }
-    
+
     // Buscar NFe pendentes
     const nfePendentes = await listarNFeDB({ status_focus: 'processando_autorizacao', limite: 100 });
     const listaNFe = nfePendentes.dados || nfePendentes || [];
-    
+
     for (const nota of listaNFe) {
       try {
         const resultado = await consultarNFe(nota.referencia);
@@ -1453,13 +1557,13 @@ async function atualizarStatusPendentes(req, res) {
         erros++;
       }
     }
-    
+
     logger.info('✅ [ATUALIZAR STATUS] Atualização concluída', {
       total_pendentes: listaNFSe.length + listaNFe.length,
       atualizadas,
       erros
     });
-    
+
     res.json({
       sucesso: true,
       mensagem: 'Status atualizados',
@@ -1468,7 +1572,7 @@ async function atualizarStatusPendentes(req, res) {
       erros,
       detalhes
     });
-    
+
   } catch (error) {
     logger.error('Erro ao atualizar status pendentes', { error: error.message });
     res.status(500).json({ sucesso: false, erro: error.message });

@@ -17,7 +17,7 @@ let estadoAtual = {
 async function verificarAutenticacao() {
     // LOGIN DESABILITADO - sempre retorna true
     return true;
-    
+
     // Código comentado - pode ser reativado depois
     // try {
     //     const response = await fetch('/api/auth/status', {
@@ -45,15 +45,15 @@ async function logout() {
     if (!confirm('Deseja realmente sair?')) {
         return;
     }
-    
+
     try {
         const response = await fetch('/api/auth/logout', {
             method: 'POST',
             credentials: 'include'
         });
-        
+
         const data = await response.json();
-        
+
         if (data.sucesso) {
             window.location.href = '/login';
         } else {
@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // if (!autenticado) {
     //     return; // Redirecionamento já foi feito
     // }
-    
+
     // Verificar se Components está disponível
     if (!window.Components) {
         console.error('Components não está disponível no DOMContentLoaded');
@@ -151,16 +151,16 @@ async function carregarSecao(secao) {
     if (estadoAtual.secaoAtiva === 'notas-enviadas') {
         pararPollingNotas();
     }
-    
+
     estadoAtual.secaoAtiva = secao;
     atualizarSidebarAtivo(secao);
-    
+
     const contentArea = document.getElementById('content-area');
     if (!contentArea) {
         console.error('content-area não encontrado');
         return;
     }
-    
+
     // Verificar se Components está disponível
     if (window.Components && window.Components.renderizarLoading) {
         contentArea.innerHTML = window.Components.renderizarLoading();
@@ -204,13 +204,13 @@ async function carregarSecao(secao) {
 async function carregarMeusDados() {
     const contentArea = document.getElementById('content-area');
     if (!contentArea) return;
-    
+
     if (window.Components && window.Components.renderizarLoading) {
         contentArea.innerHTML = window.Components.renderizarLoading();
     } else {
         contentArea.innerHTML = '<div class="content-section"><div class="loading-spinner"></div><p>Carregando...</p></div>';
     }
-    
+
     // Buscar dados do servidor
     let dadosEmitente = {
         cnpj: '51581345000117',
@@ -221,7 +221,7 @@ async function carregarMeusDados() {
         telefone: '',
         optante_simples_nacional: true
     };
-    
+
     try {
         const resultado = await API.Config.getEmitente();
         if (resultado.sucesso && resultado.dados) {
@@ -239,10 +239,10 @@ async function carregarMeusDados() {
         console.error('Erro ao carregar dados do emitente:', error);
         // Usar valores padrão em caso de erro
     }
-    
+
     // Salvar no estado
     estadoAtual.dados.meusDados = dadosEmitente;
-    
+
     const html = `
         <div class="content-section">
             <h2 class="section-title">Meus Dados</h2>
@@ -286,9 +286,9 @@ async function carregarMeusDados() {
             </form>
         </div>
     `;
-    
+
     contentArea.innerHTML = html;
-    
+
     // Adicionar event listener ao formulário
     const form = document.getElementById('form-meus-dados');
     if (form) {
@@ -297,7 +297,7 @@ async function carregarMeusDados() {
             await salvarMeusDados();
         });
     }
-    
+
     estadoAtual.dados.meusDados = dadosEmitente;
 }
 
@@ -314,7 +314,7 @@ async function salvarMeusDados() {
         telefone: document.getElementById('dados-telefone').value,
         optante_simples_nacional: document.getElementById('dados-simples-nacional').checked
     };
-    
+
     // Por enquanto, apenas mostra mensagem (implementar API depois)
     alert('Funcionalidade de salvar dados será implementada via API.\n\nDados coletados:\n' + JSON.stringify(dados, null, 2));
 }
@@ -340,13 +340,13 @@ function resetarMeusDados() {
 async function carregarConexaoWooCommerce() {
     const contentArea = document.getElementById('content-area');
     if (!contentArea) return;
-    
+
     if (window.Components && window.Components.renderizarLoading) {
         contentArea.innerHTML = window.Components.renderizarLoading();
     } else {
         contentArea.innerHTML = '<div class="content-section"><div class="loading-spinner"></div><p>Carregando...</p></div>';
     }
-    
+
     // Buscar configurações do WooCommerce
     const resultado = await API.Config.getWooCommerce();
     const dadosWC = resultado.sucesso ? resultado.dados : {
@@ -355,7 +355,7 @@ async function carregarConexaoWooCommerce() {
         consumer_key: 'ck_65ddd6aac5d176eef45ab47c031410b95e57f163',
         consumer_secret: 'cs_7f4c98b0ef10421de9774ee3410981a8f9308839'
     };
-    
+
     const html = `
         <div class="content-section">
             <h2 class="section-title">Conexão WooCommerce</h2>
@@ -440,9 +440,9 @@ async function carregarConexaoWooCommerce() {
             </div>
         </div>
     `;
-    
+
     contentArea.innerHTML = html;
-    
+
     // Adicionar event listener ao formulário
     const form = document.getElementById('form-woocommerce');
     if (form) {
@@ -451,7 +451,7 @@ async function carregarConexaoWooCommerce() {
             await salvarWooCommerce();
         });
     }
-    
+
     // Salvar dados originais para reset
     estadoAtual.dados.woocommerce = dadosWC;
 }
@@ -462,7 +462,7 @@ async function carregarConexaoWooCommerce() {
 function toggleWooCommerceVisibility(tipo) {
     const input = document.getElementById(`wc-consumer-${tipo}`);
     const btn = document.getElementById(`btn-toggle-wc-${tipo}`);
-    
+
     if (input.type === 'password') {
         input.type = 'text';
         btn.textContent = 'Ocultar';
@@ -482,13 +482,13 @@ async function salvarWooCommerce() {
         consumer_key: document.getElementById('wc-consumer-key').value.trim(),
         consumer_secret: document.getElementById('wc-consumer-secret').value.trim()
     };
-    
+
     // Validação básica
     if (!dados.url || !dados.api_url || !dados.consumer_key || !dados.consumer_secret) {
         alert('Por favor, preencha todos os campos obrigatórios.');
         return;
     }
-    
+
     // Por enquanto, apenas mostra mensagem (implementar API depois)
     alert('Funcionalidade de salvar configurações será implementada via API.\n\nDados coletados:\n' + JSON.stringify({
         url: dados.url,
@@ -504,7 +504,7 @@ async function salvarWooCommerce() {
 async function testarConexaoWooCommerce() {
     const resultadoDiv = document.getElementById('resultado-teste-woocommerce');
     if (!resultadoDiv) return;
-    
+
     resultadoDiv.style.display = 'block';
     resultadoDiv.innerHTML = `
         <div style="padding: 12px; background-color: #f8f9fa; border-radius: 4px;">
@@ -514,12 +514,12 @@ async function testarConexaoWooCommerce() {
             </div>
         </div>
     `;
-    
+
     try {
         // Testar conexão básica
         const teste = await API.WooCommerce.testarConexao();
         console.log('Resultado do teste:', teste);
-        
+
         let html = '';
         if (teste.sucesso) {
             // Testar buscar pedidos (sem filtro de status)
@@ -530,7 +530,7 @@ async function testarConexaoWooCommerce() {
             } catch (catError) {
                 categorias = { sucesso: false, erro: catError.message };
             }
-            
+
             html = `
                 <div style="padding: 16px; background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; color: #155724;">
                     <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #155724;">✓ Conexão bem-sucedida!</h4>
@@ -564,9 +564,9 @@ async function testarConexaoWooCommerce() {
                 </div>
             `;
         }
-        
+
         resultadoDiv.innerHTML = html;
-        
+
     } catch (error) {
         console.error('Erro ao testar conexão:', error);
         resultadoDiv.innerHTML = `
@@ -597,28 +597,28 @@ function resetarWooCommerce() {
 async function carregarConexaoFocus() {
     const contentArea = document.getElementById('content-area');
     if (!contentArea) return;
-    
+
     if (window.Components && window.Components.renderizarLoading) {
         contentArea.innerHTML = window.Components.renderizarLoading();
     } else {
         contentArea.innerHTML = '<div class="content-section"><div class="loading-spinner"></div><p>Carregando...</p></div>';
     }
-    
+
     // Buscar configurações do FocusNFe (sempre usar do banco)
     const resultado = await API.Config.getFocus();
-    
+
     const dadosFocus = resultado.sucesso ? resultado.dados : {
         ambiente: 'homologacao',
         token_homologacao: '4tn92XZHfM22uOfhtmbhb3dMvLk48ymA',
         token_producao: ''
     };
-    
+
     // Usar sempre o ambiente do banco (dadosFocus.ambiente)
     const ambienteAtual = dadosFocus.ambiente || 'homologacao';
-    
+
     const tokenHomologacao = dadosFocus.token_homologacao || '';
     const tokenProducao = dadosFocus.token_producao || '';
-    
+
     const html = `
         <div class="content-section">
             <h2 class="section-title">Conexão FocusNFe</h2>
@@ -682,9 +682,9 @@ async function carregarConexaoFocus() {
             </div>
         </div>
     `;
-    
+
     contentArea.innerHTML = html;
-    
+
     // Adicionar event listener ao formulário
     const form = document.getElementById('form-focus-config');
     if (form) {
@@ -693,7 +693,7 @@ async function carregarConexaoFocus() {
             await salvarFocusConfig();
         });
     }
-    
+
     // Salvar dados originais para reset
     estadoAtual.dados.focus = {
         ambiente: ambienteAtual,
@@ -709,9 +709,9 @@ async function carregarConexaoFocus() {
 function toggleTokenVisibility(tipo) {
     const input = document.getElementById(`token-${tipo}`);
     const btn = document.getElementById(`btn-toggle-${tipo}`);
-    
+
     if (!input || !btn) return;
-    
+
     if (input.type === 'password') {
         input.type = 'text';
         btn.textContent = 'Ocultar';
@@ -719,7 +719,7 @@ function toggleTokenVisibility(tipo) {
         input.type = 'password';
         btn.textContent = 'Mostrar';
     }
-    
+
     // Atualizar preview
     const previewId = `token-preview-${tipo}`;
     const preview = document.getElementById(previewId);
@@ -735,31 +735,31 @@ async function salvarFocusConfig() {
     const ambiente = document.getElementById('focus-ambiente').value;
     const tokenHomologacao = document.getElementById('token-homologacao').value.trim();
     const tokenProducao = document.getElementById('token-producao').value.trim();
-    
+
     // Validação básica
     if (ambiente === 'homologacao' && !tokenHomologacao) {
         alert('O token de homologação é obrigatório quando o ambiente está em homologação.');
         return;
     }
-    
+
     if (ambiente === 'producao' && !tokenProducao) {
         alert('O token de produção é obrigatório quando o ambiente está em produção.');
         return;
     }
-    
+
     // Mostrar loading
     const submitBtn = document.querySelector('#form-focus-config button[type="submit"]');
     const originalText = submitBtn.textContent;
     submitBtn.disabled = true;
     submitBtn.textContent = 'Salvando...';
-    
+
     try {
         const resultado = await API.Config.salvarFocus({
             ambiente: ambiente,
             token_homologacao: tokenHomologacao,
             token_producao: tokenProducao
         });
-        
+
         if (resultado.sucesso) {
             // Atualizar o select diretamente com o valor retornado
             const ambienteSalvo = resultado.dados?.ambiente || ambiente;
@@ -767,19 +767,19 @@ async function salvarFocusConfig() {
             if (selectAmbiente) {
                 selectAmbiente.value = ambienteSalvo;
             }
-            
+
             // Atualizar o texto "Ambiente atual" também
             const ambienteAtualText = document.querySelector('small strong');
             if (ambienteAtualText) {
                 ambienteAtualText.textContent = ambienteSalvo.toUpperCase();
             }
-            
+
             // Verificar se é configuração temporária (Vercel)
             if (resultado.dados?.temporario || resultado.aviso) {
                 // Mostrar instruções para configurar no dashboard Vercel
                 const instrucoes = resultado.instrucoes || [];
                 const mensagem = resultado.mensagem || 'Configuração temporária aplicada.';
-                
+
                 let mensagemCompleta = mensagem + '\n\n';
                 if (instrucoes.length > 0) {
                     mensagemCompleta += '📋 Instruções:\n\n';
@@ -787,14 +787,14 @@ async function salvarFocusConfig() {
                         mensagemCompleta += inst + '\n';
                     });
                 }
-                
+
                 mensagemCompleta += '\n⚠️ As configurações serão temporárias até você configurar no dashboard da Vercel.';
-                
+
                 alert(mensagemCompleta);
             } else {
                 alert('Configurações salvas com sucesso!');
             }
-            
+
             // Recarregar página para atualizar todos os dados
             await carregarConexaoFocus();
         } else {
@@ -830,9 +830,9 @@ async function resetarFocusConfig() {
 async function testarConexaoFocus() {
     const resultadoDiv = document.getElementById('resultado-teste-focus');
     const btnTestar = document.getElementById('btn-testar-conexao');
-    
+
     if (!resultadoDiv || !btnTestar) return;
-    
+
     // Mostrar loading
     resultadoDiv.style.display = 'block';
     resultadoDiv.innerHTML = `
@@ -843,13 +843,13 @@ async function testarConexaoFocus() {
             </div>
         </div>
     `;
-    
+
     btnTestar.disabled = true;
     btnTestar.textContent = 'Testando...';
-    
+
     try {
         const resultado = await API.Config.testarConexao();
-        
+
         let html = '';
         if (resultado.sucesso) {
             html = `
@@ -887,9 +887,9 @@ async function testarConexaoFocus() {
                 </div>
             `;
         }
-        
+
         resultadoDiv.innerHTML = html;
-        
+
     } catch (error) {
         console.error('Erro ao testar conexão:', error);
         resultadoDiv.innerHTML = `
@@ -909,7 +909,7 @@ async function testarConexaoFocus() {
  */
 async function carregarRequisicoes() {
     const contentArea = document.getElementById('content-area');
-    
+
     const html = `
         <div class="content-section">
             <h2 class="section-title">Pesquisa de Requisições</h2>
@@ -923,9 +923,9 @@ async function carregarRequisicoes() {
             <div id="paginacao-requisicoes"></div>
         </div>
     `;
-    
+
     contentArea.innerHTML = html;
-    
+
     // Carregar dados iniciais
     await buscarRequisicoes();
 }
@@ -936,23 +936,23 @@ async function carregarRequisicoes() {
 async function buscarRequisicoes() {
     const tabelaArea = document.getElementById('tabela-requisicoes');
     const paginacaoArea = document.getElementById('paginacao-requisicoes');
-    
+
     if (!tabelaArea) return;
-    
+
     tabelaArea.innerHTML = window.Components ? window.Components.renderizarLoading() : '<div class="loading-spinner"></div><p>Carregando...</p>';
-    
+
     const filtros = {
         limite: 50,
         offset: (estadoAtual.paginaAtual - 1) * 50,
         ...estadoAtual.filtros
     };
-    
+
     const resultado = await API.NFSe.listar(filtros);
-    
+
     if (resultado.sucesso) {
         estadoAtual.dados.requisicoes = Array.isArray(resultado.dados) ? resultado.dados : [];
         tabelaArea.innerHTML = window.Components ? window.Components.renderizarTabelaRequisicoes(estadoAtual.dados.requisicoes) : '<div>Erro: Components não disponível</div>';
-        
+
         // Calcular paginação (assumindo 50 itens por página)
         const totalPaginas = Math.ceil(estadoAtual.dados.requisicoes.length / 50) || 1;
         paginacaoArea.innerHTML = window.Components ? window.Components.renderizarPaginacao(
@@ -971,17 +971,17 @@ async function buscarRequisicoes() {
 function pesquisarRequisicoes() {
     const form = document.getElementById('form-pesquisa');
     if (!form) return;
-    
+
     const formData = new FormData(form);
     estadoAtual.filtros = {};
-    
+
     // Coletar filtros
     const referencia = formData.get('referencia');
     if (referencia) estadoAtual.filtros.referencia = referencia;
-    
+
     const numero = formData.get('numero');
     if (numero) estadoAtual.filtros.numero = numero;
-    
+
     estadoAtual.paginaAtual = 1;
     buscarRequisicoes();
 }
@@ -992,7 +992,7 @@ function pesquisarRequisicoes() {
 function limparFiltrosRequisicoes() {
     const form = document.getElementById('form-pesquisa');
     if (form) form.reset();
-    
+
     estadoAtual.filtros = {};
     estadoAtual.paginaAtual = 1;
     buscarRequisicoes();
@@ -1012,43 +1012,43 @@ function mudarPaginaRequisicoes(pagina) {
  */
 function agruparPedidosPorMes(pedidos) {
     const grupos = {};
-    
+
     pedidos.forEach(pedido => {
         // Pedidos podem estar em formato WooCommerce (já convertidos) ou formato banco
         let dateCreated = null;
         let total = 0;
-        
+
         // Tentar obter data de diferentes formas
         if (pedido.date_created) {
             dateCreated = new Date(pedido.date_created);
         } else if (pedido.created_at) {
             dateCreated = new Date(pedido.created_at);
         } else if (pedido.dados_pedido) {
-            const dadosPedido = typeof pedido.dados_pedido === 'string' 
-                ? JSON.parse(pedido.dados_pedido) 
+            const dadosPedido = typeof pedido.dados_pedido === 'string'
+                ? JSON.parse(pedido.dados_pedido)
                 : pedido.dados_pedido;
             dateCreated = new Date(dadosPedido.date_created || dadosPedido.data_pedido || dadosPedido.data_emissao || dadosPedido.created_at);
         }
-        
+
         // Se não conseguiu obter data válida, pular este pedido
         if (!dateCreated || isNaN(dateCreated.getTime())) {
             console.warn('Pedido sem data válida:', pedido);
             return;
         }
-        
+
         const mesAno = `${dateCreated.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}`;
         const chave = `${dateCreated.getFullYear()}-${String(dateCreated.getMonth() + 1).padStart(2, '0')}`;
-        
+
         // Obter total
         if (pedido.total) {
             total = parseFloat(pedido.total) || 0;
         } else if (pedido.dados_pedido) {
-            const dadosPedido = typeof pedido.dados_pedido === 'string' 
-                ? JSON.parse(pedido.dados_pedido) 
+            const dadosPedido = typeof pedido.dados_pedido === 'string'
+                ? JSON.parse(pedido.dados_pedido)
                 : pedido.dados_pedido;
             total = parseFloat(dadosPedido.total || dadosPedido.valor_total || dadosPedido.valor_servicos || 0);
         }
-        
+
         if (!grupos[chave]) {
             grupos[chave] = {
                 mesAno,
@@ -1057,12 +1057,12 @@ function agruparPedidosPorMes(pedidos) {
                 quantidade: 0
             };
         }
-        
+
         grupos[chave].pedidos.push(pedido);
         grupos[chave].quantidade++;
         grupos[chave].total += total;
     });
-    
+
     return grupos;
 }
 
@@ -1072,21 +1072,21 @@ function agruparPedidosPorMes(pedidos) {
 function atualizarStatusConexao(mensagem, tipo = 'info') {
     const statusBar = document.getElementById('status-woocommerce');
     if (!statusBar) return;
-    
+
     const icones = {
         'info': '⏳',
         'success': '✓',
         'error': '✗',
         'warning': '⚠'
     };
-    
+
     const cores = {
         'info': '#666',
         'success': '#28a745',
         'error': '#dc3545',
         'warning': '#ffc107'
     };
-    
+
     statusBar.innerHTML = `
         <span style="color: ${cores[tipo]}; font-size: 12px;">
             ${icones[tipo]} ${mensagem}
@@ -1107,13 +1107,13 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
         // Já está no formato WooCommerce, retornar como está
         return pedidoBanco;
     }
-    
+
     // O backend pode retornar dados de duas formas:
     // 1. Com dados_pedido como objeto/string JSON (formato original do banco)
     // 2. Com dados já extraídos usando spread (formato do listarPedidosBanco)
-    
+
     let dados = {};
-    
+
     // Tentar obter dados_pedido primeiro
     if (pedidoBanco.dados_pedido) {
         dados = pedidoBanco.dados_pedido;
@@ -1126,7 +1126,7 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
             }
         }
     }
-    
+
     // Se dados_pedido não existe ou está vazio, o backend extraiu os dados diretamente
     // Nesse caso, usar os campos diretos do pedidoBanco
     if (!dados || Object.keys(dados).length === 0 || (!dados.nome && !dados.servicos && !dados.valor_total && !dados.endereco)) {
@@ -1134,31 +1134,31 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
         // Usar pedidoBanco diretamente como dados
         dados = pedidoBanco;
     }
-    
+
     // Obter pedido_id - pode estar em diferentes lugares
     const pedidoId = pedidoBanco.pedido_id || dados.pedido_id || pedidoBanco._id_banco || pedidoBanco.id || pedidoBanco.number;
-    
+
     // Obter data de criação - tentar múltiplas fontes
     let dateCreated = dados.data_pedido || dados.data_emissao || dados.date_created || pedidoBanco.created_at || pedidoBanco.date_created;
-    
+
     // Se não encontrou data válida, usar data atual como fallback
     if (!dateCreated || (new Date(dateCreated)).toString() === 'Invalid Date') {
         console.warn('Pedido sem data válida, usando data atual:', pedidoBanco.pedido_id);
         dateCreated = new Date().toISOString();
     }
-    
+
     // Obter nome completo do cliente
     const nomeCompleto = dados.nome || '';
     const nomePartes = nomeCompleto.split(' ');
     const firstName = nomePartes[0] || '';
     const lastName = nomePartes.slice(1).join(' ') || '';
-    
+
     // Calcular total se não existir
     let totalPedido = dados.valor_total || dados.valor_servicos || dados.total || 0;
     if (!totalPedido && dados.servicos && Array.isArray(dados.servicos)) {
         totalPedido = dados.servicos.reduce((sum, s) => sum + parseFloat(s.total || s.valor_unitario || 0), 0);
     }
-    
+
     // Converter para formato WooCommerce
     const pedidoConvertido = {
         id: parseInt(pedidoId) || pedidoId || '-',
@@ -1187,8 +1187,8 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
             total: parseFloat(servico.total || servico.valor_unitario) || 0,
             subtotal: parseFloat(servico.subtotal || servico.total || servico.valor_unitario) || 0,
             categories: Array.isArray(servico.categorias) ? servico.categorias : (servico.categoria ? [servico.categoria] : []),
-            category: servico.categorias && Array.isArray(servico.categorias) && servico.categorias.length > 0 
-                ? servico.categorias[0] 
+            category: servico.categorias && Array.isArray(servico.categorias) && servico.categorias.length > 0
+                ? servico.categorias[0]
                 : (servico.categoria || null)
         })),
         shipping_total: parseFloat(dados.frete) || 0,
@@ -1203,7 +1203,7 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
         _tem_nfse: pedidoBanco._tem_nfse,
         _tem_nfe: pedidoBanco._tem_nfe
     };
-    
+
     return pedidoConvertido;
 }
 
@@ -1218,18 +1218,18 @@ const POLLING_DELAY = 30000; // 30 segundos
  */
 function pedidoContemLivroFaiscas(pedido) {
     const categoriasLivro = ['livro faíscas', 'livro faiscas', 'livros faíscas', 'livros faiscas'];
-    
+
     // Extrair dados do pedido (pode estar em dados_pedido)
-    const dadosPedido = typeof pedido.dados_pedido === 'string' 
-        ? JSON.parse(pedido.dados_pedido) 
+    const dadosPedido = typeof pedido.dados_pedido === 'string'
+        ? JSON.parse(pedido.dados_pedido)
         : pedido.dados_pedido || pedido;
-    
+
     if (!dadosPedido.line_items && !pedido.line_items) {
         return false;
     }
-    
+
     const lineItems = dadosPedido.line_items || pedido.line_items || [];
-    
+
     for (const item of lineItems) {
         // Verificar categorias do item
         if (item.categories && Array.isArray(item.categories)) {
@@ -1255,28 +1255,28 @@ function pedidoContemLivroFaiscas(pedido) {
             }
         }
     }
-    
+
     // Verificar também usando extrairCategoriasPedido do Components
     if (window.Components && typeof window.Components.extrairCategoriasPedido === 'function') {
         const categorias = window.Components.extrairCategoriasPedido(pedido);
         const temLivroFaiscas = categorias.some(cat => {
             const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             return (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                   catLower === 'livro faiscas' ||
-                   catLower.includes('livro faiscas');
+                catLower === 'livro faiscas' ||
+                catLower.includes('livro faiscas');
         });
         if (temLivroFaiscas) {
             return true;
         }
     }
-    
+
     return false;
 }
 
 async function carregarPedidos() {
     const contentArea = document.getElementById('content-area');
     const meses = gerarListaMeses();
-    
+
     // Mostrar tela inicial
     contentArea.innerHTML = `
         <div class="content-section">
@@ -1292,32 +1292,32 @@ async function carregarPedidos() {
             </div>
         </div>
     `;
-    
+
     try {
         // 1. CARREGAR DO BANCO LOCAL (instantâneo)
         atualizarStatusConexao('Carregando do banco...', 'info');
-        
+
         let todosPedidos = [];
         const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
-        
+
         if (resultadoBanco.sucesso && resultadoBanco.dados && resultadoBanco.dados.length > 0) {
             todosPedidos = resultadoBanco.dados;
-            
+
             // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
             todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
-            
+
             // Filtrar apenas pedidos com "Livro Faíscas" (produtos)
             todosPedidos = todosPedidos.filter(pedido => {
                 return pedidoContemLivroFaiscas(pedido);
             });
-            
+
             // Ordenar por data
             todosPedidos.sort((a, b) => {
                 const dataA = new Date(a.date_created || 0);
                 const dataB = new Date(b.date_created || 0);
                 return dataB - dataA;
             });
-            
+
             // Salvar no estado e renderizar IMEDIATAMENTE
             estadoAtual.dados.meses = meses;
             estadoAtual.dados.todosPedidos = todosPedidos;
@@ -1325,22 +1325,22 @@ async function carregarPedidos() {
             estadoAtual.filtroStatus = null;
             estadoAtual.filtroCategoria = null;
             estadoAtual.agruparPorCategoria = false;
-            
+
             renderizarTelaPedidos(todosPedidos, meses);
             atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos de produto carregados`, 'success');
-            
+
             // 2. ATUALIZAR EM BACKGROUND (em lotes pequenos, sem bloquear)
             sincronizarEmBackground();
-            
+
         } else {
             // Banco vazio - fazer primeira importação
             atualizarStatusConexao('Importando do WooCommerce...', 'info');
             await importarPrimeiraVez(meses);
         }
-        
+
         // Iniciar polling
         iniciarPollingPedidos();
-        
+
     } catch (error) {
         console.error('Erro ao carregar pedidos:', error);
         atualizarStatusConexao(`✗ Erro: ${error.message}`, 'error');
@@ -1364,92 +1364,103 @@ async function carregarPedidos() {
 /**
  * Carrega seção de Pedidos Woo Serviço - Mostra apenas pedidos de serviço (excluindo Livro Faíscas)
  */
-async function carregarPedidosServico() {
+async function carregarPedidosServico(mostrarLoading = true) {
     const contentArea = document.getElementById('content-area');
     const meses = gerarListaMeses();
-    
+
     // Mostrar tela inicial
-    contentArea.innerHTML = `
-        <div class="content-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                <h2 class="section-title" style="margin: 0;">Pedidos Woo Serviço</h2>
-                <div id="status-woocommerce-servico" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
-                    <span style="color: #666; font-size: 12px;">⏳ Carregando...</span>
+    if (mostrarLoading) {
+        contentArea.innerHTML = `
+            <div class="content-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h2 class="section-title" style="margin: 0;">Pedidos Woo Serviço</h2>
+                    <div id="status-woocommerce-servico" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
+                        <span style="color: #666; font-size: 12px;">⏳ Carregando...</span>
+                    </div>
+                </div>
+                <div style="text-align: center; padding: 40px;">
+                    <div class="loading-spinner" style="width: 40px; height: 40px; margin: 0 auto 16px;"></div>
+                    <p style="color: var(--color-gray-medium);">Carregando pedidos de serviço...</p>
                 </div>
             </div>
-            <div style="text-align: center; padding: 40px;">
-                <div class="loading-spinner" style="width: 40px; height: 40px; margin: 0 auto 16px;"></div>
-                <p style="color: var(--color-gray-medium);">Carregando pedidos de serviço...</p>
-            </div>
-        </div>
-    `;
-    
+        `;
+    }
+
     try {
         // 1. CARREGAR DO BANCO LOCAL (instantâneo)
-        atualizarStatusConexaoServico('Carregando do banco...', 'info');
-        
+        if (mostrarLoading) atualizarStatusConexaoServico('Carregando do banco...', 'info');
+
         let todosPedidos = [];
         const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
-        
+
         if (resultadoBanco.sucesso && resultadoBanco.dados && resultadoBanco.dados.length > 0) {
             todosPedidos = resultadoBanco.dados;
-            
+
             // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
             // Isso garante que pedidoContemLivroFaiscas tenha acesso aos dados convertidos
             todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
-            
+
             // Filtrar apenas pedidos de serviço (excluir Livro Faíscas) DEPOIS da conversão
             todosPedidos = todosPedidos.filter(pedido => {
                 return !pedidoContemLivroFaiscas(pedido);
             });
-            
+
             // Ordenar por data
             todosPedidos.sort((a, b) => {
                 const dataA = new Date(a.date_created || 0);
                 const dataB = new Date(b.date_created || 0);
                 return dataB - dataA;
             });
-            
+
             // Salvar no estado e renderizar IMEDIATAMENTE
             estadoAtual.dados.meses = meses;
             estadoAtual.dados.todosPedidosServico = todosPedidos;
             estadoAtual.filtroMes = null;
             estadoAtual.filtroStatus = null;
-            estadoAtual.filtroCategoria = null;
-            estadoAtual.agruparPorCategoria = false;
-            
-            renderizarTelaPedidosServico(todosPedidos, meses);
-            atualizarStatusConexaoServico(`✓ ${todosPedidos.length} pedidos de serviço carregados`, 'success');
-            
+            if (mostrarLoading) {
+                estadoAtual.filtroCategoria = null;
+                estadoAtual.agruparPorCategoria = false;
+            }
+
+            renderizarTelaPedidosServico(todosPedidos, meses, estadoAtual.filtroStatus, estadoAtual.filtroCategoria, estadoAtual.agruparPorCategoria);
+
+            if (document.getElementById('status-woocommerce-servico')) {
+                atualizarStatusConexaoServico(`✓ ${todosPedidos.length} pedidos de serviço carregados`, 'success');
+            }
+
             // 2. ATUALIZAR EM BACKGROUND (em lotes pequenos, sem bloquear)
             sincronizarEmBackgroundServico();
-            
+
         } else {
             // Banco vazio - fazer primeira importação
-            atualizarStatusConexaoServico('Importando do WooCommerce...', 'info');
+            if (mostrarLoading) atualizarStatusConexaoServico('Importando do WooCommerce...', 'info');
             await importarPrimeiraVezServico(meses);
         }
-        
+
         // Iniciar polling
         iniciarPollingPedidosServico();
-        
+
     } catch (error) {
         console.error('Erro ao carregar pedidos de serviço:', error);
-        atualizarStatusConexaoServico(`✗ Erro: ${error.message}`, 'error');
-        contentArea.innerHTML = `
-            <div class="content-section">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h2 class="section-title" style="margin: 0;">Pedidos Woo Serviço</h2>
-                    <div id="status-woocommerce-servico" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
-                        <span style="color: #dc3545; font-size: 12px;">✗ Erro: ${error.message}</span>
+        if (mostrarLoading) {
+            atualizarStatusConexaoServico(`✗ Erro: ${error.message}`, 'error');
+            contentArea.innerHTML = `
+                <div class="content-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                        <h2 class="section-title" style="margin: 0;">Pedidos Woo Serviço</h2>
+                        <div id="status-woocommerce-servico" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
+                            <span style="color: #dc3545; font-size: 12px;">✗ Erro: ${error.message}</span>
+                        </div>
+                    </div>
+                    <div class="empty-state">
+                        <p>Erro ao carregar pedidos de serviço: ${error.message}</p>
+                        <button class="btn btn-primary" onclick="carregarPedidosServico()" style="margin-top: 16px;">Tentar novamente</button>
                     </div>
                 </div>
-                <div class="empty-state">
-                    <p>Erro ao carregar pedidos de serviço: ${error.message}</p>
-                    <button class="btn btn-primary" onclick="carregarPedidosServico()" style="margin-top: 16px;">Tentar novamente</button>
-                </div>
-            </div>
-        `;
+            `;
+        } else {
+            console.error('Erro silent:', error);
+        }
     }
 }
 
@@ -1459,14 +1470,14 @@ async function carregarPedidosServico() {
 function atualizarStatusConexaoServico(mensagem, tipo = 'info') {
     const statusEl = document.getElementById('status-woocommerce-servico');
     if (!statusEl) return;
-    
+
     const cores = {
         success: '#28a745',
         error: '#dc3545',
         info: '#666',
         warning: '#ffc107'
     };
-    
+
     statusEl.innerHTML = `<span style="color: ${cores[tipo] || cores.info}; font-size: 12px;">${mensagem}</span>`;
 }
 
@@ -1476,14 +1487,14 @@ function atualizarStatusConexaoServico(mensagem, tipo = 'info') {
  */
 function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtroCategoria = null, agruparPorCategoria = false) {
     const contentArea = document.getElementById('content-area');
-    
+
     // Verificar se Components está disponível
     if (!window.Components || typeof window.Components.renderizarTabelaPedidos !== 'function') {
         console.error('Components não está disponível. Aguardando carregamento...');
         setTimeout(() => renderizarTelaPedidosServico(pedidos, meses, filtroStatus, filtroCategoria, agruparPorCategoria), 100);
         return;
     }
-    
+
     // Debug: verificar se pedidos está definido
     console.log('renderizarTelaPedidosServico chamado:', {
         totalPedidos: pedidos ? pedidos.length : 0,
@@ -1492,13 +1503,13 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
         filtroCategoria,
         agruparPorCategoria
     });
-    
+
     // Garantir que pedidos é um array
     if (!pedidos || !Array.isArray(pedidos)) {
         console.error('Pedidos não é um array válido:', pedidos);
         pedidos = [];
     }
-    
+
     // Extrair todas as categorias únicas de TODOS os pedidos (para o filtro mostrar todas as opções)
     // EXCLUIR "Livro Faíscas" das categorias disponíveis
     const todasCategorias = new Set();
@@ -1509,8 +1520,8 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                 // Excluir categorias relacionadas a "Livro Faíscas"
                 const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                 const isLivroFaiscas = (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                                       catLower === 'livro faiscas' ||
-                                       catLower.includes('livro faiscas');
+                    catLower === 'livro faiscas' ||
+                    catLower.includes('livro faiscas');
                 if (!isLivroFaiscas) {
                     todasCategorias.add(cat);
                 }
@@ -1520,17 +1531,17 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
         }
     });
     const categoriasOrdenadas = Array.from(todasCategorias).sort();
-    
+
     // Aplicar filtros
     let pedidosFiltrados = [...pedidos];
-    
+
     if (filtroStatus && filtroStatus !== 'todos') {
         pedidosFiltrados = pedidosFiltrados.filter(p => {
             const dadosPedido = typeof p.dados_pedido === 'string' ? JSON.parse(p.dados_pedido) : (p.dados_pedido || p);
             return (dadosPedido.status || 'pending') === filtroStatus;
         });
     }
-    
+
     if (filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.length > 0) {
         pedidosFiltrados = pedidosFiltrados.filter(pedido => {
             const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
@@ -1544,11 +1555,11 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
             });
         });
     }
-    
+
     // Agrupar pedidos por mês
     const pedidosPorMes = agruparPedidosPorMes(pedidosFiltrados);
     const mesesOrdenados = meses.sort((a, b) => b.value.localeCompare(a.value));
-    
+
     // Opções de status
     const statusOptions = [
         { value: 'todos', label: 'Todos os status' },
@@ -1560,7 +1571,7 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
         { value: 'refunded', label: 'Reembolsado' },
         { value: 'failed', label: 'Falhou' }
     ];
-    
+
     const html = `
         <div class="content-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
@@ -1622,9 +1633,9 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                                 </label>
                             </div>
                             ${categoriasOrdenadas.map(cat => {
-                                const catId = cat.toLowerCase().replace(/\s+/g, '-');
-                                const isSelected = filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.includes(catId);
-                                return `
+        const catId = cat.toLowerCase().replace(/\s+/g, '-');
+        const isSelected = filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.includes(catId);
+        return `
                                     <div style="padding: 8px; border-bottom: 1px solid #f0f0f0;">
                                         <label style="display: flex; align-items: center; cursor: pointer;">
                                             <input 
@@ -1639,7 +1650,7 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                                         </label>
                                     </div>
                                 `;
-                            }).join('')}
+    }).join('')}
                             <div style="padding: 8px; border-top: 1px solid #eee;">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
                                     <input 
@@ -1683,9 +1694,9 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
             <!-- Accordion de Meses -->
             <div style="margin-bottom: 24px;">
                 ${mesesOrdenados.map(mes => {
-                    const grupo = pedidosPorMes[mes.value] || { pedidos: [], total: 0, quantidade: 0 };
-                    const mesId = `mes-${mes.value.replace('-', '')}-servico`;
-                    return `
+        const grupo = pedidosPorMes[mes.value] || { pedidos: [], total: 0, quantidade: 0 };
+        const mesId = `mes-${mes.value.replace('-', '')}-servico`;
+        return `
                         <div style="border: 1px solid var(--color-border); border-radius: 8px; margin-bottom: 12px; overflow: hidden;">
                     <button 
                         type="button" 
@@ -1747,7 +1758,7 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                             </div>
                         </div>
                     `;
-                }).join('')}
+    }).join('')}
             </div>
             
             <!-- Resumo -->
@@ -1765,9 +1776,9 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
             </div>
         </div>
     `;
-    
+
     contentArea.innerHTML = html;
-    
+
     // Carregar logs automaticamente para todos os meses após renderizar
     setTimeout(() => {
         mesesOrdenados.forEach(mes => {
@@ -1793,7 +1804,7 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
 function toggleAccordionServico(mesId) {
     const content = document.getElementById(mesId);
     const icon = document.getElementById(`icon-${mesId}`);
-    
+
     if (content && icon) {
         const isOpen = content.style.display !== 'none';
         content.style.display = isOpen ? 'none' : 'block';
@@ -1808,7 +1819,7 @@ function aplicarFiltrosPedidosServico() {
     const filtroStatus = document.getElementById('filtro-status-pedidos-servico')?.value || null;
     const filtroCategoriaEl = document.getElementById('filtro-categoria-pedidos-servico');
     const agruparPorCategoria = document.getElementById('agrupar-por-categoria-servico')?.checked || false;
-    
+
     let filtroCategoria = null;
     if (filtroCategoriaEl) {
         const selecionadas = Array.from(filtroCategoriaEl.selectedOptions).map(opt => opt.value);
@@ -1816,11 +1827,11 @@ function aplicarFiltrosPedidosServico() {
             filtroCategoria = selecionadas;
         }
     }
-    
+
     estadoAtual.filtroStatus = filtroStatus === 'todos' ? null : filtroStatus;
     estadoAtual.filtroCategoria = filtroCategoria;
     estadoAtual.agruparPorCategoria = agruparPorCategoria;
-    
+
     renderizarTelaPedidosServico(
         estadoAtual.dados.todosPedidosServico || [],
         estadoAtual.dados.meses || [],
@@ -1837,7 +1848,7 @@ function limparFiltrosPedidosServico() {
     estadoAtual.filtroStatus = null;
     estadoAtual.filtroCategoria = null;
     estadoAtual.agruparPorCategoria = false;
-    
+
     renderizarTelaPedidosServico(
         estadoAtual.dados.todosPedidosServico || [],
         estadoAtual.dados.meses || [],
@@ -1855,7 +1866,7 @@ async function atualizarDadosWooCommerceServico() {
     if (statusBar) {
         statusBar.innerHTML = '<span style="color: #666; font-size: 12px;">⏳ Recarregando pedidos do WooCommerce...</span>';
     }
-    
+
     try {
         // Recarregar pedidos diretamente do WooCommerce (sem salvar no banco)
         await carregarPedidosServico();
@@ -1894,17 +1905,17 @@ function toggleTodasCategoriasServico(checkbox) {
 function atualizarFiltroCategoriasServico() {
     const checkboxes = document.querySelectorAll('.checkbox-categoria-servico:checked');
     const categorias = Array.from(checkboxes).map(cb => cb.value);
-    
+
     const textoEl = document.getElementById('texto-filtro-categoria-servico');
     if (textoEl) {
         textoEl.textContent = categorias.length > 0 ? `${categorias.length} categoria(s) selecionada(s)` : 'Todas as categorias';
     }
-    
+
     const todasCheckbox = document.querySelector('.checkbox-categoria-todas-servico');
     if (todasCheckbox) {
         todasCheckbox.checked = categorias.length === 0;
     }
-    
+
     aplicarFiltrosPedidosServico();
 }
 
@@ -1914,9 +1925,9 @@ function atualizarFiltroCategoriasServico() {
 function toggleMesServico(mesId) {
     const content = document.getElementById(mesId);
     const icon = document.getElementById(`icon-${mesId}`);
-    
+
     if (!content || !icon) return;
-    
+
     if (content.style.display === 'none') {
         content.style.display = 'block';
         icon.textContent = '▼';
@@ -1933,7 +1944,7 @@ function toggleLogsMesServico(mes) {
     const mesId = mes.replace('-', '');
     const conteudo = document.getElementById(`conteudo-logs-mes-${mesId}-servico`);
     const icon = document.getElementById(`logs-icon-${mesId}-servico`);
-    
+
     // Logs sempre ficam abertos na aba de serviço - apenas recarrega ao clicar
     if (conteudo && icon) {
         conteudo.style.display = 'block';
@@ -1950,14 +1961,14 @@ function adicionarLogMesServico(mes, nivel, mensagem, dados = null) {
     const mesId = mes.replace('-', '');
     const logsContainer = document.getElementById(`conteudo-logs-mes-${mesId}-servico`);
     if (!logsContainer) return;
-    
+
     // Garantir que está visível
     logsContainer.style.display = 'block';
     const icon = document.getElementById(`logs-icon-${mesId}-servico`);
     if (icon) {
         icon.textContent = '▲';
     }
-    
+
     // Determinar cor baseado no nível
     let cor = '#d4d4d4'; // Cor padrão
     if (nivel === 'ERROR' || nivel === 'erro') {
@@ -1969,10 +1980,10 @@ function adicionarLogMesServico(mes, nivel, mensagem, dados = null) {
     } else if (nivel === 'INFO' || nivel === 'info') {
         cor = '#569cd6'; // Azul claro
     }
-    
+
     const data = new Date().toLocaleString('pt-BR');
     const nivelUpper = nivel.toUpperCase();
-    
+
     // Formatar mensagem com dados adicionais
     let mensagemFormatada = mensagem;
     if (dados) {
@@ -1983,20 +1994,20 @@ function adicionarLogMesServico(mes, nivel, mensagem, dados = null) {
             mensagemFormatada += ` [${dados}]`;
         }
     }
-    
+
     const logDiv = document.createElement('div');
     logDiv.style.marginBottom = '6px';
     logDiv.style.padding = '4px 0';
     logDiv.style.borderBottom = '1px solid #333';
-    
+
     logDiv.innerHTML = `
         <span style="color: #808080;">[${data}]</span>
         <span style="color: ${cor}; font-weight: 600; margin-left: 8px;">[${nivelUpper}]</span>
         <span style="color: #d4d4d4; margin-left: 8px;">${mensagemFormatada}</span>
     `;
-    
+
     logsContainer.appendChild(logDiv);
-    
+
     // Scroll para o final (logs mais recentes)
     logsContainer.scrollTop = logsContainer.scrollHeight;
 }
@@ -2007,35 +2018,35 @@ function adicionarLogMesServico(mes, nivel, mensagem, dados = null) {
 async function carregarLogsMesServico(mes) {
     try {
         const resultado = await API.Pedidos.listarLogs({ mes, limite: 50 });
-        
+
         const logs = Array.isArray(resultado) ? resultado : (resultado.dados || []);
-        
+
         // Limpar logs anteriores
         const mesId = mes.replace('-', '');
         const logsContainer = document.getElementById(`conteudo-logs-mes-${mesId}-servico`);
         if (!logsContainer) return;
-        
+
         // Garantir que o container está visível ao carregar logs
         logsContainer.style.display = 'block';
         const icon = document.getElementById(`logs-icon-${mesId}-servico`);
         if (icon) {
             icon.textContent = '▲';
         }
-        
+
         if (logs.length === 0) {
             logsContainer.innerHTML = '<div style="color: #888;">Nenhum log disponível ainda. Os logs aparecerão aqui após iniciar a emissão.</div>';
             return;
         }
-        
+
         logsContainer.innerHTML = '';
-        
+
         // Ordenar logs por data (mais antigo primeiro para melhor leitura)
         logs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        
+
         logs.forEach(log => {
             let tipo = 'info';
             let mensagem = log.message || '';
-            
+
             // Determinar tipo baseado no level e action
             if (log.level === 'ERROR' || log.level === 'error') {
                 tipo = 'erro';
@@ -2048,7 +2059,7 @@ async function carregarLogsMesServico(mes) {
                     tipo = 'sucesso';
                 }
             }
-            
+
             // Extrair dados relevantes com mais detalhes
             let dados = null;
             if (log.data) {
@@ -2059,7 +2070,7 @@ async function carregarLogsMesServico(mes) {
                     dados = { raw: log.data };
                 }
             }
-            
+
             // Formatar mensagem com informações adicionais
             let mensagemFormatada = mensagem;
             if (dados) {
@@ -2076,7 +2087,7 @@ async function carregarLogsMesServico(mes) {
                     mensagemFormatada += ` [Erro: ${typeof dados.erro === 'string' ? dados.erro : JSON.stringify(dados.erro)}]`;
                 }
             }
-            
+
             // Determinar cor baseado no tipo
             let cor = '#d4d4d4'; // Cor padrão
             if (tipo === 'erro') {
@@ -2088,18 +2099,18 @@ async function carregarLogsMesServico(mes) {
             } else if (tipo === 'recebido') {
                 cor = '#ce9178'; // Laranja claro
             }
-            
+
             // Criar elemento de log
             const logDiv = document.createElement('div');
             logDiv.style.marginBottom = '6px';
             logDiv.style.padding = '4px 0';
             logDiv.style.borderBottom = '1px solid #333';
-            
+
             const data = new Date(log.created_at || Date.now()).toLocaleString('pt-BR');
             const level = (log.level || 'INFO').toUpperCase();
             const service = log.service || '';
             const action = log.action || '';
-            
+
             logDiv.innerHTML = `
                 <span style="color: #808080;">[${data}]</span>
                 <span style="color: ${cor}; font-weight: 600; margin-left: 8px;">[${level}]</span>
@@ -2107,13 +2118,13 @@ async function carregarLogsMesServico(mes) {
                 ${action ? `<span style="color: #ce9178; margin-left: 8px;">[${action}]</span>` : ''}
                 <span style="color: #d4d4d4; margin-left: 8px;">${mensagemFormatada}</span>
             `;
-            
+
             logsContainer.appendChild(logDiv);
         });
-        
+
         // Scroll para o final (logs mais recentes)
         logsContainer.scrollTop = logsContainer.scrollHeight;
-        
+
     } catch (error) {
         console.error('Erro ao carregar logs do mês:', error);
         const mesId = mes.replace('-', '');
@@ -2129,79 +2140,166 @@ async function carregarLogsMesServico(mes) {
  */
 async function emitirNotasMesServico(mes) {
     console.log('Emitir Notas de Serviço para mês:', mes);
-    
+
     // Buscar pedidos do mês que são de serviço
     const pedidosMes = estadoAtual.dados.todosPedidosServico?.filter(pedido => {
         const dataPedido = new Date(pedido.date_created);
         const [ano, mesNum] = mes.split('-');
-        return dataPedido.getFullYear() === parseInt(ano) && 
-               (dataPedido.getMonth() + 1) === parseInt(mesNum);
+        return dataPedido.getFullYear() === parseInt(ano) &&
+            (dataPedido.getMonth() + 1) === parseInt(mesNum);
     }) || [];
-    
+
     if (pedidosMes.length === 0) {
         adicionarLogMesServico(mes, 'WARN', 'Nenhum pedido de serviço encontrado para este mês.');
         return;
     }
-    
+
     const pedidoIds = pedidosMes.map(p => String(p.id || p.number));
-    
+
     if (!confirm(`Deseja emitir ${pedidoIds.length} nota(s) de serviço (NFSe) para o mês ${mes}?`)) {
         return;
     }
-    
+
+    const mesId = `mes-${mes.replace('-', '')}-servico`;
+
     try {
         const resultado = await API.NFSe.emitirLote(pedidoIds, 'servico');
-        
+
         // Garantir que o accordion do mês está expandido
-        const mesId = `mes-${mes.replace('-', '')}-servico`;
         const mesContent = document.getElementById(mesId);
         if (mesContent && mesContent.style.display === 'none') {
             toggleMesServico(mesId);
         }
-        
+
         // Garantir que os logs estão visíveis
         toggleLogsMesServico(mes);
-        
+
+        // --- INÍCIO TRATAMENTO ASSÍNCRONO ---
+        if (resultado.processamento_async && resultado.job_id) {
+            adicionarLogMesServico(mes, 'INFO', `⚡ Processamento em segundo plano iniciado (Job: ${resultado.job_id}). Acompanhando...`);
+
+            const jobId = resultado.job_id;
+            let pollingAtivo = true;
+            let tentativas = 0;
+            const maxTentativas = 60; // ~2 minutos (2s * 60)
+
+            // Função de Polling
+            const fazerPolling = async () => {
+                if (!pollingAtivo || tentativas >= maxTentativas) {
+                    if (tentativas >= maxTentativas) {
+                        adicionarLogMesServico(mes, 'WARN', '⚠️ Tempo limite de acompanhamento excedido. O processo continua no servidor.');
+                        await carregarPedidosServico(false); // Atualizar lista final
+                    }
+                    return;
+                }
+
+                tentativas++;
+
+                try {
+                    // Buscar logs específicos do Job
+                    // Assumimos que API.Config.buscarLogs suporta filtro por job_id (conforme update anterior)
+                    const resLogs = await API.Config.buscarLogs({
+                        job_id: jobId,
+                        limite: 10 // Pegar últimos 10
+                    });
+
+                    if (resLogs.sucesso && resLogs.dados) {
+                        // Filtrar logs que indicam conclusão
+                        const logs = resLogs.dados;
+
+                        // Verificar se tem log de conclusão
+                        const logConclusao = logs.find(l =>
+                            (l.message && l.message.includes('Processamento concluído')) ||
+                            (l.data && l.data.status_job === 'concluido')
+                        );
+
+                        if (logConclusao) {
+                            pollingAtivo = false;
+                            const dadosFinais = logConclusao.data || {};
+                            const msgFinal = `✓ Concluído! Sucessos: ${dadosFinais.sucessos || 0}, Erros: ${dadosFinais.erros || 0}.`;
+
+                            adicionarLogMesServico(mes, 'SUCCESS', msgFinal);
+
+                            // Recarregar lista e restaurar UI
+                            await carregarPedidosServico(false);
+                            setTimeout(() => {
+                                const mesContentRec = document.getElementById(mesId);
+                                if (mesContentRec) mesContentRec.style.display = 'block';
+                                toggleLogsMesServico(mes);
+                                carregarLogsMesServico(mes); // Carregar histórico completo
+                            }, 500);
+
+                        } else {
+                            // Se ainda não acabou, apenas atualiza logs recentes na tela (opcional)
+                            // Para não floodar, podemos apenas mostrar "Processando... [X/Y]" se tiver essa info
+                            const logProgresso = logs.find(l => l.data && l.data.progresso_atual);
+                            if (logProgresso) {
+                                // Opcional: Atualizar algum indicador visual
+                                // adicionarLogMesServico(mes, 'INFO', `... Pedido ${logProgresso.data.progresso_atual}/${logProgresso.data.total}`);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Erro no polling:', err);
+                }
+
+                if (pollingAtivo) {
+                    setTimeout(fazerPolling, 2000); // Tentar novamente em 2s
+                }
+            };
+
+            // Iniciar polling
+            fazerPolling();
+            return; // Sai da função, o polling cuida do resto
+        }
+        // --- FIM TRATAMENTO ASSÍNCRONO ---
+
+        // Fluxo síncrono legado (mantido para compatibilidade ou se backend reverter)
         if (resultado.sucesso) {
             adicionarLogMesServico(mes, 'SUCCESS', `✓ ${resultado.sucesso} nota(s) emitida(s) com sucesso!`, { pedidos: pedidoIds.length });
-            await carregarPedidosServico();
-            
-            // Aguardar um pouco para garantir que os logs foram salvos no banco
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            
-            // Carregar logs automaticamente após emissão em lote
-            await carregarLogsMesServico(mes);
+
+            // Recarregar pedidos silenciosamente (sem flash)
+            await carregarPedidosServico(false);
+
+            // Restaurar estado visual
+            setTimeout(async () => {
+                const mesContentRecarregado = document.getElementById(mesId);
+                if (mesContentRecarregado) {
+                    mesContentRecarregado.style.display = 'block';
+                    const icon = document.getElementById(`icon-${mesId}`);
+                    if (icon) icon.textContent = '▼';
+
+                    const logsIcon = document.getElementById(`logs-icon-${mes.replace('-', '')}-servico`);
+                    const logsContent = document.getElementById(`conteudo-logs-mes-${mes.replace('-', '')}-servico`);
+
+                    if (logsContent) {
+                        logsContent.style.display = 'block';
+                        if (logsIcon) logsIcon.textContent = '▲';
+
+                        await carregarLogsMesServico(mes);
+                        adicionarLogMesServico(mes, 'SUCCESS', `✓ Sincronização concluída. Status atualizados.`);
+                    }
+                }
+            }, 50);
         } else {
             const erroMsg = resultado.erro || 'Erro desconhecido';
             adicionarLogMesServico(mes, 'ERROR', `✗ Erro ao emitir notas: ${erroMsg}`, { pedidos: pedidoIds.length, erro: resultado.erro });
-            
-            // Aguardar um pouco antes de carregar logs
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Mesmo em caso de erro, tentar carregar logs para ver o que aconteceu
             await carregarLogsMesServico(mes);
         }
     } catch (error) {
-        // Garantir que o accordion do mês está expandido
-        const mesId = `mes-${mes.replace('-', '')}-servico`;
         const mesContent = document.getElementById(mesId);
         if (mesContent && mesContent.style.display === 'none') {
             toggleMesServico(mesId);
         }
-        
-        // Garantir que os logs estão visíveis
+
         toggleLogsMesServico(mes);
-        
-        adicionarLogMesServico(mes, 'ERROR', `✗ Erro ao emitir notas: ${error.message}`, { 
-            pedidos: pedidoIds.length, 
+
+        adicionarLogMesServico(mes, 'ERROR', `✗ Erro ao emitir notas: ${error.message}`, {
+            pedidos: pedidoIds.length,
             erro: error.message,
-            stack: error.stack 
+            stack: error.stack
         });
-        
-        // Aguardar um pouco antes de carregar logs
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Mesmo em caso de erro, tentar carregar logs
+
         await carregarLogsMesServico(mes);
     }
 }
@@ -2227,30 +2325,30 @@ window.adicionarLogMesServico = adicionarLogMesServico;
 async function sincronizarEmBackgroundServico() {
     try {
         const resultado = await API.Pedidos.sincronizarDoWooCommerce(1, 50);
-        
+
         if (resultado.sucesso && resultado.salvos > 0) {
             atualizarStatusConexaoServico(`🔄 ${resultado.salvos} novos pedidos encontrados`, 'info');
-            
+
             const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
             if (resultadoBanco.sucesso && resultadoBanco.dados) {
                 let todosPedidos = resultadoBanco.dados;
-                
+
                 // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
                 todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
-                
+
                 // Filtrar apenas pedidos de serviço (excluir Livro Faíscas) DEPOIS da conversão
                 todosPedidos = todosPedidos.filter(pedido => {
                     return !pedidoContemLivroFaiscas(pedido);
                 });
-                
+
                 todosPedidos.sort((a, b) => {
                     const dataA = new Date(a.date_created || 0);
                     const dataB = new Date(b.date_created || 0);
                     return dataB - dataA;
                 });
-                
+
                 estadoAtual.dados.todosPedidosServico = todosPedidos;
-                
+
                 renderizarTelaPedidosServico(
                     todosPedidos,
                     estadoAtual.dados.meses,
@@ -2272,33 +2370,33 @@ async function importarPrimeiraVezServico(meses) {
     const resultado = await API.Pedidos.sincronizarTodosDoWooCommerce((progresso) => {
         atualizarStatusConexaoServico(`Importando página ${progresso.pagina}... (${progresso.salvos} pedidos)`, 'info');
     });
-    
+
     if (resultado.sucesso) {
         const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
         if (resultadoBanco.sucesso && resultadoBanco.dados) {
             let todosPedidos = resultadoBanco.dados;
-            
+
             // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
             todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
-            
+
             // Filtrar apenas pedidos de serviço (excluir Livro Faíscas) DEPOIS da conversão
             todosPedidos = todosPedidos.filter(pedido => {
                 return !pedidoContemLivroFaiscas(pedido);
             });
-            
+
             todosPedidos.sort((a, b) => {
                 const dataA = new Date(a.date_created || 0);
                 const dataB = new Date(b.date_created || 0);
                 return dataB - dataA;
             });
-            
+
             estadoAtual.dados.meses = meses;
             estadoAtual.dados.todosPedidosServico = todosPedidos;
             estadoAtual.filtroMes = null;
             estadoAtual.filtroStatus = null;
             estadoAtual.filtroCategoria = null;
             estadoAtual.agruparPorCategoria = false;
-            
+
             renderizarTelaPedidosServico(todosPedidos, meses);
             atualizarStatusConexaoServico(`✓ ${todosPedidos.length} pedidos de serviço importados`, 'success');
         }
@@ -2315,9 +2413,9 @@ function iniciarPollingPedidosServico() {
     if (pollingIntervalServico) {
         clearInterval(pollingIntervalServico);
     }
-    
+
     console.log('🔄 Iniciando polling para novos pedidos de serviço (a cada 30s)');
-    
+
     pollingIntervalServico = setInterval(async () => {
         try {
             // Verificar se ainda estamos na seção de pedidos serviço
@@ -2326,37 +2424,37 @@ function iniciarPollingPedidosServico() {
                 pollingIntervalServico = null;
                 return;
             }
-            
+
             // Buscar pedidos atualizados do banco
             const resultado = await API.Pedidos.listarDoBanco({ limite: 1000 });
-            
+
             if (resultado.sucesso && resultado.dados) {
                 // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
                 let todosPedidos = resultado.dados.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
-                
+
                 // Filtrar apenas pedidos de serviço (excluir Livro Faíscas) DEPOIS da conversão
                 let pedidosServico = todosPedidos.filter(pedido => {
                     return !pedidoContemLivroFaiscas(pedido);
                 });
-                
+
                 const novosTotal = pedidosServico.length;
                 const atualTotal = estadoAtual.dados.todosPedidosServico?.length || 0;
-                
+
                 // Se tem novos pedidos, atualizar a lista
                 if (novosTotal > atualTotal) {
                     console.log(`🔔 Novos pedidos de serviço detectados: ${novosTotal - atualTotal}`);
-                    
+
                     pedidosServico.sort((a, b) => {
                         const dataA = new Date(a.date_created || 0);
                         const dataB = new Date(b.date_created || 0);
                         return dataB - dataA;
                     });
-                    
+
                     estadoAtual.dados.todosPedidosServico = pedidosServico;
-                    
+
                     // Re-renderizar mantendo filtros
                     renderizarTelaPedidosServico(
-                        pedidosServico, 
+                        pedidosServico,
                         estadoAtual.dados.meses,
                         estadoAtual.filtroStatus,
                         estadoAtual.filtroCategoria,
@@ -2378,31 +2476,31 @@ async function sincronizarEmBackground() {
     try {
         // Sincronizar apenas página 1 (pedidos mais recentes) para pegar novos
         const resultado = await API.Pedidos.sincronizarDoWooCommerce(1, 50);
-        
+
         if (resultado.sucesso && resultado.salvos > 0) {
             // Tem pedidos novos - recarregar do banco e atualizar tela
             atualizarStatusConexao(`🔄 ${resultado.salvos} novos pedidos encontrados`, 'info');
-            
+
             const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
             if (resultadoBanco.sucesso && resultadoBanco.dados) {
                 let todosPedidos = resultadoBanco.dados;
-                
+
                 // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
                 todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
-                
+
                 // Filtrar apenas pedidos com "Livro Faíscas" (produtos)
                 todosPedidos = todosPedidos.filter(pedido => {
                     return pedidoContemLivroFaiscas(pedido);
                 });
-                
+
                 todosPedidos.sort((a, b) => {
                     const dataA = new Date(a.date_created || 0);
                     const dataB = new Date(b.date_created || 0);
                     return dataB - dataA;
                 });
-                
+
                 estadoAtual.dados.todosPedidos = todosPedidos;
-                
+
                 // Re-renderizar mantendo filtros
                 renderizarTelaPedidos(
                     todosPedidos,
@@ -2411,7 +2509,7 @@ async function sincronizarEmBackground() {
                     estadoAtual.filtroCategoria,
                     estadoAtual.agruparPorCategoria
                 );
-                
+
                 atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos de produto (${resultado.salvos} novos)`, 'success');
             }
         } else {
@@ -2431,33 +2529,33 @@ async function importarPrimeiraVez(meses) {
     const resultado = await API.Pedidos.sincronizarTodosDoWooCommerce((progresso) => {
         atualizarStatusConexao(`Importando página ${progresso.pagina}... (${progresso.salvos} pedidos)`, 'info');
     });
-    
+
     if (resultado.sucesso) {
         const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
         if (resultadoBanco.sucesso && resultadoBanco.dados) {
             let todosPedidos = resultadoBanco.dados;
-            
+
             // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
             todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
-            
+
             // Filtrar apenas pedidos com "Livro Faíscas" (produtos)
             todosPedidos = todosPedidos.filter(pedido => {
                 return pedidoContemLivroFaiscas(pedido);
             });
-            
+
             todosPedidos.sort((a, b) => {
                 const dataA = new Date(a.date_created || 0);
                 const dataB = new Date(b.date_created || 0);
                 return dataB - dataA;
             });
-            
+
             estadoAtual.dados.meses = meses;
             estadoAtual.dados.todosPedidos = todosPedidos;
             estadoAtual.filtroMes = null;
             estadoAtual.filtroStatus = null;
             estadoAtual.filtroCategoria = null;
             estadoAtual.agruparPorCategoria = false;
-            
+
             renderizarTelaPedidos(todosPedidos, meses);
             atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos de produto importados`, 'success');
         }
@@ -2473,17 +2571,17 @@ async function buscarTodosPedidosWooCommerce() {
     let todosPedidos = [];
     let page = 1;
     const perPage = 100;
-    
+
     while (true) {
         atualizarStatusConexao(`Carregando do WooCommerce... (${todosPedidos.length} carregados)`, 'info');
-        
+
         const resultado = await API.WooCommerce.buscarPedidos({
             per_page: perPage,
             page: page,
             orderby: 'date',
             order: 'desc'
         });
-        
+
         let pedidos = [];
         if (Array.isArray(resultado)) {
             pedidos = resultado;
@@ -2494,15 +2592,15 @@ async function buscarTodosPedidosWooCommerce() {
         } else {
             break;
         }
-        
+
         if (!pedidos || pedidos.length === 0) break;
-        
+
         todosPedidos = todosPedidos.concat(pedidos);
-        
+
         if (pedidos.length < perPage) break;
         page++;
     }
-    
+
     atualizarStatusConexao(`✓ ${todosPedidos.length} pedidos carregados do WooCommerce`, 'success');
     return todosPedidos;
 }
@@ -2515,9 +2613,9 @@ function iniciarPollingPedidos() {
     if (pollingInterval) {
         clearInterval(pollingInterval);
     }
-    
+
     console.log('🔄 Iniciando polling para novos pedidos (a cada 30s)');
-    
+
     pollingInterval = setInterval(async () => {
         try {
             // Verificar se ainda estamos na seção de pedidos
@@ -2526,34 +2624,34 @@ function iniciarPollingPedidos() {
                 pollingInterval = null;
                 return;
             }
-            
+
             // Buscar pedidos atualizados do banco
             const resultado = await API.Pedidos.listarDoBanco({ limite: 1000 });
-            
+
             if (resultado.sucesso && resultado.dados) {
                 const novosTotal = resultado.dados.length;
                 const atualTotal = estadoAtual.dados.todosPedidos?.length || 0;
-                
+
                 // Se tem novos pedidos, atualizar a lista
                 if (novosTotal > atualTotal) {
                     console.log(`🔔 Novos pedidos detectados: ${novosTotal - atualTotal}`);
-                    
+
                     // Salvar seleção atual
                     const selecionadosAntes = obterPedidosSelecionados();
-                    
+
                     // Atualizar dados
                     resultado.dados.sort((a, b) => new Date(b.date_created || 0) - new Date(a.date_created || 0));
                     estadoAtual.dados.todosPedidos = resultado.dados;
-                    
+
                     // Re-renderizar mantendo filtros
                     renderizarTelaPedidos(
-                        resultado.dados, 
+                        resultado.dados,
                         estadoAtual.dados.meses,
                         estadoAtual.filtroStatus,
                         estadoAtual.filtroCategoria,
                         estadoAtual.agruparPorCategoria
                     );
-                    
+
                     // Restaurar seleção
                     setTimeout(() => {
                         selecionadosAntes.forEach(id => {
@@ -2562,7 +2660,7 @@ function iniciarPollingPedidos() {
                         });
                         atualizarSelecaoPedidos();
                     }, 100);
-                    
+
                     // Mostrar notificação
                     atualizarStatusConexao(`🔔 ${novosTotal - atualTotal} novo(s) pedido(s) adicionado(s)`, 'success');
                 }
@@ -2592,9 +2690,9 @@ function iniciarPollingNotas() {
     if (pollingNotasInterval) {
         clearInterval(pollingNotasInterval);
     }
-    
+
     console.log('🔄 Iniciando polling para notas enviadas (a cada 30s)');
-    
+
     pollingNotasInterval = setInterval(async () => {
         try {
             // Verificar se ainda estamos na seção de notas enviadas
@@ -2603,7 +2701,7 @@ function iniciarPollingNotas() {
                 pollingNotasInterval = null;
                 return;
             }
-            
+
             // Buscar notas atualizadas do banco (sem alterar página atual)
             const limite = 50;
             const offset = (estadoAtual.paginaNotas - 1) * limite;
@@ -2612,28 +2710,28 @@ function iniciarPollingNotas() {
                 offset: offset,
                 ...estadoAtual.filtrosNotas
             };
-            
+
             const resultado = await API.NFSe.listar(filtros);
-            
+
             if (resultado.sucesso) {
                 const notas = resultado.dados || [];
                 const total = resultado.total || 0;
                 const notasAnteriores = estadoAtual.dados.notasEnviadas || [];
-                
+
                 // Verificar se há novas notas (comparar por referência)
                 const referenciasAnteriores = new Set(notasAnteriores.map(n => n.referencia));
                 const novasNotas = notas.filter(n => !referenciasAnteriores.has(n.referencia));
-                
+
                 if (novasNotas.length > 0) {
                     console.log(`🔔 ${novasNotas.length} nova(s) nota(s) detectada(s)`);
-                    
+
                     // Atualizar dados
                     estadoAtual.dados.notasEnviadas = notas;
                     const tabelaArea = document.getElementById('tabela-notas-enviadas');
                     if (tabelaArea) {
                         tabelaArea.innerHTML = await window.Components.renderizarTabelaNotasEnviadas(notas);
                     }
-                    
+
                     // Atualizar paginação se necessário
                     const totalPaginas = Math.ceil(total / limite) || 1;
                     const paginacaoArea = document.getElementById('paginacao-notas-enviadas');
@@ -2668,37 +2766,37 @@ function pararPollingNotas() {
  */
 async function forcarAtualizacaoWooCommerce() {
     atualizarStatusConexao('Sincronizando do WooCommerce...', 'info');
-    
+
     try {
         // Sincronizar todos os pedidos do WooCommerce (paginado)
         const resultado = await API.Pedidos.sincronizarTodosDoWooCommerce((progresso) => {
             atualizarStatusConexao(`Sincronizando página ${progresso.pagina}... (${progresso.salvos} novos, ${progresso.atualizados} atualizados)`, 'info');
         });
-        
+
         if (resultado.sucesso) {
             atualizarStatusConexao(`✓ ${resultado.paginas} páginas: ${resultado.salvos} novos, ${resultado.atualizados} atualizados`, 'success');
-            
+
             // Recarregar do banco
             const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 1000 });
             if (resultadoBanco.sucesso && resultadoBanco.dados) {
                 let todosPedidos = resultadoBanco.dados;
-                
+
                 // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
                 todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
-                
+
                 // Filtrar apenas pedidos com "Livro Faíscas" (produtos)
                 todosPedidos = todosPedidos.filter(pedido => {
                     return pedidoContemLivroFaiscas(pedido);
                 });
-                
+
                 todosPedidos.sort((a, b) => {
                     const dataA = new Date(a.date_created || 0);
                     const dataB = new Date(b.date_created || 0);
                     return dataB - dataA;
                 });
-                
+
                 estadoAtual.dados.todosPedidos = todosPedidos;
-                
+
                 renderizarTelaPedidos(
                     todosPedidos,
                     estadoAtual.dados.meses,
@@ -2726,7 +2824,7 @@ window.pararPollingNotas = pararPollingNotas;
  */
 function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCategoria = null, agruparPorCategoria = false) {
     const contentArea = document.getElementById('content-area');
-    
+
     // Verificar se Components está disponível
     if (!window.Components || typeof window.Components.renderizarTabelaPedidos !== 'function') {
         console.error('Components não está disponível. Aguardando carregamento...');
@@ -2747,7 +2845,7 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
         }, 100);
         return;
     }
-    
+
     // Debug: verificar se pedidos está definido
     console.log('renderizarTelaPedidos chamado:', {
         totalPedidos: pedidos ? pedidos.length : 0,
@@ -2756,13 +2854,13 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
         filtroCategoria,
         agruparPorCategoria
     });
-    
+
     // Garantir que pedidos é um array
     if (!pedidos || !Array.isArray(pedidos)) {
         console.error('Pedidos não é um array válido:', pedidos);
         pedidos = [];
     }
-    
+
     // Extrair todas as categorias únicas de TODOS os pedidos (para o filtro mostrar todas as opções)
     // Para produtos, mostrar apenas categorias relacionadas a "Livro Faíscas"
     const todasCategorias = new Set();
@@ -2773,8 +2871,8 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
                 // Incluir apenas categorias relacionadas a "Livro Faíscas"
                 const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                 const isLivroFaiscas = (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                                       catLower === 'livro faiscas' ||
-                                       catLower.includes('livro faiscas');
+                    catLower === 'livro faiscas' ||
+                    catLower.includes('livro faiscas');
                 if (isLivroFaiscas) {
                     todasCategorias.add(cat);
                 }
@@ -2782,14 +2880,14 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
         }
     });
     const categoriasOrdenadas = Array.from(todasCategorias).sort();
-    
+
     // Aplicar filtros
     let pedidosFiltrados = [...pedidos];
-    
+
     if (filtroStatus && filtroStatus !== 'todos') {
         pedidosFiltrados = pedidosFiltrados.filter(p => (p.status || 'pending') === filtroStatus);
     }
-    
+
     if (filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.length > 0) {
         pedidosFiltrados = pedidosFiltrados.filter(pedido => {
             const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
@@ -2803,11 +2901,11 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
             });
         });
     }
-    
+
     // Agrupar pedidos por mês
     const pedidosPorMes = agruparPedidosPorMes(pedidosFiltrados);
     const mesesOrdenados = meses.sort((a, b) => b.value.localeCompare(a.value));
-    
+
     // Opções de status
     const statusOptions = [
         { value: 'todos', label: 'Todos os status' },
@@ -2819,7 +2917,7 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
         { value: 'refunded', label: 'Reembolsado' },
         { value: 'failed', label: 'Falhou' }
     ];
-    
+
     const html = `
         <div class="content-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
@@ -2881,9 +2979,9 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
                                 </label>
                             </div>
                             ${categoriasOrdenadas.map(cat => {
-                                const catId = cat.toLowerCase().replace(/\s+/g, '-');
-                                const isSelected = filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.includes(catId);
-                                return `
+        const catId = cat.toLowerCase().replace(/\s+/g, '-');
+        const isSelected = filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.includes(catId);
+        return `
                                     <div style="padding: 8px; border-bottom: 1px solid #f0f0f0;">
                                         <label style="display: flex; align-items: center; cursor: pointer;">
                                             <input 
@@ -2898,7 +2996,7 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
                                         </label>
                                     </div>
                                 `;
-                            }).join('')}
+    }).join('')}
                             <div style="padding: 8px; border-top: 1px solid #eee;">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
                                     <input 
@@ -2942,9 +3040,9 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
             <!-- Accordion de Meses -->
             <div style="margin-bottom: 24px;">
                 ${mesesOrdenados.map(mes => {
-                    const grupo = pedidosPorMes[mes.value] || { pedidos: [], total: 0, quantidade: 0 };
-                    const mesId = `mes-${mes.value.replace('-', '')}`;
-                    return `
+        const grupo = pedidosPorMes[mes.value] || { pedidos: [], total: 0, quantidade: 0 };
+        const mesId = `mes-${mes.value.replace('-', '')}`;
+        return `
                         <div style="border: 1px solid var(--color-border); border-radius: 8px; margin-bottom: 12px; overflow: hidden;">
                     <button 
                         type="button" 
@@ -3006,7 +3104,7 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
                             </div>
                         </div>
                     `;
-                }).join('')}
+    }).join('')}
             </div>
             
             <!-- Resumo -->
@@ -3024,7 +3122,7 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
             </div>
         </div>
     `;
-    
+
     contentArea.innerHTML = html;
 }
 
@@ -3034,14 +3132,14 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
 function toggleMes(mesId) {
     const content = document.getElementById(mesId);
     const icon = document.getElementById(`icon-${mesId}`);
-    
+
     if (!content || !icon) return;
-    
+
     if (content.style.display === 'none') {
         content.style.display = 'block';
         icon.textContent = '▲';
         icon.style.transform = 'rotate(0deg)';
-        
+
         // Carregar logs do banco APENAS se não houver logs locais já na tela
         // Extrair o mês do mesId (formato: mes-202411)
         const mesMatch = mesId.match(/mes-(\d{6})/);
@@ -3050,9 +3148,9 @@ function toggleMes(mesId) {
             const mes = `${mesNum.substring(0, 4)}-${mesNum.substring(4)}`;
             const logsContainer = document.getElementById(`conteudo-logs-mes-${mesNum}`);
             // Só carregar do banco se o container estiver vazio ou só tiver a mensagem inicial
-            const temApenasInicial = logsContainer && logsContainer.children.length <= 1 && 
-                                      logsContainer.innerHTML.includes('Carregando logs') || 
-                                      logsContainer.innerHTML.includes('Nenhum log');
+            const temApenasInicial = logsContainer && logsContainer.children.length <= 1 &&
+                logsContainer.innerHTML.includes('Carregando logs') ||
+                logsContainer.innerHTML.includes('Nenhum log');
             if (temApenasInicial) {
                 carregarLogsMes(mes);
             }
@@ -3070,17 +3168,17 @@ function toggleMes(mesId) {
 async function atualizarDadosWooCommerce() {
     const btnAtualizar = document.getElementById('btn-atualizar-woocommerce');
     const statusBar = document.getElementById('status-woocommerce');
-    
+
     if (!btnAtualizar) return;
-    
+
     // Desabilitar botão e mostrar loading
     btnAtualizar.disabled = true;
     btnAtualizar.textContent = 'Recarregando...';
-    
+
     if (statusBar) {
         statusBar.innerHTML = '<span style="color: #666; font-size: 12px;">⏳ Recarregando pedidos do WooCommerce...</span>';
     }
-    
+
     try {
         // Recarregar pedidos diretamente do WooCommerce (sem salvar no banco)
         await carregarPedidos();
@@ -3125,19 +3223,19 @@ function voltarParaListaMeses() {
 function gerarListaMeses() {
     const meses = [];
     const hoje = new Date();
-    
+
     for (let i = 0; i < 12; i++) {
         const data = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
         const ano = data.getFullYear();
         const mes = String(data.getMonth() + 1).padStart(2, '0');
         const mesNome = data.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
-        
+
         meses.push({
             value: `${ano}-${mes}`,
             label: mesNome.charAt(0).toUpperCase() + mesNome.slice(1)
         });
     }
-    
+
     return meses;
 }
 
@@ -3148,28 +3246,28 @@ function gerarListaMeses() {
 async function buscarPedidosFiltrados() {
     const tabelaArea = document.getElementById('tabela-pedidos');
     const areaEmissao = document.getElementById('area-emissao-lote');
-    
+
     if (!tabelaArea) return;
-    
+
     const mes = estadoAtual.mesSelecionado;
-    
+
     if (!mes) {
         alert('Por favor, selecione um mês primeiro.');
         return;
     }
-    
+
     tabelaArea.style.display = 'block';
     tabelaArea.innerHTML = window.Components ? window.Components.renderizarLoading() : '<div class="loading-spinner"></div><p>Carregando...</p>';
     if (areaEmissao) areaEmissao.style.display = 'none';
-    
+
     // Coletar filtros
     const statusSelect = document.getElementById('filtro-status-pedidos');
     const status = statusSelect ? (statusSelect.value || 'completed') : 'completed';
-    
+
     // Coletar categorias selecionadas
     const checkboxes = document.querySelectorAll('.checkbox-categoria:checked');
     const categorias = Array.from(checkboxes).map(cb => parseInt(cb.value));
-    
+
     const filtros = {
         mes: mes,
         status: status || undefined,
@@ -3179,21 +3277,21 @@ async function buscarPedidosFiltrados() {
         orderby: 'date',
         order: 'desc'
     };
-    
+
     const resultado = await API.WooCommerce.buscarPedidos(filtros);
-    
+
     if (resultado.sucesso) {
         estadoAtual.dados.pedidos = resultado.pedidos || [];
         estadoAtual.filtros = filtros;
-        
+
         if (estadoAtual.dados.pedidos.length === 0) {
             tabelaArea.innerHTML = `<div class="empty-state"><p>Nenhum pedido encontrado com os filtros selecionados.</p></div>`;
             return;
         }
-        
+
         // Mostrar tabela de pedidos
         tabelaArea.innerHTML = window.Components ? window.Components.renderizarTabelaPedidos(estadoAtual.dados.pedidos) : '<div>Erro: Components não disponível</div>';
-        
+
         // Mostrar botão de emissão em lote
         if (areaEmissao) {
             areaEmissao.style.display = 'block';
@@ -3209,10 +3307,10 @@ async function buscarPedidosFiltrados() {
 function limparFiltrosPedidos() {
     const statusSelect = document.getElementById('filtro-status-pedidos');
     if (statusSelect) statusSelect.value = 'completed';
-    
+
     const checkboxes = document.querySelectorAll('.checkbox-categoria');
     checkboxes.forEach(cb => cb.checked = false);
-    
+
     document.getElementById('tabela-pedidos').style.display = 'none';
     document.getElementById('area-emissao-lote').style.display = 'none';
 }
@@ -3224,16 +3322,16 @@ async function atualizarStatusPedido(pedidoId, novoStatus) {
     try {
         // Atualizar no banco de dados via API
         const resultado = await API.Pedidos.atualizarStatus(pedidoId, novoStatus);
-        
+
         if (resultado.sucesso || (resultado.dados && resultado.dados.sucesso)) {
             // Atualizar na interface imediatamente
             const pedido = estadoAtual.dados.todosPedidos.find(p => (p.id || p.number) == pedidoId);
             if (pedido) {
                 pedido.status = novoStatus;
             }
-            
+
             console.log(`Status do pedido ${pedidoId} atualizado para: ${novoStatus}`);
-            
+
             // Mostrar feedback visual
             const select = document.querySelector(`select[data-pedido-id="${pedidoId}"]`);
             if (select) {
@@ -3245,11 +3343,11 @@ async function atualizarStatusPedido(pedidoId, novoStatus) {
         } else {
             throw new Error(resultado.erro || 'Erro ao atualizar status');
         }
-        
+
     } catch (error) {
         console.error('Erro ao atualizar status do pedido:', error);
         alert('Erro ao atualizar status: ' + (error.message || error.erro || 'Erro desconhecido'));
-        
+
         // Reverter o select para o valor anterior
         const select = document.querySelector(`select[data-pedido-id="${pedidoId}"]`);
         if (select) {
@@ -3268,7 +3366,7 @@ function extrairCategoriasPedido(pedido) {
     if (!pedido.line_items || !Array.isArray(pedido.line_items)) {
         return [];
     }
-    
+
     const categorias = new Set();
     pedido.line_items.forEach(item => {
         // Tentar obter categorias de diferentes formas
@@ -3285,7 +3383,7 @@ function extrairCategoriasPedido(pedido) {
             categorias.add(item.name);
         }
     });
-    
+
     return Array.from(categorias);
 }
 
@@ -3296,24 +3394,24 @@ function aplicarFiltrosPedidos() {
     if (!estadoAtual.dados.todosPedidos || !estadoAtual.dados.meses) {
         return;
     }
-    
+
     const statusSelect = document.getElementById('filtro-status-pedidos');
     const agruparCheckbox = document.getElementById('agrupar-por-categoria');
-    
+
     const filtroStatus = statusSelect ? statusSelect.value : null;
     const agruparPorCategoria = agruparCheckbox ? agruparCheckbox.checked : false;
-    
+
     // Obter categorias selecionadas
     const categoriasSelecionadas = obterCategoriasSelecionadas();
-    
+
     // Salvar no estado
     estadoAtual.filtroStatus = filtroStatus === 'todos' ? null : filtroStatus;
     estadoAtual.filtroCategoria = categoriasSelecionadas.length > 0 ? categoriasSelecionadas : null;
     estadoAtual.agruparPorCategoria = agruparPorCategoria;
-    
+
     // Renderizar com filtros
     renderizarTelaPedidos(
-        estadoAtual.dados.todosPedidos, 
+        estadoAtual.dados.todosPedidos,
         estadoAtual.dados.meses,
         estadoAtual.filtroStatus,
         estadoAtual.filtroCategoria,
@@ -3335,22 +3433,22 @@ function obterCategoriasSelecionadas() {
 function atualizarFiltroCategorias() {
     const categoriasSelecionadas = obterCategoriasSelecionadas();
     const checkboxTodas = document.querySelector('.checkbox-categoria-todas');
-    
+
     // Se nenhuma categoria está selecionada, marcar "Todas"
     if (categoriasSelecionadas.length === 0) {
         if (checkboxTodas) checkboxTodas.checked = true;
     } else {
         if (checkboxTodas) checkboxTodas.checked = false;
     }
-    
+
     // Atualizar texto do botão
     const textoFiltro = document.getElementById('texto-filtro-categoria');
     if (textoFiltro) {
-        textoFiltro.textContent = categoriasSelecionadas.length > 0 
+        textoFiltro.textContent = categoriasSelecionadas.length > 0
             ? `${categoriasSelecionadas.length} categoria(s) selecionada(s)`
             : 'Todas as categorias';
     }
-    
+
     // Aplicar filtros
     aplicarFiltrosPedidos();
 }
@@ -3360,7 +3458,7 @@ function atualizarFiltroCategorias() {
  */
 function toggleTodasCategorias(checkbox) {
     const checkboxes = document.querySelectorAll('.checkbox-categoria');
-    
+
     if (checkbox.checked) {
         // Se "Todas" foi marcada, desmarcar todas as categorias específicas
         checkboxes.forEach(cb => {
@@ -3368,7 +3466,7 @@ function toggleTodasCategorias(checkbox) {
         });
     }
     // Se "Todas" foi desmarcada, não fazer nada (manter seleções atuais)
-    
+
     // Atualizar texto do botão
     const textoFiltro = document.getElementById('texto-filtro-categoria');
     if (textoFiltro) {
@@ -3376,12 +3474,12 @@ function toggleTodasCategorias(checkbox) {
             textoFiltro.textContent = 'Todas as categorias';
         } else {
             const categoriasSelecionadas = obterCategoriasSelecionadas();
-            textoFiltro.textContent = categoriasSelecionadas.length > 0 
+            textoFiltro.textContent = categoriasSelecionadas.length > 0
                 ? `${categoriasSelecionadas.length} categoria(s) selecionada(s)`
                 : 'Todas as categorias';
         }
     }
-    
+
     // Aplicar filtros
     aplicarFiltrosPedidos();
 }
@@ -3394,7 +3492,7 @@ function toggleDropdownCategorias() {
     if (dropdown) {
         const isVisible = dropdown.style.display !== 'none';
         dropdown.style.display = isVisible ? 'none' : 'block';
-        
+
         // Fechar ao clicar fora
         if (!isVisible) {
             setTimeout(() => {
@@ -3416,17 +3514,17 @@ function limparFiltrosPedidosTela() {
     estadoAtual.filtroStatus = null;
     estadoAtual.filtroCategoria = null;
     estadoAtual.agruparPorCategoria = false;
-    
+
     // Desmarcar todos os checkboxes de categoria
     const checkboxes = document.querySelectorAll('.checkbox-categoria');
     checkboxes.forEach(cb => cb.checked = false);
-    
+
     // Marcar "Todas as categorias"
     const checkboxTodas = document.querySelector('.checkbox-categoria-todas');
     if (checkboxTodas) checkboxTodas.checked = true;
-    
+
     renderizarTelaPedidos(
-        estadoAtual.dados.todosPedidos, 
+        estadoAtual.dados.todosPedidos,
         estadoAtual.dados.meses
     );
 }
@@ -3436,18 +3534,18 @@ function limparFiltrosPedidosTela() {
  */
 async function verDetalhesPedido(pedidoId) {
     try {
-    const resultado = await API.WooCommerce.buscarPedidoPorId(pedidoId);
-    
+        const resultado = await API.WooCommerce.buscarPedidoPorId(pedidoId);
+
         if (!resultado || !resultado.sucesso) {
             alert('Erro ao buscar detalhes: ' + (resultado?.erro || 'Erro desconhecido'));
             return;
         }
-        
+
         const pedido = resultado.dados?.pedido || resultado.pedido || resultado;
-        
+
         // Criar popup/modal com os detalhes
         mostrarPopupDetalhesPedido(pedido);
-        
+
     } catch (error) {
         console.error('Erro ao buscar detalhes do pedido:', error);
         alert('Erro ao buscar detalhes: ' + error.message);
@@ -3474,7 +3572,7 @@ function mostrarPopupDetalhesPedido(pedido) {
         align-items: center;
         padding: 20px;
     `;
-    
+
     // Criar modal
     const modal = document.createElement('div');
     modal.style.cssText = `
@@ -3486,7 +3584,7 @@ function mostrarPopupDetalhesPedido(pedido) {
         overflow-y: auto;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     `;
-    
+
     // Header do modal
     const header = document.createElement('div');
     header.style.cssText = `
@@ -3497,11 +3595,11 @@ function mostrarPopupDetalhesPedido(pedido) {
         align-items: center;
         background-color: var(--color-gray-light);
     `;
-    
+
     const titulo = document.createElement('h2');
     titulo.textContent = `Pedido #${pedido.id || pedido.number || 'N/A'}`;
     titulo.style.cssText = 'margin: 0; font-size: 20px; font-weight: 600; color: var(--color-gray-dark);';
-    
+
     const btnFechar = document.createElement('button');
     btnFechar.textContent = '✕';
     btnFechar.style.cssText = `
@@ -3518,35 +3616,35 @@ function mostrarPopupDetalhesPedido(pedido) {
         justify-content: center;
     `;
     btnFechar.onclick = () => overlay.remove();
-    
+
     header.appendChild(titulo);
     header.appendChild(btnFechar);
-    
+
     // Body do modal
     const body = document.createElement('div');
     body.style.cssText = 'padding: 20px;';
-    
+
     // Função auxiliar para formatar dados de forma mais legível
     const formatarDados = (obj, nivel = 0, chave = '') => {
         const indent = '  '.repeat(nivel);
-        
+
         if (obj === null || obj === undefined) {
             return `<span style="color: #999;">null</span>`;
         }
-        
+
         if (typeof obj === 'string') {
             const valor = obj.length > 100 ? obj.substring(0, 100) + '...' : obj;
             return `<span style="color: #28a745;">"${valor}"</span>`;
         }
-        
+
         if (typeof obj === 'number') {
             return `<span style="color: #0066cc; font-weight: 600;">${obj}</span>`;
         }
-        
+
         if (typeof obj === 'boolean') {
             return `<span style="color: #cc0066; font-weight: 600;">${obj}</span>`;
         }
-        
+
         if (Array.isArray(obj)) {
             if (obj.length === 0) {
                 return `<span style="color: #999;">[]</span>`;
@@ -3559,7 +3657,7 @@ function mostrarPopupDetalhesPedido(pedido) {
                 `).join('')}
             </div>`;
         }
-        
+
         if (typeof obj === 'object') {
             const keys = Object.keys(obj);
             if (keys.length === 0) {
@@ -3567,20 +3665,20 @@ function mostrarPopupDetalhesPedido(pedido) {
             }
             return `<div style="margin-left: ${nivel * 20}px; border-left: 2px solid #e0e0e0; padding-left: 10px;">
                 ${keys.map(key => {
-                    const valor = obj[key];
-                    const isComplex = (typeof valor === 'object' && valor !== null) || Array.isArray(valor);
-                    return `
+                const valor = obj[key];
+                const isComplex = (typeof valor === 'object' && valor !== null) || Array.isArray(valor);
+                return `
                         <div style="margin-bottom: ${isComplex ? '12px' : '6px'};">
                             <span style="color: #0066cc; font-weight: 600;">${key}</span>: ${formatarDados(valor, nivel + 1, key)}
                         </div>
                     `;
-                }).join('')}
+            }).join('')}
             </div>`;
         }
-        
+
         return String(obj);
     };
-    
+
     // Criar conteúdo formatado
     const conteudo = document.createElement('div');
     conteudo.style.cssText = `
@@ -3595,9 +3693,9 @@ function mostrarPopupDetalhesPedido(pedido) {
         overflow-y: auto;
     `;
     conteudo.innerHTML = formatarDados(pedido);
-    
+
     body.appendChild(conteudo);
-    
+
     // Footer do modal
     const footer = document.createElement('div');
     footer.style.cssText = `
@@ -3607,28 +3705,28 @@ function mostrarPopupDetalhesPedido(pedido) {
         justify-content: flex-end;
         background-color: var(--color-gray-light);
     `;
-    
+
     const btnFecharFooter = document.createElement('button');
     btnFecharFooter.textContent = 'Fechar';
     btnFecharFooter.className = 'btn btn-secondary';
     btnFecharFooter.style.cssText = 'padding: 8px 16px;';
     btnFecharFooter.onclick = () => overlay.remove();
-    
+
     footer.appendChild(btnFecharFooter);
-    
+
     // Montar modal
     modal.appendChild(header);
     modal.appendChild(body);
     modal.appendChild(footer);
     overlay.appendChild(modal);
-    
+
     // Fechar ao clicar no overlay (fora do modal)
     overlay.onclick = (e) => {
         if (e.target === overlay) {
             overlay.remove();
         }
     };
-    
+
     // Adicionar ao body
     document.body.appendChild(overlay);
 }
@@ -3640,19 +3738,19 @@ function adicionarLogMes(mes, tipo, mensagem, dados = null) {
     const mesId = mes.replace('-', '');
     const logsContainer = document.getElementById(`conteudo-logs-mes-${mesId}`);
     if (!logsContainer) return;
-    
+
     // Expandir automaticamente quando adicionar log
     logsContainer.style.display = 'block';
     const icon = document.getElementById(`logs-icon-${mesId}`);
     if (icon) {
         icon.textContent = '▲';
     }
-    
+
     const timestamp = new Date().toLocaleString('pt-BR');
     let cor = '#d4d4d4';
     let prefixo = '';
-    
-    switch(tipo) {
+
+    switch (tipo) {
         case 'enviado':
             cor = '#4ec9b0';
             prefixo = '→ ENVIADO';
@@ -3676,10 +3774,10 @@ function adicionarLogMes(mes, tipo, mensagem, dados = null) {
         default:
             prefixo = '•';
     }
-    
+
     const logEntry = document.createElement('div');
     logEntry.style.cssText = 'margin-bottom: 12px; line-height: 1.6; padding: 8px; border-radius: 4px; background: rgba(255,255,255,0.02);';
-    
+
     // Formatar dados de forma mais legível
     let dadosHTML = '';
     if (dados) {
@@ -3702,7 +3800,7 @@ function adicionarLogMes(mes, tipo, mensagem, dados = null) {
             dadosHTML += '</div>';
         }
     }
-    
+
     logEntry.innerHTML = `
         <div style="display: flex; align-items: flex-start; gap: 8px;">
             <span style="color: #808080; font-size: 11px; white-space: nowrap;">[${timestamp}]</span>
@@ -3711,14 +3809,14 @@ function adicionarLogMes(mes, tipo, mensagem, dados = null) {
         </div>
         ${dadosHTML}
     `;
-    
+
     // Se for o primeiro log, limpar mensagem inicial
     if (logsContainer.querySelector('div[style*="color: #888"]') && logsContainer.children.length === 1) {
         logsContainer.innerHTML = '';
     }
-    
+
     logsContainer.appendChild(logEntry);
-    
+
     // Scroll para o final
     logsContainer.scrollTop = logsContainer.scrollHeight;
 }
@@ -3729,35 +3827,35 @@ function adicionarLogMes(mes, tipo, mensagem, dados = null) {
 async function carregarLogsMes(mes) {
     try {
         const resultado = await API.Pedidos.listarLogs({ mes, limite: 50 });
-        
+
         const logs = Array.isArray(resultado) ? resultado : (resultado.dados || []);
-        
+
         // Limpar logs anteriores
         const mesId = mes.replace('-', '');
         const logsContainer = document.getElementById(`conteudo-logs-mes-${mesId}`);
         if (!logsContainer) return;
-        
+
         // Garantir que o container está visível ao carregar logs
         logsContainer.style.display = 'block';
         const icon = document.getElementById(`logs-icon-${mesId}`);
         if (icon) {
             icon.textContent = '▲';
         }
-        
+
         if (logs.length === 0) {
             logsContainer.innerHTML = '<div style="color: #888;">Nenhum log disponível ainda. Os logs aparecerão aqui após iniciar a emissão.</div>';
             return;
         }
-        
+
         logsContainer.innerHTML = '';
-        
+
         // Ordenar logs por data (mais antigo primeiro para melhor leitura)
         logs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        
+
         logs.forEach(log => {
             let tipo = 'info';
             let mensagem = log.message || '';
-            
+
             // Determinar tipo baseado no level e action
             if (log.level === 'ERROR' || log.level === 'error') {
                 tipo = 'erro';
@@ -3770,56 +3868,56 @@ async function carregarLogsMes(mes) {
                     tipo = 'sucesso';
                 }
             }
-            
+
             // Extrair dados relevantes com mais detalhes
             let dados = null;
             if (log.data) {
                 try {
                     const dataObj = typeof log.data === 'string' ? JSON.parse(log.data) : log.data;
-                    
+
                     // Montar objeto com todos os dados úteis
                     const detalhes = {};
-                    
+
                     // Identificação
                     if (dataObj.pedido_id) detalhes['📦 Pedido'] = `#${dataObj.pedido_id}`;
                     if (dataObj.referencia) detalhes['🏷️ Referência'] = dataObj.referencia;
                     if (dataObj.tipo_nota) detalhes['📄 Tipo'] = dataObj.tipo_nota === 'produto' ? 'NFe (Produto)' : 'NFSe (Serviço)';
-                    
+
                     // Status
                     if (dataObj.status) detalhes['📊 Status'] = dataObj.status;
                     if (dataObj.status_sefaz) detalhes['🏛️ Status SEFAZ'] = dataObj.status_sefaz;
                     if (dataObj.mensagem_sefaz) detalhes['💬 Mensagem SEFAZ'] = dataObj.mensagem_sefaz;
-                    
+
                     // Chaves e URLs
                     if (dataObj.chave_nfe) detalhes['🔑 Chave NFe'] = dataObj.chave_nfe;
                     if (dataObj.chave_nfse) detalhes['🔑 Chave NFSe'] = dataObj.chave_nfse;
                     if (dataObj.caminho_xml_nota_fiscal || dataObj.caminho_xml) detalhes['📁 XML'] = dataObj.caminho_xml_nota_fiscal || dataObj.caminho_xml;
                     if (dataObj.caminho_danfe || dataObj.caminho_pdf) detalhes['📄 PDF'] = dataObj.caminho_danfe || dataObj.caminho_pdf;
-                    
+
                     // Valores
                     if (dataObj.valor_total) detalhes['💰 Valor'] = `R$ ${parseFloat(dataObj.valor_total).toFixed(2)}`;
-                    
+
                     // Cliente
                     if (dataObj.cliente) detalhes['👤 Cliente'] = dataObj.cliente;
                     if (dataObj.nome) detalhes['👤 Cliente'] = dataObj.nome;
                     if (dataObj.cpf || dataObj.cpf_destinatario) detalhes['🆔 CPF'] = dataObj.cpf || dataObj.cpf_destinatario;
                     if (dataObj.cnpj || dataObj.cnpj_destinatario) detalhes['🆔 CNPJ'] = dataObj.cnpj || dataObj.cnpj_destinatario;
-                    
+
                     // Erros
                     if (dataObj.erro) detalhes['❌ Erro'] = typeof dataObj.erro === 'object' ? JSON.stringify(dataObj.erro) : dataObj.erro;
                     if (dataObj.error) detalhes['❌ Erro'] = typeof dataObj.error === 'object' ? JSON.stringify(dataObj.error) : dataObj.error;
                     if (dataObj.codigo_erro) detalhes['🔢 Código Erro'] = dataObj.codigo_erro;
-                    
+
                     // Response da API
                     if (dataObj.response_data) {
                         if (dataObj.response_data.status) detalhes['📊 Status API'] = dataObj.response_data.status;
                         if (dataObj.response_data.mensagem_sefaz) detalhes['💬 SEFAZ'] = dataObj.response_data.mensagem_sefaz;
                         if (dataObj.response_data.chave_nfe) detalhes['🔑 Chave'] = dataObj.response_data.chave_nfe;
                     }
-                    
+
                     // Ambiente
                     if (dataObj.ambiente) detalhes['🌐 Ambiente'] = dataObj.ambiente === 'producao' ? '🔴 PRODUÇÃO' : '🟡 Homologação';
-                    
+
                     // Se tem detalhes, usar; senão mostrar dados brutos
                     if (Object.keys(detalhes).length > 0) {
                         dados = detalhes;
@@ -3831,10 +3929,10 @@ async function carregarLogsMes(mes) {
                     dados = String(log.data).substring(0, 500);
                 }
             }
-            
+
             adicionarLogMes(mes, tipo, mensagem, dados);
         });
-        
+
     } catch (error) {
         console.error('Erro ao carregar logs do mês:', error);
         const mesId = mes.replace('-', '');
@@ -3850,84 +3948,84 @@ async function carregarLogsMes(mes) {
  */
 async function emitirNotasMes(mes) {
     console.log('Emitir Notas para mês:', mes);
-    
+
     // Garantir que o mês está expandido para ver os logs
     const mesId = `mes-${mes.replace('-', '')}`;
     const content = document.getElementById(mesId);
     if (content && content.style.display === 'none') {
         toggleMes(mesId);
     }
-    
+
     // Adicionar log inicial
     adicionarLogMes(mes, 'info', '🚀 Iniciando emissão de notas...');
-    
+
     try {
         // Obter pedidos selecionados ou todos do mês
         let pedidoIds = obterPedidosSelecionados();
-        
+
         // Se não houver pedidos selecionados, usar todos do mês
         let pedidosMes = [];
         if (!pedidoIds || pedidoIds.length === 0) {
             pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
                 const dataPedido = new Date(pedido.date_created);
                 const [ano, mesNum] = mes.split('-');
-                return dataPedido.getFullYear() === parseInt(ano) && 
-                       (dataPedido.getMonth() + 1) === parseInt(mesNum);
+                return dataPedido.getFullYear() === parseInt(ano) &&
+                    (dataPedido.getMonth() + 1) === parseInt(mesNum);
             });
-            
+
             if (pedidosMes.length === 0) {
                 adicionarLogMes(mes, 'erro', 'Nenhum pedido encontrado para este mês.');
                 return;
             }
-            
+
             adicionarLogMes(mes, 'info', `Processando todos os ${pedidosMes.length} pedido(s) do mês.`);
         } else {
             // Filtrar pedidos selecionados que pertencem ao mês
             pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
                 const dataPedido = new Date(pedido.date_created);
                 const [ano, mesNum] = mes.split('-');
-                const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) && 
-                                     (dataPedido.getMonth() + 1) === parseInt(mesNum);
+                const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) &&
+                    (dataPedido.getMonth() + 1) === parseInt(mesNum);
                 const estaSelecionado = pedidoIds.includes(String(pedido.id || pedido.number));
                 return pertenceAoMes && estaSelecionado;
             });
-            
+
             if (pedidosMes.length === 0) {
                 adicionarLogMes(mes, 'erro', 'Nenhum pedido selecionado pertence a este mês.');
                 return;
             }
-            
+
             adicionarLogMes(mes, 'info', `${pedidosMes.length} pedido(s) selecionado(s) para processar.`);
         }
-        
+
         // Separar pedidos por tipo (produto vs serviço)
         const pedidosProduto = [];
         const pedidosServico = [];
-        
+
         for (const pedido of pedidosMes) {
             const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
             const temLivroFaiscas = categorias.some(cat => {
                 const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                 return catLower.includes('livro') && catLower.includes('faiscas');
             });
-            
+
             if (temLivroFaiscas) {
                 pedidosProduto.push(pedido);
             } else {
                 pedidosServico.push(pedido);
             }
         }
-        
+
         adicionarLogMes(mes, 'info', `📊 Detectado: ${pedidosServico.length} serviço(s), ${pedidosProduto.length} produto(s)`);
-        
+
         let totalSucesso = 0;
         let totalErros = 0;
-        
+
         // Emitir NFSe (serviços)
         if (pedidosServico.length > 0) {
             const idsServico = pedidosServico.map(p => String(p.id || p.number));
             adicionarLogMes(mes, 'enviado', `📤 Emitindo ${idsServico.length} NFSe (serviço)...`);
-            
+
             try {
                 const resultado = await API.NFSe.emitirLote(idsServico, 'servico');
                 processarResultadoEmissao(mes, resultado, 'NFSe', pedidosServico);
@@ -3938,12 +4036,12 @@ async function emitirNotasMes(mes) {
                 totalErros += idsServico.length;
             }
         }
-        
+
         // Emitir NFe (produtos)
         if (pedidosProduto.length > 0) {
             const idsProduto = pedidosProduto.map(p => String(p.id || p.number));
             adicionarLogMes(mes, 'enviado', `📤 Emitindo ${idsProduto.length} NFe (produto)...`);
-            
+
             try {
                 const resultado = await API.NFSe.emitirLote(idsProduto, 'produto');
                 processarResultadoEmissao(mes, resultado, 'NFe', pedidosProduto);
@@ -3954,7 +4052,7 @@ async function emitirNotasMes(mes) {
                 totalErros += idsProduto.length;
             }
         }
-        
+
         // Mensagem final
         const total = pedidosMes.length;
         if (totalSucesso === total) {
@@ -3964,39 +4062,39 @@ async function emitirNotasMes(mes) {
         } else {
             adicionarLogMes(mes, 'erro', `❌ Emissão falhou: ${totalErros} erro(s)`);
         }
-        
+
         // Recarregar dados
         await carregarPedidos();
-        
+
         // Garantir que o accordion do mês está expandido
         const mesId = `mes-${mes.replace('-', '')}`;
         const mesContent = document.getElementById(mesId);
         if (mesContent && mesContent.style.display === 'none') {
             toggleMes(mesId);
         }
-        
+
         // Aguardar um pouco para garantir que os logs foram salvos no banco
         await new Promise(resolve => setTimeout(resolve, 1500));
-        
+
         // Carregar logs automaticamente após emissão
         // Expandir accordion de logs e carregar
         toggleLogsMes(mes);
         await carregarLogsMes(mes);
-        
+
     } catch (error) {
         console.error('Erro ao emitir notas:', error);
         adicionarLogMes(mes, 'erro', `Erro: ${error.message}`);
-        
+
         // Garantir que o accordion do mês está expandido
         const mesId = `mes-${mes.replace('-', '')}`;
         const mesContent = document.getElementById(mesId);
         if (mesContent && mesContent.style.display === 'none') {
             toggleMes(mesId);
         }
-        
+
         // Aguardar um pouco antes de carregar logs
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         // Mesmo em caso de erro, tentar carregar logs
         toggleLogsMes(mes);
         await carregarLogsMes(mes);
@@ -4009,13 +4107,13 @@ async function emitirNotasMes(mes) {
 function processarResultadoEmissao(mes, resultado, tipoNota, pedidos) {
     if (resultado && resultado.resultados && Array.isArray(resultado.resultados)) {
         resultado.resultados.forEach((res) => {
-            const pedidoCompleto = pedidos.find(p => 
+            const pedidoCompleto = pedidos.find(p =>
                 String(p.id) === String(res.pedido_id) || String(p.number) === String(res.pedido_id)
             );
-            const cliente = pedidoCompleto?.billing?.first_name ? 
+            const cliente = pedidoCompleto?.billing?.first_name ?
                 `${pedidoCompleto.billing.first_name} ${pedidoCompleto.billing.last_name || ''}`.trim() : 'N/A';
             const valor = pedidoCompleto?.total || 'N/A';
-            
+
             if (res.sucesso) {
                 adicionarLogMes(mes, 'sucesso', `✓ #${res.pedido_id}: ${tipoNota} emitida`, {
                     '👤 Cliente': cliente,
@@ -4024,10 +4122,10 @@ function processarResultadoEmissao(mes, resultado, tipoNota, pedidos) {
                     '📊 Status': res.status || 'processando'
                 });
             } else {
-                const erroDetalhe = typeof res.erro === 'object' 
+                const erroDetalhe = typeof res.erro === 'object'
                     ? (res.erro.mensagem || res.erro.message || JSON.stringify(res.erro))
                     : (res.erro || 'Erro desconhecido');
-                
+
                 adicionarLogMes(mes, 'erro', `✗ #${res.pedido_id}: Falha`, {
                     '👤 Cliente': cliente,
                     '❌ Erro': erroDetalhe
@@ -4040,35 +4138,35 @@ function processarResultadoEmissao(mes, resultado, tipoNota, pedidos) {
 // Manter funções antigas por compatibilidade
 async function emitirNFServicoMes(mes) {
     console.log('Emitir NF Serviço para mês:', mes);
-    
+
     // Garantir que o mês está expandido para ver os logs
     const mesId = `mes-${mes.replace('-', '')}`;
     const content = document.getElementById(mesId);
     if (content && content.style.display === 'none') {
         toggleMes(mesId);
     }
-    
+
     // Adicionar log inicial
     adicionarLogMes(mes, 'info', 'Iniciando emissão de NF Serviço...');
-    
+
     try {
         // Obter pedidos selecionados primeiro
         let pedidoIds = obterPedidosSelecionados();
-        
+
         // Se não houver pedidos selecionados, usar todos do mês
         if (!pedidoIds || pedidoIds.length === 0) {
             const pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
                 const dataPedido = new Date(pedido.date_created);
                 const [ano, mesNum] = mes.split('-');
-                return dataPedido.getFullYear() === parseInt(ano) && 
-                       (dataPedido.getMonth() + 1) === parseInt(mesNum);
+                return dataPedido.getFullYear() === parseInt(ano) &&
+                    (dataPedido.getMonth() + 1) === parseInt(mesNum);
             });
-            
+
             if (pedidosMes.length === 0) {
                 adicionarLogMes(mes, 'erro', 'Nenhum pedido encontrado para este mês.');
                 return;
             }
-            
+
             pedidoIds = pedidosMes.map(p => String(p.id || p.number));
             adicionarLogMes(mes, 'info', `Nenhum pedido selecionado. Processando todos os ${pedidoIds.length} pedido(s) do mês.`);
         } else {
@@ -4076,30 +4174,30 @@ async function emitirNFServicoMes(mes) {
             const pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
                 const dataPedido = new Date(pedido.date_created);
                 const [ano, mesNum] = mes.split('-');
-                const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) && 
-                                     (dataPedido.getMonth() + 1) === parseInt(mesNum);
+                const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) &&
+                    (dataPedido.getMonth() + 1) === parseInt(mesNum);
                 const estaSelecionado = pedidoIds.includes(String(pedido.id || pedido.number));
                 return pertenceAoMes && estaSelecionado;
             });
-            
+
             pedidoIds = pedidosMes.map(p => String(p.id || p.number));
-            
+
             if (pedidoIds.length === 0) {
                 adicionarLogMes(mes, 'erro', 'Nenhum pedido selecionado pertence a este mês.');
                 return;
             }
-            
+
             adicionarLogMes(mes, 'info', `${pedidoIds.length} pedido(s) selecionado(s) para processar.`);
         }
-        
+
         // Chamar API de emissão em lote
-        adicionarLogMes(mes, 'enviado', `Enviando ${pedidoIds.length} pedido(s) para emissão...`, { 
+        adicionarLogMes(mes, 'enviado', `Enviando ${pedidoIds.length} pedido(s) para emissão...`, {
             total_pedidos: pedidoIds.length,
             pedido_ids: pedidoIds.slice(0, 5) // Mostrar apenas os primeiros 5 IDs
         });
-        
+
         const resultado = await API.NFSe.emitirLote(pedidoIds, 'servico');
-    
+
         // Verificar se temos resultados para processar (sucesso pode ser 0 mas ainda ter resultados)
         if (resultado && resultado.resultados && Array.isArray(resultado.resultados)) {
             adicionarLogMes(mes, 'recebido', `Resposta recebida: ${resultado.sucesso || 0} sucesso, ${resultado.erros || 0} erros`, {
@@ -4107,18 +4205,18 @@ async function emitirNFServicoMes(mes) {
                 sucesso: resultado.sucesso,
                 erros: resultado.erros
             });
-            
+
             // Adicionar logs individuais dos resultados
             resultado.resultados.forEach((res, idx) => {
                 // Buscar dados do pedido para mais detalhes
-                const pedidoCompleto = estadoAtual.dados.todosPedidos?.find(p => 
+                const pedidoCompleto = estadoAtual.dados.todosPedidos?.find(p =>
                     String(p.id) === String(res.pedido_id) || String(p.number) === String(res.pedido_id)
                 );
-                const cliente = pedidoCompleto?.billing?.first_name ? 
-                    `${pedidoCompleto.billing.first_name} ${pedidoCompleto.billing.last_name || ''}`.trim() : 
+                const cliente = pedidoCompleto?.billing?.first_name ?
+                    `${pedidoCompleto.billing.first_name} ${pedidoCompleto.billing.last_name || ''}`.trim() :
                     (pedidoCompleto?.customer_name || 'N/A');
                 const valor = pedidoCompleto?.total || res.valor_total || 'N/A';
-                
+
                 if (res.sucesso) {
                     adicionarLogMes(mes, 'sucesso', `Pedido #${res.pedido_id}: NFSe emitida com sucesso`, {
                         '📦 Pedido': `#${res.pedido_id}`,
@@ -4132,13 +4230,13 @@ async function emitirNFServicoMes(mes) {
                     });
                 } else {
                     // Extrair mensagem de erro (pode ser string ou objeto)
-                    const erroDetalhe = typeof res.erro === 'object' 
+                    const erroDetalhe = typeof res.erro === 'object'
                         ? (res.erro.mensagem || res.erro.message || JSON.stringify(res.erro))
                         : (res.erro || res.mensagem || 'Erro desconhecido');
                     const codigoErro = typeof res.erro === 'object'
                         ? (res.erro.codigo || res.erro.code || res.codigo_erro || res.codigo || 'N/A')
                         : (res.codigo_erro || res.codigo || 'N/A');
-                    
+
                     adicionarLogMes(mes, 'erro', `Pedido #${res.pedido_id}: Falha na emissão`, {
                         '📦 Pedido': `#${res.pedido_id}`,
                         '👤 Cliente': cliente,
@@ -4148,11 +4246,11 @@ async function emitirNFServicoMes(mes) {
                     });
                 }
             });
-            
+
             // Determinar mensagem final baseado no resultado
             const temSucesso = resultado.sucesso > 0;
             const mensagemFinal = `${temSucesso ? '✓' : '✗'} Emissão concluída: ${resultado.sucesso || 0} de ${resultado.total || pedidoIds.length} pedido(s) processado(s) com sucesso.`;
-            
+
             if (temSucesso) {
                 adicionarLogMes(mes, 'sucesso', mensagemFinal);
             } else {
@@ -4164,9 +4262,9 @@ async function emitirNFServicoMes(mes) {
                 erro: erroMsg
             });
         }
-        
+
         // Logs permanecem na tela até o usuário atualizar a página
-        
+
     } catch (error) {
         console.error('Erro ao emitir NF Serviço:', error);
         adicionarLogMes(mes, 'erro', `Erro ao emitir NF Serviço: ${error.message}`, { error: error.message });
@@ -4178,14 +4276,14 @@ async function emitirNFServicoMes(mes) {
  */
 async function emitirNFProdutoMes(mes) {
     console.log('Emitir NF Produto para mês:', mes);
-    
+
     // Garantir que o mês está expandido para ver os logs
     const mesId = `mes-${mes.replace('-', '')}`;
     const content = document.getElementById(mesId);
     if (content && content.style.display === 'none') {
         toggleMes(mesId);
     }
-    
+
     // Garantir que o container de logs existe
     const mesIdLogs = mes.replace('-', '');
     const logsContainer = document.getElementById(`conteudo-logs-mes-${mesIdLogs}`);
@@ -4194,45 +4292,45 @@ async function emitirNFProdutoMes(mes) {
         alert('Erro: Container de logs não encontrado. Recarregue a página.');
         return;
     }
-    
+
     // Adicionar log inicial
     adicionarLogMes(mes, 'info', 'Iniciando emissão de NF Produto...');
-    
+
     try {
         // Verificar se há dados carregados
         if (!estadoAtual.dados || !estadoAtual.dados.todosPedidos) {
             adicionarLogMes(mes, 'erro', 'Erro: Dados dos pedidos não carregados. Clique em "Recarregar do WooCommerce" primeiro.');
             return;
         }
-        
+
         // Obter pedidos selecionados primeiro
         let pedidoIds = obterPedidosSelecionados();
-        
+
         // Se não houver pedidos selecionados, usar todos do mês que são produtos
         if (!pedidoIds || pedidoIds.length === 0) {
             const pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
                 const dataPedido = new Date(pedido.date_created);
                 const [ano, mesNum] = mes.split('-');
-                const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) && 
-                                     (dataPedido.getMonth() + 1) === parseInt(mesNum);
-                
+                const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) &&
+                    (dataPedido.getMonth() + 1) === parseInt(mesNum);
+
                 // Filtrar apenas pedidos com categoria "Livro Faíscas" (produtos)
                 const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
                 const temLivroFaiscas = categorias.some(cat => {
                     const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                     return (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                           catLower === 'livro faiscas' ||
-                           catLower.includes('livro faiscas');
+                        catLower === 'livro faiscas' ||
+                        catLower.includes('livro faiscas');
                 });
-                
+
                 return pertenceAoMes && temLivroFaiscas;
             });
-            
+
             if (pedidosMes.length === 0) {
                 adicionarLogMes(mes, 'erro', 'Nenhum pedido de PRODUTO (Livro Faíscas) encontrado para este mês.');
                 return;
             }
-            
+
             pedidoIds = pedidosMes.map(p => String(p.id || p.number));
             adicionarLogMes(mes, 'info', `Nenhum pedido selecionado. Processando ${pedidoIds.length} pedido(s) de PRODUTO do mês.`);
         } else {
@@ -4240,43 +4338,43 @@ async function emitirNFProdutoMes(mes) {
             const pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
                 const dataPedido = new Date(pedido.date_created);
                 const [ano, mesNum] = mes.split('-');
-                const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) && 
-                                     (dataPedido.getMonth() + 1) === parseInt(mesNum);
+                const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) &&
+                    (dataPedido.getMonth() + 1) === parseInt(mesNum);
                 const estaSelecionado = pedidoIds.includes(String(pedido.id || pedido.number));
-                
+
                 // Verificar se é produto
                 const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
                 const temLivroFaiscas = categorias.some(cat => {
                     const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                     return (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                           catLower === 'livro faiscas' ||
-                           catLower.includes('livro faiscas');
+                        catLower === 'livro faiscas' ||
+                        catLower.includes('livro faiscas');
                 });
-                
+
                 return pertenceAoMes && estaSelecionado && temLivroFaiscas;
             });
-            
+
             pedidoIds = pedidosMes.map(p => String(p.id || p.number));
-            
+
             if (pedidoIds.length === 0) {
                 adicionarLogMes(mes, 'erro', 'Nenhum pedido selecionado é de PRODUTO (Livro Faíscas) ou pertence a este mês.');
                 return;
             }
-            
+
             adicionarLogMes(mes, 'info', `${pedidoIds.length} pedido(s) de PRODUTO selecionado(s) para processar.`);
         }
-        
+
         // Chamar API de emissão em lote (tipo produto)
-        adicionarLogMes(mes, 'enviado', `Enviando ${pedidoIds.length} pedido(s) para emissão de NF Produto...`, { 
+        adicionarLogMes(mes, 'enviado', `Enviando ${pedidoIds.length} pedido(s) para emissão de NF Produto...`, {
             total_pedidos: pedidoIds.length,
             pedido_ids: pedidoIds.slice(0, 5),
             tipo: 'produto'
         });
-        
+
         console.log('Chamando API.emitirLote com:', { pedidoIds, tipo: 'produto' });
         const resultado = await API.NFSe.emitirLote(pedidoIds, 'produto');
         console.log('Resultado da API:', resultado);
-        
+
         // Verificar se temos resultados para processar (sucesso pode ser 0 mas ainda ter resultados)
         if (resultado && resultado.resultados && Array.isArray(resultado.resultados)) {
             adicionarLogMes(mes, 'recebido', `Resposta recebida: ${resultado.sucesso || 0} sucesso, ${resultado.erros || 0} erros`, {
@@ -4284,18 +4382,18 @@ async function emitirNFProdutoMes(mes) {
                 sucesso: resultado.sucesso,
                 erros: resultado.erros
             });
-            
+
             // Adicionar logs individuais dos resultados
             resultado.resultados.forEach((res, idx) => {
                 // Buscar dados do pedido para mais detalhes
-                const pedidoCompleto = estadoAtual.dados.todosPedidos?.find(p => 
+                const pedidoCompleto = estadoAtual.dados.todosPedidos?.find(p =>
                     String(p.id) === String(res.pedido_id) || String(p.number) === String(res.pedido_id)
                 );
-                const cliente = pedidoCompleto?.billing?.first_name ? 
-                    `${pedidoCompleto.billing.first_name} ${pedidoCompleto.billing.last_name || ''}`.trim() : 
+                const cliente = pedidoCompleto?.billing?.first_name ?
+                    `${pedidoCompleto.billing.first_name} ${pedidoCompleto.billing.last_name || ''}`.trim() :
                     (pedidoCompleto?.customer_name || 'N/A');
                 const valor = pedidoCompleto?.total || res.valor_total || 'N/A';
-                
+
                 if (res.sucesso) {
                     adicionarLogMes(mes, 'sucesso', `Pedido #${res.pedido_id}: NFe (Produto) emitida com sucesso`, {
                         '📦 Pedido': `#${res.pedido_id}`,
@@ -4309,13 +4407,13 @@ async function emitirNFProdutoMes(mes) {
                     });
                 } else {
                     // Extrair mensagem de erro (pode ser string ou objeto)
-                    const erroDetalhe = typeof res.erro === 'object' 
+                    const erroDetalhe = typeof res.erro === 'object'
                         ? (res.erro.mensagem || res.erro.message || JSON.stringify(res.erro))
                         : (res.erro || res.mensagem || 'Erro desconhecido');
                     const codigoErro = typeof res.erro === 'object'
                         ? (res.erro.codigo || res.erro.code || res.codigo_erro || res.codigo || 'N/A')
                         : (res.codigo_erro || res.codigo || 'N/A');
-                    
+
                     adicionarLogMes(mes, 'erro', `Pedido #${res.pedido_id}: Falha na emissão de NFe`, {
                         '📦 Pedido': `#${res.pedido_id}`,
                         '👤 Cliente': cliente,
@@ -4325,11 +4423,11 @@ async function emitirNFProdutoMes(mes) {
                     });
                 }
             });
-            
+
             // Determinar mensagem final baseado no resultado
             const temSucesso = resultado.sucesso > 0;
             const mensagemFinal = `${temSucesso ? '✓' : '✗'} Emissão concluída: ${resultado.sucesso || 0} de ${resultado.total || pedidoIds.length} pedido(s) processado(s) com sucesso.`;
-            
+
             if (temSucesso) {
                 adicionarLogMes(mes, 'sucesso', mensagemFinal);
             } else {
@@ -4343,12 +4441,12 @@ async function emitirNFProdutoMes(mes) {
                 resposta_completa: resultado
             });
         }
-        
+
         // Logs permanecem na tela até o usuário atualizar a página
-        
+
     } catch (error) {
         console.error('Erro ao emitir NF Produto:', error);
-        adicionarLogMes(mes, 'erro', `Erro ao emitir NF Produto: ${error.message}`, { 
+        adicionarLogMes(mes, 'erro', `Erro ao emitir NF Produto: ${error.message}`, {
             error: error.message,
             stack: error.stack,
             tipo: error.name
@@ -4365,20 +4463,20 @@ async function emitirNFProdutoMes(mes) {
 function mostrarProgressoEmissao(tipoNF, isTeste = false) {
     const modalId = 'modal-progresso-emissao';
     let modal = document.getElementById(modalId);
-    
+
     let titulo;
     if (tipoNF === 'sincronizacao') {
         titulo = 'Sincronizando Notas da Focus NFe';
     } else {
-        titulo = isTeste 
+        titulo = isTeste
             ? `Emitindo ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} de Teste`
             : `Emitindo ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} em Lote`;
     }
-    
+
     const step1Text = tipoNF === 'sincronizacao' ? 'Buscando notas da Focus NFe...' : 'Preparando dados...';
     const step2Text = tipoNF === 'sincronizacao' ? 'Sincronizando com banco local...' : 'Enviando para Focus NFe...';
     const step3Text = tipoNF === 'sincronizacao' ? 'Finalizando sincronização...' : 'Processando resposta...';
-    
+
     if (!modal) {
         modal = document.createElement('div');
         modal.id = modalId;
@@ -4408,7 +4506,7 @@ function mostrarProgressoEmissao(tipoNF, isTeste = false) {
         // Atualizar título e textos dos steps se modal já existe
         const h3 = modal.querySelector('h3');
         if (h3) h3.textContent = titulo;
-        
+
         const step1 = modal.querySelector('#step-1 .step-text');
         if (step1) step1.textContent = step1Text;
         const step2 = modal.querySelector('#step-2 .step-text');
@@ -4416,7 +4514,7 @@ function mostrarProgressoEmissao(tipoNF, isTeste = false) {
         const step3 = modal.querySelector('#step-3 .step-text');
         if (step3) step3.textContent = step3Text;
     }
-    
+
     // Resetar estados
     for (let i = 1; i <= 3; i++) {
         const step = document.getElementById(`step-${i}`);
@@ -4429,7 +4527,7 @@ function mostrarProgressoEmissao(tipoNF, isTeste = false) {
         mensagem.textContent = '';
         mensagem.className = 'progresso-mensagem';
     }
-    
+
     modal.style.display = 'flex';
     return modal;
 }
@@ -4446,13 +4544,13 @@ function atualizarProgressoEmissao(passo, mensagem = '') {
             step.classList.add('completed');
         }
     }
-    
+
     // Marcar passo atual como ativo
     const stepAtual = document.getElementById(`step-${passo}`);
     if (stepAtual) {
         stepAtual.classList.add('active');
     }
-    
+
     // Atualizar mensagem
     const mensagemEl = document.getElementById('progresso-mensagem');
     if (mensagemEl && mensagem) {
@@ -4478,13 +4576,13 @@ function finalizarProgressoEmissao(sucesso, mensagem) {
             }
         }
     }
-    
+
     const mensagemEl = document.getElementById('progresso-mensagem');
     if (mensagemEl) {
         mensagemEl.textContent = mensagem;
         mensagemEl.className = 'progresso-mensagem ' + (sucesso ? 'sucesso' : 'erro');
     }
-    
+
     // Adicionar botão de fechar se não existir
     const modal = document.getElementById('modal-progresso-emissao');
     if (modal) {
@@ -4500,7 +4598,7 @@ function finalizarProgressoEmissao(sucesso, mensagem) {
             content.appendChild(btnFechar);
         }
     }
-    
+
     // NÃO fecha automaticamente - usuário deve clicar no botão ou dar refresh
 }
 
@@ -4519,17 +4617,17 @@ async function emitirNFTeste(tipoNF) {
             return;
         }
     }
-    
+
     if (!confirm(`Deseja emitir uma ${tipoNF === 'produto' ? 'NFe (Produto)' : 'NFSe (Serviço)'} de TESTE com dados aleatórios?`)) {
         return;
     }
-    
+
     console.log(`Iniciando emissão de ${tipoNF === 'produto' ? 'NFe' : 'NFSe'} de teste...`);
-    
+
     try {
         // Fazer a requisição
         const resultado = await API.NFSe.emitirTeste(tipoNF);
-        
+
         if (resultado.sucesso) {
             const msg = `✓ ${tipoNF === 'produto' ? 'NFe (Produto)' : 'NFSe (Serviço)'} enviada com sucesso!\n\nReferência: ${resultado.referencia}\nStatus: ${resultado.status}`;
             console.log(msg);
@@ -4553,12 +4651,12 @@ async function emitirNFTeste(tipoNF) {
 function selecionarTodosPedidos(checkbox, tabelaId) {
     const tabela = document.getElementById(tabelaId);
     if (!tabela) return;
-    
+
     const checkboxes = tabela.querySelectorAll('.checkbox-pedido');
     checkboxes.forEach(cb => {
         cb.checked = checkbox.checked;
     });
-    
+
     atualizarSelecaoPedidos();
 }
 
@@ -4568,15 +4666,15 @@ function selecionarTodosPedidos(checkbox, tabelaId) {
 function atualizarSelecaoPedidos() {
     // Encontrar todas as tabelas de pedidos na página
     const tabelas = document.querySelectorAll('.table');
-    
+
     tabelas.forEach(tabela => {
         const checkboxTodos = tabela.querySelector('.checkbox-selecionar-todos');
         if (!checkboxTodos) return;
-        
+
         const checkboxes = tabela.querySelectorAll('.checkbox-pedido');
         const total = checkboxes.length;
         const selecionados = Array.from(checkboxes).filter(cb => cb.checked).length;
-        
+
         // Atualizar estado do checkbox "Selecionar todos"
         if (total === 0) {
             checkboxTodos.checked = false;
@@ -4587,7 +4685,7 @@ function atualizarSelecaoPedidos() {
         } else if (selecionados > 0) {
             checkboxTodos.checked = false;
             checkboxTodos.indeterminate = true;
-    } else {
+        } else {
             checkboxTodos.checked = false;
             checkboxTodos.indeterminate = false;
         }
@@ -4608,12 +4706,12 @@ function obterPedidosSelecionados() {
  */
 async function emitirNFSePedido(pedidoId) {
     console.log('[DEBUG] emitirNFSePedido chamado para pedido:', pedidoId);
-    
+
     try {
         // Buscar pedido completo do WooCommerce
         console.log('[DEBUG] Buscando pedido no WooCommerce...');
         const resultado = await API.WooCommerce.buscarPedidoPorId(pedidoId);
-        
+
         if (!resultado.sucesso) {
             console.error('[DEBUG] Erro ao buscar pedido:', resultado.erro);
             // Tentar determinar o mês do pedido para adicionar log (se possível)
@@ -4629,33 +4727,33 @@ async function emitirNFSePedido(pedidoId) {
             }
             return;
         }
-        
+
         const pedido = resultado.pedido;
         console.log('[DEBUG] Pedido encontrado:', pedido.id, pedido.number);
-        
+
         // Extrair categorias do pedido
         const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
         console.log('[DEBUG] Categorias do pedido:', categorias);
-        
+
         // Verificar se tem categoria "Livro Faíscas" (produto)
         // Busca flexível: "livro" + "faíscas" ou "faiscas" (com ou sem acento)
         const temLivroFaiscas = categorias.some(cat => {
             const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // Remove acentos
             return (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                   catLower === 'livro faiscas' ||
-                   catLower.includes('livro faiscas');
+                catLower === 'livro faiscas' ||
+                catLower.includes('livro faiscas');
         });
-        
+
         // Determinar tipo de NF
         const tipoNF = temLivroFaiscas ? 'produto' : 'servico';
         const tipoNFLabel = tipoNF === 'produto' ? 'NFe (Produto)' : 'NFSe (Serviço)';
         console.log('[DEBUG] Tipo de NF determinado:', tipoNF, tipoNFLabel);
-        
+
         // Determinar o mês do pedido ANTES de emitir (para logs)
         const dataPedido = new Date(pedido.date_created || pedido.created_at);
         const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
         console.log('[DEBUG] Mês do pedido:', mes);
-        
+
         // Garantir que o accordion do mês está expandido e logs visíveis ANTES de emitir
         const sufixoMes = tipoNF === 'servico' ? '-servico' : '';
         const mesId = `mes-${mes.replace('-', '')}${sufixoMes}`;
@@ -4667,39 +4765,57 @@ async function emitirNFSePedido(pedidoId) {
                 toggleMes(mesId);
             }
         }
-        
+
         // Garantir que os logs estão visíveis
         if (tipoNF === 'servico') {
             toggleLogsMesServico(mes);
-            adicionarLogMesServico(mes, 'INFO', `Iniciando emissão de ${tipoNFLabel} para pedido #${pedidoId}...`, { 
-                pedido_id: pedidoId, 
+            adicionarLogMesServico(mes, 'INFO', `Iniciando emissão de ${tipoNFLabel} para pedido #${pedidoId}...`, {
+                pedido_id: pedidoId,
                 tipo: tipoNF,
                 categorias: categorias.length > 0 ? categorias.join(', ') : 'Sem categoria'
             });
         }
-        
+
         console.log('[DEBUG] Iniciando emissão automaticamente (sem confirmação)...');
-        
-        // Mostrar feedback visual - buscar botão pelo pedidoId
-        const btnOriginal = document.querySelector(`button[onclick*="emitirNFSePedido(${pedidoId})"]`);
+
+        // Mostrar feedback visual - buscar botão pelo pedidoId (tentar diferentes formatos de aspas)
+        let btnOriginal = document.querySelector(`button[onclick*="emitirNFSePedido('${pedidoId}')"]`);
+        if (!btnOriginal) {
+            btnOriginal = document.querySelector(`button[onclick*='emitirNFSePedido("${pedidoId}")']`);
+        }
+        if (!btnOriginal) {
+            btnOriginal = document.querySelector(`button[onclick*="emitirNFSePedido(${pedidoId})"]`);
+        }
+
         if (btnOriginal) {
             btnOriginal.disabled = true;
             btnOriginal.textContent = 'Emitindo...';
         }
-        
+
         if (tipoNF === 'servico') {
             adicionarLogMesServico(mes, 'INFO', `Enviando ${tipoNFLabel} para Focus NFe...`, { pedido_id: pedidoId });
+        } else {
+            // Se for produto, usar o log padrão (que funciona)
+            toggleLogsMes(mes);
+            adicionarLogMes(mes, 'INFO', `Iniciando emissão de ${tipoNFLabel} para pedido #${pedidoId}...`, {
+                pedido_id: pedidoId,
+                tipo: tipoNF,
+                categorias: categorias.length > 0 ? categorias.join(', ') : 'Sem categoria'
+            });
+            adicionarLogMes(mes, 'INFO', `Enviando ${tipoNFLabel} para Focus NFe...`, { pedido_id: pedidoId });
         }
-        
+
+
+
         // Emitir usando a API de lote (com apenas 1 pedido)
         const resultadoEmissao = await API.NFSe.emitirLote([pedidoId], tipoNF);
         console.log('[DEBUG] Resultado da emissão:', resultadoEmissao);
-        
+
         if (btnOriginal) {
             btnOriginal.disabled = false;
             btnOriginal.textContent = 'Emitir NF';
         }
-        
+
         if (resultadoEmissao.sucesso) {
             const resultadoPedido = resultadoEmissao.resultados && resultadoEmissao.resultados[0];
             if (resultadoPedido && resultadoPedido.sucesso) {
@@ -4709,18 +4825,27 @@ async function emitirNFSePedido(pedidoId) {
                     status: resultadoPedido.status || 'Processando',
                     tipo: tipoNF
                 });
-                
+
                 // Recarregar dados para atualizar a tabela
                 // Verificar qual aba está ativa e recarregar apropriadamente
                 const secaoAtiva = estadoAtual.secaoAtiva || 'pedidos';
                 if (secaoAtiva === 'pedidos-servico') {
                     await carregarPedidosServico();
-                    
+
                     // Aguardar um pouco para garantir que os logs foram salvos no banco
                     await new Promise(resolve => setTimeout(resolve, 1000));
-                    
+
                     // Carregar logs automaticamente após emissão
                     await carregarLogsMesServico(mes);
+
+                    // Também carregar logs do mês atual (pois a emissão gera logs com data atual)
+                    const dataAtual = new Date();
+                    const mesAtual = `${dataAtual.getFullYear()}-${String(dataAtual.getMonth() + 1).padStart(2, '0')}`;
+                    if (mes !== mesAtual) {
+                        console.log('[DEBUG] Atualizando também logs do mês atual:', mesAtual);
+                        await carregarLogsMesServico(mesAtual);
+                    }
+
                 } else if (secaoAtiva === 'pedidos-produto' || secaoAtiva === 'pedidos') {
                     await carregarPedidos();
                     // Carregar logs automaticamente após emissão
@@ -4728,17 +4853,17 @@ async function emitirNFSePedido(pedidoId) {
                     if (pedidoWC.sucesso && pedidoWC.pedido) {
                         const dataPedido = new Date(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at);
                         const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
-                        
+
                         // Garantir que o accordion do mês está expandido
                         const mesId = `mes-${mes.replace('-', '')}`;
                         const mesContent = document.getElementById(mesId);
                         if (mesContent && mesContent.style.display === 'none') {
                             toggleMes(mesId);
                         }
-                        
+
                         // Aguardar um pouco para garantir que os logs foram salvos no banco
                         await new Promise(resolve => setTimeout(resolve, 1000));
-                        
+
                         // Expandir accordion de logs e carregar
                         toggleLogsMes(mes);
                         await carregarLogsMes(mes);
@@ -4756,6 +4881,14 @@ async function emitirNFSePedido(pedidoId) {
                         erro: erro
                     });
                     await carregarLogsMesServico(mes);
+
+                    // Também carregar logs do mês atual
+                    const dataAtual = new Date();
+                    const mesAtual = `${dataAtual.getFullYear()}-${String(dataAtual.getMonth() + 1).padStart(2, '0')}`;
+                    if (mes !== mesAtual) {
+                        await carregarLogsMesServico(mesAtual);
+                    }
+
                 }
             }
         } else {
@@ -4768,30 +4901,38 @@ async function emitirNFSePedido(pedidoId) {
                     erro: erroMsg
                 });
                 await carregarLogsMesServico(mes);
+
+                // Também carregar logs do mês atual
+                const dataAtual = new Date();
+                const mesAtual = `${dataAtual.getFullYear()}-${String(dataAtual.getMonth() + 1).padStart(2, '0')}`;
+                if (mes !== mesAtual) {
+                    await carregarLogsMesServico(mesAtual);
+                }
+
             }
         }
-        
+
     } catch (error) {
         console.error('[DEBUG] Erro ao emitir NF (catch):', error);
         console.error('[DEBUG] Stack trace:', error.stack);
-        
+
         // Determinar o mês do pedido para adicionar log de erro
         try {
             const pedidoWC = await API.WooCommerce.buscarPedidoPorId(pedidoId);
             if (pedidoWC.sucesso && pedidoWC.pedido) {
                 const dataPedido = new Date(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at);
                 const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
-                
+
                 // Determinar tipo de NF baseado nas categorias
                 const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedidoWC.pedido) : [];
                 const temLivroFaiscas = categorias.some(cat => {
                     const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                     return (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                           catLower === 'livro faiscas' ||
-                           catLower.includes('livro faiscas');
+                        catLower === 'livro faiscas' ||
+                        catLower.includes('livro faiscas');
                 });
                 const tipoNF = temLivroFaiscas ? 'produto' : 'servico';
-                
+
                 // Garantir que os logs estão visíveis apenas para serviço
                 if (tipoNF === 'servico') {
                     toggleLogsMesServico(mes);
@@ -4807,7 +4948,7 @@ async function emitirNFSePedido(pedidoId) {
             // Se não conseguir determinar o mês, pelo menos logar no console
             console.error('[DEBUG] Erro ao adicionar log:', e);
         }
-        
+
         // Restaurar botão em caso de erro
         const btnOriginal = document.querySelector(`button[onclick*="emitirNFSePedido(${pedidoId})"]`);
         if (btnOriginal) {
@@ -4824,41 +4965,41 @@ async function emitirLoteNFSe() {
     // Pegar pedidos filtrados
     const todosPedidos = estadoAtual.dados.todosPedidos || [];
     const mesFiltrado = estadoAtual.filtroMes;
-    
+
     let pedidos = todosPedidos;
     if (mesFiltrado) {
         const [ano, mes] = mesFiltrado.split('-');
         pedidos = todosPedidos.filter(pedido => {
             const dataPedido = new Date(pedido.date_created);
-            return dataPedido.getFullYear() === parseInt(ano) && 
-                   (dataPedido.getMonth() + 1) === parseInt(mes);
+            return dataPedido.getFullYear() === parseInt(ano) &&
+                (dataPedido.getMonth() + 1) === parseInt(mes);
         });
     }
-    
+
     const tipoNF = 'servico'; // Por enquanto sempre serviço
-    
+
     if (pedidos.length === 0) {
         alert('Nenhum pedido selecionado para emissão.');
         return;
     }
-    
+
     if (!confirm(`Deseja emitir NFSe para ${pedidos.length} pedido(s)?`)) {
         return;
     }
-    
+
     // Extrair IDs dos pedidos
     const pedidoIds = pedidos.map(p => p.id || p.number);
-    
+
     // Criar modal de progresso
     const modalHtml = window.Components ? window.Components.renderizarProgressoEmissao(pedidoIds.length, 0, 0, 0, []) : '<div>Erro: Components não disponível</div>';
     document.body.insertAdjacentHTML('beforeend', modalHtml);
-    
+
     const modal = document.getElementById('modal-progresso');
     const resultados = [];
     let processados = 0;
     let sucesso = 0;
     let erros = 0;
-    
+
     // Função para atualizar modal
     const atualizarModal = () => {
         const novoHtml = window.Components ? window.Components.renderizarProgressoEmissao(
@@ -4874,18 +5015,18 @@ async function emitirLoteNFSe() {
         modal.replaceWith(novoModal);
         return document.getElementById('modal-progresso');
     };
-    
+
     // Processar cada pedido
     for (let i = 0; i < pedidoIds.length; i++) {
         const pedidoId = pedidoIds[i];
-        
+
         try {
             const resultado = await API.NFSe.emitirLote([pedidoId], tipoNF);
-            
+
             if (resultado.sucesso && resultado.resultados && resultado.resultados.length > 0) {
                 const resultadoPedido = resultado.resultados[0];
                 resultados.push(resultadoPedido);
-                
+
                 if (resultadoPedido.sucesso) {
                     sucesso++;
                 } else {
@@ -4907,16 +5048,16 @@ async function emitirLoteNFSe() {
             });
             erros++;
         }
-        
+
         processados++;
         modal = atualizarModal();
-        
+
         // Pequeno delay para não sobrecarregar a API
         if (i < pedidoIds.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
     }
-    
+
     // Atualizar modal final
     modal = atualizarModal();
 }
@@ -4929,7 +5070,7 @@ function fecharModalProgresso() {
     if (modal) {
         modal.remove();
     }
-    
+
     // Recarregar pedidos para atualizar status
     buscarPedidosFiltrados();
 }
@@ -4945,14 +5086,14 @@ async function carregarNotasEnviadas() {
             console.error('content-area não encontrado');
             return;
         }
-        
+
         // Verificar se Components está disponível
         if (!window.Components || !window.Components.renderizarFiltrosNotasEnviadas) {
             console.error('Components não está disponível ou renderizarFiltrosNotasEnviadas não existe');
             contentArea.innerHTML = '<div class="content-section"><p>Erro: Componentes não carregados</p></div>';
             return;
         }
-        
+
         const html = `
             <div class="content-section">
                 <h2 class="section-title">Notas Enviadas</h2>
@@ -4964,10 +5105,11 @@ async function carregarNotasEnviadas() {
                 </div>
                 <div id="paginacao-notas-enviadas"></div>
             </div>
+
         `;
-        
+
         contentArea.innerHTML = html;
-        
+
         // Inicializar estado
         if (!estadoAtual.filtrosNotas) {
             estadoAtual.filtrosNotas = {};
@@ -4975,20 +5117,30 @@ async function carregarNotasEnviadas() {
         if (!estadoAtual.paginaNotas) {
             estadoAtual.paginaNotas = 1;
         }
-        
+
         // Carregar dados iniciais
         await buscarNotasEnviadas();
-        
+
         // Iniciar polling para atualizar notas automaticamente
         iniciarPollingNotas();
     } catch (error) {
         console.error('Erro ao carregar notas enviadas:', error);
         const contentArea = document.getElementById('content-area');
         if (contentArea) {
-            contentArea.innerHTML = `<div class="content-section"><p>Erro ao carregar: ${error.message}</p></div>`;
+            contentArea.innerHTML = `
+                <div class="content-section">
+                    <h2 class="section-title">Notas Enviadas</h2>
+                    <div class="alert alert-danger">
+                        <h3>Erro ao carregar notas</h3>
+                        <p>${error.message}</p>
+                        <button onclick="carregarNotasEnviadas()" class="btn btn-primary" style="margin-top: 10px;">Tentar Novamente</button>
+                    </div>
+                </div>
+            `;
         }
     }
 }
+
 
 /**
  * Busca notas enviadas com filtros
@@ -4996,30 +5148,31 @@ async function carregarNotasEnviadas() {
 async function buscarNotasEnviadas() {
     const tabelaArea = document.getElementById('tabela-notas-enviadas');
     const paginacaoArea = document.getElementById('paginacao-notas-enviadas');
-    
+
     if (!tabelaArea) return;
-    
+
     tabelaArea.innerHTML = window.Components.renderizarLoading();
-    
+
     const limite = 50;
     const offset = (estadoAtual.paginaNotas - 1) * limite;
-    
+
     const filtros = {
         limite: limite,
         offset: offset,
         ...estadoAtual.filtrosNotas
     };
-    
+
     try {
         const resultado = await API.NFSe.listar(filtros);
-        
+
         if (resultado.sucesso) {
             const notas = resultado.dados || [];
             const total = resultado.total || 0;
-            
+
             estadoAtual.dados.notasEnviadas = notas;
-            tabelaArea.innerHTML = window.Components.renderizarTabelaNotasEnviadas(notas);
-            
+            tabelaArea.innerHTML = await window.Components.renderizarTabelaNotasEnviadas(notas);
+
+
             // Calcular paginação
             const totalPaginas = Math.ceil(total / limite) || 1;
             paginacaoArea.innerHTML = window.Components.renderizarPaginacao(
@@ -5044,28 +5197,28 @@ async function buscarNotasEnviadas() {
  */
 async function atualizarStatusNotas() {
     console.log('Atualizando status das notas pendentes...');
-    
+
     try {
         const resultado = await API.NFSe.atualizarStatus();
-        
+
         if (resultado.sucesso) {
             let mensagem = `✓ Status atualizados!\n\n`;
             mensagem += `Total pendentes: ${resultado.total_pendentes}\n`;
             mensagem += `Atualizadas: ${resultado.atualizadas}\n`;
-            
+
             if (resultado.detalhes && resultado.detalhes.length > 0) {
                 mensagem += `\nDetalhes:\n`;
                 resultado.detalhes.forEach(d => {
                     mensagem += `• ${d.ref}: ${d.status_novo}\n`;
                 });
             }
-            
+
             if (resultado.erros > 0) {
                 mensagem += `\n⚠️ ${resultado.erros} erro(s)`;
             }
-            
+
             alert(mensagem);
-            
+
             // Recarregar lista de notas
             setTimeout(() => buscarNotasEnviadas(), 500);
         } else {
@@ -5084,28 +5237,28 @@ async function sincronizarNotasFocus() {
     if (!confirm('Deseja sincronizar todas as notas da Focus NFe com o banco local?\n\nIsso irá buscar todas as notas (NFSe e NFe) da Focus NFe e atualizar/criar registros no banco local.')) {
         return;
     }
-    
+
     console.log('Iniciando sincronização com Focus NFe...');
-    
+
     try {
         const resultado = await API.NFSe.sincronizar();
-        
+
         if (resultado.sucesso) {
             const resumo = resultado.resumo || {};
             const nfse = resumo.nfse || {};
             const nfe = resumo.nfe || {};
-            
+
             let mensagem = '✓ Sincronização concluída!\n\n';
             mensagem += `NFSe: ${nfse.criadas || 0} criadas, ${nfse.atualizadas || 0} atualizadas\n`;
             mensagem += `NFe: ${nfe.criadas || 0} criadas, ${nfe.atualizadas || 0} atualizadas\n`;
-            
+
             if (resumo.total_erros > 0) {
                 mensagem += `\n⚠️ ${resumo.total_erros} erro(s) durante a sincronização`;
             }
-            
+
             console.log(mensagem);
             alert(mensagem);
-            
+
             // Recarregar a lista de notas após sincronização
             setTimeout(() => {
                 buscarNotasEnviadas();
@@ -5132,23 +5285,23 @@ async function carregarBuscarNotas() {
             console.error('content-area não encontrado');
             return;
         }
-        
+
         // Verificar se Components está disponível
         if (!window.Components || !window.Components.renderizarFiltrosBuscarNotas) {
             console.error('Components não está disponível ou renderizarFiltrosBuscarNotas não existe');
             contentArea.innerHTML = '<div class="content-section"><p>Erro: Componentes não carregados</p></div>';
             return;
         }
-        
+
         const html = `
             <div class="content-section">
                 <h2 class="section-title">Excluir notas enviadas</h2>
                 ${window.Components.renderizarFiltrosBuscarNotas()}
             </div>
         `;
-        
+
         contentArea.innerHTML = html;
-        
+
         // Inicializar estado
         if (!estadoAtual.filtrosBuscarNotas) {
             estadoAtual.filtrosBuscarNotas = {};
@@ -5167,25 +5320,25 @@ async function carregarBuscarNotas() {
  */
 async function buscarNotasFocus() {
     console.log('🔍 [FRONTEND] Buscar Notas - Iniciando busca...');
-    
+
     const tabelaArea = document.getElementById('tabela-buscar-notas');
-    
+
     if (!tabelaArea) {
         console.error('🔍 [FRONTEND] Buscar Notas - Área da tabela não encontrada');
         return;
     }
-    
+
     tabelaArea.innerHTML = window.Components.renderizarLoading();
-    
+
     const form = document.getElementById('form-filtros-buscar-notas');
     if (!form) {
         console.error('🔍 [FRONTEND] Buscar Notas - Formulário de filtros não encontrado');
         return;
     }
-    
+
     const formData = new FormData(form);
     const apenasBancoLocal = formData.get('apenas_banco_local') === 'on';
-    
+
     const filtros = {
         referencia: formData.get('referencia') || undefined,
         chave: formData.get('chave') || undefined,
@@ -5195,7 +5348,7 @@ async function buscarNotasFocus() {
         tipo_nota: formData.get('tipo_nota') || undefined,
         apenas_banco_local: apenasBancoLocal // Sempre enviar (true ou false)
     };
-    
+
     // Remover campos vazios (exceto apenas_banco_local que é boolean)
     Object.keys(filtros).forEach(key => {
         if (key === 'apenas_banco_local') {
@@ -5204,20 +5357,20 @@ async function buscarNotasFocus() {
         }
         if (!filtros[key]) delete filtros[key];
     });
-    
+
     console.log('🔍 [FRONTEND] Buscar Notas - Filtros finais:', {
         ...filtros,
         apenas_banco_local: filtros.apenas_banco_local,
         buscar_na_focus: !filtros.apenas_banco_local
     });
-    
+
     console.log('🔍 [FRONTEND] Buscar Notas - Filtros aplicados:', filtros);
     const inicioBusca = Date.now();
-    
+
     try {
         const resultado = await API.NFSe.buscar(filtros);
         const tempoDecorrido = Date.now() - inicioBusca;
-        
+
         if (resultado.sucesso) {
             const notas = resultado.dados || [];
             console.log('✅ [FRONTEND] Buscar Notas - Busca concluída com sucesso', {
@@ -5231,7 +5384,7 @@ async function buscarNotasFocus() {
                     status: n.status || n.status_focus
                 }))
             });
-            
+
             tabelaArea.innerHTML = window.Components.renderizarTabelaBuscarNotas(notas);
         } else {
             console.error('❌ [FRONTEND] Buscar Notas - Erro na busca', {
@@ -5263,7 +5416,7 @@ function visualizarNota(url, tipoNota, ambiente) {
         tipo_nota: tipoNota,
         ambiente
     });
-    
+
     // Abrir em nova aba
     window.open(url, '_blank');
 }
@@ -5279,14 +5432,14 @@ async function cancelarNotaPorChave(chave, tipoNota, ambiente, justificativaPree
         justificativaPreenchida: justificativaPreenchida ? 'sim' : 'não',
         timestamp: new Date().toISOString()
     });
-    
+
     // Justificativa padrão de 30 caracteres
     const justificativaPadrao = justificativaPreenchida || 'Erro na ordem das notas, cance';
-    
+
     // Criar modal para justificativa
     const modalId = 'modal-cancelar-nota-chave';
     let modal = document.getElementById(modalId);
-    
+
     if (!modal) {
         modal = document.createElement('div');
         modal.id = modalId;
@@ -5335,11 +5488,11 @@ async function cancelarNotaPorChave(chave, tipoNota, ambiente, justificativaPree
             btnConfirmar.setAttribute('onclick', `confirmarCancelarNotaPorChave('${chave}', '${tipoNota}', '${ambiente || 'producao'}')`);
         }
     }
-    
+
     // Atualizar contador de caracteres
     const textarea = modal.querySelector('#justificativa-cancelar-chave');
     const contador = modal.querySelector('#contador-justificativa-chave');
-    
+
     const updateCounter = () => {
         const length = textarea.value.length;
         contador.textContent = `${length}/255 caracteres`;
@@ -5349,12 +5502,12 @@ async function cancelarNotaPorChave(chave, tipoNota, ambiente, justificativaPree
             contador.style.color = '#28a745';
         }
     };
-    
+
     // Remover listeners anteriores e adicionar novo
     const newTextarea = textarea.cloneNode(true);
     textarea.parentNode.replaceChild(newTextarea, textarea);
     newTextarea.addEventListener('input', updateCounter);
-    
+
     // Atualizar contador inicial
     const length = newTextarea.value.length;
     contador.textContent = `${length}/255 caracteres`;
@@ -5363,7 +5516,7 @@ async function cancelarNotaPorChave(chave, tipoNota, ambiente, justificativaPree
     } else {
         contador.style.color = '#28a745';
     }
-    
+
     // Mostrar modal
     modal.style.display = 'flex';
     newTextarea.focus();
@@ -5389,46 +5542,46 @@ async function confirmarCancelarNotaPorChave(chave, tipoNota, ambiente = null) {
         ambiente: ambiente || 'não especificado',
         timestamp: new Date().toISOString()
     });
-    
+
     const modal = document.getElementById('modal-cancelar-nota-chave');
     if (!modal) {
         console.error('Modal não encontrado');
         return;
     }
-    
+
     const justificativa = modal.querySelector('#justificativa-cancelar-chave').value.trim();
-    
+
     if (!justificativa) {
         alert('Por favor, informe a justificativa do cancelamento.');
         return;
     }
-    
+
     if (justificativa.length < 15) {
         alert('A justificativa deve ter no mínimo 15 caracteres.');
         return;
     }
-    
+
     if (justificativa.length > 255) {
         alert('A justificativa deve ter no máximo 255 caracteres.');
         return;
     }
-    
+
     // Desabilitar botões durante o processamento
     const btnConfirmar = modal.querySelector('.btn-danger');
     const btnCancelar = modal.querySelector('.btn-secondary');
     if (btnConfirmar) btnConfirmar.disabled = true;
     if (btnCancelar) btnCancelar.disabled = true;
-    
+
     try {
         const resultado = await API.NFSe.cancelarPorChave(chave, justificativa, ambiente);
-        
+
         if (resultado.sucesso) {
             alert('✅ Nota cancelada com sucesso!');
             fecharModalCancelarChave();
-            
+
             // Recarregar a lista de notas
             await buscarNotasFocus();
-            
+
             console.log('✅ [FRONTEND] Processo de cancelamento por chave concluído com sucesso');
         } else {
             const erroMsg = resultado.erro?.mensagem || resultado.erro || resultado.mensagem || 'Erro desconhecido';
@@ -5462,11 +5615,11 @@ async function cancelarNota(referencia, tipoNota, ambiente) {
         tipoNota,
         timestamp: new Date().toISOString()
     });
-    
+
     // Criar modal para justificativa
     const modalId = 'modal-cancelar-nota';
     let modal = document.getElementById(modalId);
-    
+
     if (!modal) {
         modal = document.createElement('div');
         modal.id = modalId;
@@ -5513,11 +5666,11 @@ async function cancelarNota(referencia, tipoNota, ambiente) {
             btnConfirmar.setAttribute('onclick', `confirmarCancelarNota('${referencia}', '${tipoNota}', '${ambiente || 'homologacao'}')`);
         }
     }
-    
+
     // Atualizar contador de caracteres
     const textarea = modal.querySelector('#justificativa-cancelar');
     const contador = modal.querySelector('#contador-justificativa');
-    
+
     const updateCounter = () => {
         const length = textarea.value.length;
         contador.textContent = `${length}/255 caracteres`;
@@ -5527,12 +5680,12 @@ async function cancelarNota(referencia, tipoNota, ambiente) {
             contador.style.color = '#28a745';
         }
     };
-    
+
     // Remover listeners anteriores e adicionar novo
     const newTextarea = textarea.cloneNode(true);
     textarea.parentNode.replaceChild(newTextarea, textarea);
     newTextarea.addEventListener('input', updateCounter);
-    
+
     // Mostrar modal
     modal.style.display = 'flex';
     newTextarea.focus();
@@ -5558,17 +5711,17 @@ async function confirmarCancelarNota(referencia, tipoNota, ambiente = null) {
         ambiente: ambiente || 'não especificado',
         timestamp: new Date().toISOString()
     });
-    
+
     const textarea = document.getElementById('justificativa-cancelar');
     const justificativa = textarea.value.trim();
-    
+
     if (!justificativa) {
         console.warn('⚠️ [FRONTEND] Justificativa não fornecida');
         alert('Por favor, digite a justificativa do cancelamento.');
         textarea.focus();
         return;
     }
-    
+
     if (justificativa.length < 15) {
         console.warn('⚠️ [FRONTEND] Justificativa muito curta', {
             referencia,
@@ -5579,7 +5732,7 @@ async function confirmarCancelarNota(referencia, tipoNota, ambiente = null) {
         textarea.focus();
         return;
     }
-    
+
     if (justificativa.length > 255) {
         console.warn('⚠️ [FRONTEND] Justificativa muito longa', {
             referencia,
@@ -5590,37 +5743,37 @@ async function confirmarCancelarNota(referencia, tipoNota, ambiente = null) {
         textarea.focus();
         return;
     }
-    
+
     console.log('📝 [FRONTEND] Justificativa validada', {
         referencia,
         tipo_nota: tipoNota,
         justificativa_length: justificativa.length,
         justificativa_preview: justificativa.substring(0, 50) + (justificativa.length > 50 ? '...' : '')
     });
-    
+
     if (!confirm(`Deseja realmente cancelar a nota ${referencia}?\n\nJustificativa: ${justificativa}`)) {
         console.log('❌ [FRONTEND] Usuário cancelou a confirmação');
         return;
     }
-    
+
     // Desabilitar botão durante processamento
     const btnConfirmar = document.querySelector('#modal-cancelar-nota .btn-danger');
     if (btnConfirmar) {
         btnConfirmar.disabled = true;
         btnConfirmar.textContent = 'Cancelando...';
     }
-    
+
     const inicioCancelamento = Date.now();
     console.log('📤 [FRONTEND] Enviando requisição de cancelamento para o backend', {
         referencia,
         tipo_nota: tipoNota,
         timestamp: new Date().toISOString()
     });
-    
+
     try {
         const resultado = await API.NFSe.cancelar(referencia, tipoNota, justificativa, ambiente);
         const tempoDecorrido = Date.now() - inicioCancelamento;
-        
+
         if (resultado.sucesso) {
             console.log('✅ [FRONTEND] Nota cancelada com sucesso', {
                 referencia,
@@ -5633,14 +5786,14 @@ async function confirmarCancelarNota(referencia, tipoNota, ambiente = null) {
                 timestamp: new Date().toISOString(),
                 detalhes_completos: resultado
             });
-            
+
             alert(`✓ Nota ${referencia} cancelada com sucesso!`);
             fecharModalCancelar();
-            
+
             console.log('🔄 [FRONTEND] Recarregando lista de notas após cancelamento...');
             // Recarregar busca
             await buscarNotasFocus();
-            
+
             console.log('✅ [FRONTEND] Processo de cancelamento concluído com sucesso');
         } else {
             console.error('❌ [FRONTEND] Erro ao cancelar nota', {
@@ -5653,7 +5806,7 @@ async function confirmarCancelarNota(referencia, tipoNota, ambiente = null) {
                 timestamp: new Date().toISOString(),
                 resposta_completa: resultado
             });
-            
+
             alert(`✗ Erro ao cancelar nota: ${resultado.erro || resultado.mensagem || 'Erro desconhecido'}`);
             if (btnConfirmar) {
                 btnConfirmar.disabled = false;
@@ -5670,7 +5823,7 @@ async function confirmarCancelarNota(referencia, tipoNota, ambiente = null) {
             tempo_decorrido_ms: tempoDecorrido,
             timestamp: new Date().toISOString()
         });
-        
+
         alert(`✗ Erro ao cancelar nota: ${error.message}`);
         if (btnConfirmar) {
             btnConfirmar.disabled = false;
@@ -5685,16 +5838,16 @@ async function confirmarCancelarNota(referencia, tipoNota, ambiente = null) {
 function filtrarNotasEnviadas() {
     const form = document.getElementById('form-filtros-notas');
     if (!form) return;
-    
+
     const formData = new FormData(form);
     estadoAtual.filtrosNotas = {};
-    
+
     for (const [key, value] of formData.entries()) {
         if (value && value.trim() !== '') {
             estadoAtual.filtrosNotas[key] = value.trim();
         }
     }
-    
+
     estadoAtual.paginaNotas = 1;
     buscarNotasEnviadas();
 }
@@ -5705,12 +5858,12 @@ function filtrarNotasEnviadas() {
 function limparFiltrosNotasEnviadas() {
     estadoAtual.filtrosNotas = {};
     estadoAtual.paginaNotas = 1;
-    
+
     const form = document.getElementById('form-filtros-notas');
     if (form) {
         form.reset();
     }
-    
+
     buscarNotasEnviadas();
 }
 
@@ -5728,12 +5881,12 @@ function mudarPaginaNotasEnviadas(pagina) {
 async function verLogsNota(referencia) {
     try {
         const resultado = await API.Pedidos.listarLogs({ referencia, limite: 100 });
-        
+
         const logs = Array.isArray(resultado) ? resultado : (resultado.dados || []);
-        
+
         // Ordenar logs por data (mais antigo primeiro)
         logs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        
+
         // Criar modal similar ao de detalhes do pedido
         const overlay = document.createElement('div');
         overlay.style.cssText = `
@@ -5749,7 +5902,7 @@ async function verLogsNota(referencia) {
             justify-content: center;
             padding: 20px;
         `;
-        
+
         const modal = document.createElement('div');
         modal.style.cssText = `
             background: white;
@@ -5761,7 +5914,7 @@ async function verLogsNota(referencia) {
             flex-direction: column;
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
         `;
-        
+
         // Header
         const header = document.createElement('div');
         header.style.cssText = `
@@ -5771,11 +5924,11 @@ async function verLogsNota(referencia) {
             justify-content: space-between;
             align-items: center;
         `;
-        
+
         const titulo = document.createElement('h3');
         titulo.textContent = `Logs da Nota: ${referencia}`;
         titulo.style.cssText = 'margin: 0; font-size: 18px; font-weight: 600;';
-        
+
         const btnFechar = document.createElement('button');
         btnFechar.textContent = '✕';
         btnFechar.style.cssText = `
@@ -5792,10 +5945,10 @@ async function verLogsNota(referencia) {
             justify-content: center;
         `;
         btnFechar.onclick = () => overlay.remove();
-        
+
         header.appendChild(titulo);
         header.appendChild(btnFechar);
-        
+
         // Body
         const body = document.createElement('div');
         body.style.cssText = `
@@ -5803,7 +5956,7 @@ async function verLogsNota(referencia) {
             overflow-y: auto;
             flex: 1;
         `;
-        
+
         if (logs.length === 0) {
             body.innerHTML = '<p style="color: #888; text-align: center;">Nenhum log encontrado para esta nota.</p>';
         } else {
@@ -5813,12 +5966,12 @@ async function verLogsNota(referencia) {
                 const message = log.message || '';
                 const service = log.service || '';
                 const action = log.action || '';
-                
+
                 let cor = '#666';
                 if (level === 'ERROR') cor = '#dc3545';
                 else if (level === 'WARN') cor = '#ffc107';
                 else if (level === 'INFO') cor = '#17a2b8';
-                
+
                 let dadosHtml = '';
                 if (log.data) {
                     try {
@@ -5828,7 +5981,7 @@ async function verLogsNota(referencia) {
                         dadosHtml = `<div style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px; margin-top: 8px;">${log.data}</div>`;
                     }
                 }
-                
+
                 return `
                     <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #eee;">
                         <div style="display: flex; gap: 12px; margin-bottom: 4px;">
@@ -5842,10 +5995,10 @@ async function verLogsNota(referencia) {
                     </div>
                 `;
             }).join('');
-            
+
             body.innerHTML = logsHtml;
         }
-        
+
         // Footer
         const footer = document.createElement('div');
         footer.style.cssText = `
@@ -5854,29 +6007,29 @@ async function verLogsNota(referencia) {
             display: flex;
             justify-content: flex-end;
         `;
-        
+
         const btnFecharFooter = document.createElement('button');
         btnFecharFooter.textContent = 'Fechar';
         btnFecharFooter.className = 'btn btn-secondary';
         btnFecharFooter.onclick = () => overlay.remove();
-        
+
         footer.appendChild(btnFecharFooter);
-        
+
         // Montar modal
         modal.appendChild(header);
         modal.appendChild(body);
         modal.appendChild(footer);
         overlay.appendChild(modal);
-        
+
         // Fechar ao clicar fora
         overlay.onclick = (e) => {
             if (e.target === overlay) {
                 overlay.remove();
             }
         };
-        
+
         document.body.appendChild(overlay);
-        
+
     } catch (error) {
         console.error('Erro ao carregar logs da nota:', error);
         alert(`Erro ao carregar logs: ${error.message}`);
@@ -5923,7 +6076,7 @@ let logsServidorExpandido = false;
 
 function toggleLogsServidor() {
     let logsContainer = document.getElementById('logs-servidor-container');
-    
+
     if (!logsContainer) {
         // Criar container de logs se não existir (inicialmente minimizado)
         logsContainer = document.createElement('div');
@@ -5942,7 +6095,7 @@ function toggleLogsServidor() {
             box-shadow: 0 -4px 6px rgba(0,0,0,0.3);
             transition: height 0.3s ease;
         `;
-        
+
         // Header do container (sempre visível)
         const header = document.createElement('div');
         header.id = 'logs-servidor-header';
@@ -5960,18 +6113,18 @@ function toggleLogsServidor() {
             logsServidorExpandido = !logsServidorExpandido;
             atualizarEstadoLogsServidor();
         };
-        
+
         const titulo = document.createElement('div');
         titulo.style.cssText = 'color: #d4d4d4; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;';
         titulo.innerHTML = `
             <span id="logs-servidor-icon" style="transition: transform 0.3s;">▼</span>
             <span>Logs do Servidor</span>
         `;
-        
+
         const botoes = document.createElement('div');
         botoes.style.cssText = 'display: flex; gap: 8px; align-items: center;';
         botoes.onclick = (e) => e.stopPropagation(); // Prevenir toggle ao clicar nos botões
-        
+
         const btnAtualizar = document.createElement('button');
         btnAtualizar.textContent = 'Atualizar';
         btnAtualizar.style.cssText = `
@@ -5987,7 +6140,7 @@ function toggleLogsServidor() {
             e.stopPropagation();
             carregarLogsServidor();
         };
-        
+
         const btnFechar = document.createElement('button');
         btnFechar.textContent = '✕';
         btnFechar.style.cssText = `
@@ -6011,12 +6164,12 @@ function toggleLogsServidor() {
             logsContainer.style.display = 'none';
             document.getElementById('btn-mostrar-logs').style.opacity = '1';
         };
-        
+
         botoes.appendChild(btnAtualizar);
         botoes.appendChild(btnFechar);
         header.appendChild(titulo);
         header.appendChild(botoes);
-        
+
         // Body do container (inicialmente oculto)
         const body = document.createElement('div');
         body.id = 'logs-servidor-conteudo';
@@ -6030,11 +6183,11 @@ function toggleLogsServidor() {
             line-height: 1.6;
             display: none;
         `;
-        
+
         logsContainer.appendChild(header);
         logsContainer.appendChild(body);
         document.body.appendChild(logsContainer);
-        
+
         logsServidorVisivel = true;
         logsServidorExpandido = false;
     } else {
@@ -6044,7 +6197,7 @@ function toggleLogsServidor() {
             logsServidorExpandido = false;
         }
     }
-    
+
     atualizarEstadoLogsServidor();
 }
 
@@ -6056,13 +6209,13 @@ function atualizarEstadoLogsServidor() {
     const conteudo = document.getElementById('logs-servidor-conteudo');
     const icon = document.getElementById('logs-servidor-icon');
     const btnMostrar = document.getElementById('btn-mostrar-logs');
-    
+
     if (!logsContainer) return;
-    
+
     if (logsServidorVisivel) {
         logsContainer.style.display = 'flex';
         if (btnMostrar) btnMostrar.style.opacity = '0.6';
-        
+
         if (logsServidorExpandido) {
             logsContainer.style.height = '400px';
             if (conteudo) conteudo.style.display = 'block';
@@ -6087,7 +6240,7 @@ function atualizarEstadoLogsServidor() {
 async function carregarLogsServidor() {
     const conteudo = document.getElementById('logs-servidor-conteudo');
     if (!conteudo) return;
-    
+
     // Verificar se já existe mensagem de status, senão criar
     let loadingMsg = document.getElementById('logs-loading-msg');
     if (!loadingMsg) {
@@ -6098,24 +6251,24 @@ async function carregarLogsServidor() {
         conteudo.appendChild(loadingMsg);
     }
     loadingMsg.innerHTML = '<span style="color: #4ec9b0;">⏳</span> Carregando logs...';
-    
+
     try {
         const resultado = await API.Config.buscarLogs({ limite: 200 });
-        
+
         const logs = resultado.logs || resultado.dados?.logs || (Array.isArray(resultado) ? resultado : []);
-        
+
         // Atualizar mensagem de status
         if (logs.length === 0) {
             loadingMsg.innerHTML = '<span style="color: #888;">✓</span> <span style="color: #888;">Nenhum log disponível.</span>';
             return;
         }
-        
+
         // Ordenar por data (mais recente primeiro)
         logs.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-        
+
         // Atualizar mensagem de status com sucesso
         loadingMsg.innerHTML = `<span style="color: #6a9955;">✓</span> <span style="color: #6a9955;">${logs.length} log(s) carregado(s) com sucesso</span>`;
-        
+
         // Formatar logs
         const logsFormatados = logs.map(log => {
             const data = new Date(log.created_at || Date.now()).toLocaleString('pt-BR');
@@ -6123,13 +6276,13 @@ async function carregarLogsServidor() {
             const service = log.service || '';
             const action = log.action || '';
             const message = log.message || '';
-            
+
             let cor = '#d4d4d4';
             if (level === 'ERROR') cor = '#f48771';
             else if (level === 'WARN') cor = '#dcdcaa';
             else if (level === 'INFO') cor = '#4ec9b0';
             else if (level === 'DEBUG') cor = '#808080';
-            
+
             return `
                 <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid #333;">
                     <span style="color: #808080;">[${data}]</span>
@@ -6140,22 +6293,22 @@ async function carregarLogsServidor() {
                 </div>
             `;
         }).join('');
-        
+
         // Remover logs antigos (se existirem) mas manter a mensagem de status
         const existingLogsDiv = conteudo.querySelector('#logs-servidor-lista');
         if (existingLogsDiv) {
             existingLogsDiv.remove();
         }
-        
+
         // Adicionar logs após a mensagem de status
         const logsDiv = document.createElement('div');
         logsDiv.id = 'logs-servidor-lista';
         logsDiv.innerHTML = logsFormatados;
         conteudo.appendChild(logsDiv);
-        
+
         // Scroll para o topo (logs mais recentes)
         conteudo.scrollTop = 0;
-        
+
     } catch (error) {
         console.error('Erro ao carregar logs:', error);
         loadingMsg.innerHTML = `<span style="color: #f48771;">✗</span> <span style="color: #f48771;">Erro ao carregar logs: ${error.message}</span>`;
@@ -6169,11 +6322,11 @@ function toggleLogsMes(mes) {
     const mesId = mes.replace('-', '');
     const conteudo = document.getElementById(`conteudo-logs-mes-${mesId}`);
     const icon = document.getElementById(`logs-icon-${mesId}`);
-    
+
     if (!conteudo || !icon) return;
-    
+
     const isExpanded = conteudo.style.display !== 'none';
-    
+
     if (isExpanded) {
         conteudo.style.display = 'none';
         icon.textContent = '▼';
@@ -6182,7 +6335,7 @@ function toggleLogsMes(mes) {
         conteudo.style.display = 'block';
         icon.textContent = '▲';
         icon.style.transform = 'rotate(180deg)';
-        
+
         // Se não tiver logs carregados ainda, carregar
         if (conteudo.innerHTML.includes('Carregando logs...') || conteudo.innerHTML.trim() === '') {
             carregarLogsMes(mes);
@@ -6196,7 +6349,7 @@ function toggleLogsMes(mes) {
  */
 async function carregarBackups() {
     const contentArea = document.getElementById('content-area');
-    
+
     // Mostrar loading
     contentArea.innerHTML = `
         <div class="content-section">
@@ -6209,14 +6362,14 @@ async function carregarBackups() {
             </div>
         </div>
     `;
-    
+
     try {
         const resultado = await API.Backups.listar();
         const resultadoNotas = await API.Backups.listarNotasNFe();
-        
+
         console.log('Resultado da API de backups:', resultado);
         console.log('Notas NFe encontradas:', resultadoNotas);
-        
+
         if (resultado.sucesso) {
             // Aceitar array vazio como sucesso válido
             const backups = resultado.backups || [];
@@ -6311,7 +6464,7 @@ window.limparReferencia = limparReferencia;
  */
 function limparReferencia() {
     const referenciaInput = document.getElementById('referencia-cancelar');
-    
+
     if (referenciaInput) {
         referenciaInput.value = '';
         referenciaInput.focus();
@@ -6323,25 +6476,25 @@ function limparReferencia() {
  */
 async function cancelarPorReferencia() {
     const referenciaInput = document.getElementById('referencia-cancelar');
-    
+
     if (!referenciaInput) {
         alert('Erro: Campo de referência não encontrado');
         return;
     }
-    
+
     const referencia = referenciaInput.value.trim();
-    
+
     if (!referencia) {
         alert('Por favor, informe a referência da nota (ex: PED-6454)');
         referenciaInput.focus();
         return;
     }
-    
+
     // Abrir modal de cancelamento com a referência
     // Tentar detectar ambiente baseado na referência ou usar produção como padrão
     const ambiente = 'producao'; // Padrão produção, pode ser alterado se necessário
     await cancelarNota(referencia, 'nfe', ambiente);
-    
+
     // Limpar campo após abrir modal
     referenciaInput.value = '';
 }

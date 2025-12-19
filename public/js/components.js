@@ -31,10 +31,10 @@ function formatarValor(valor) {
  */
 function formatarStatus(status) {
     if (!status) return '<span class="status-badge">-</span>';
-    
+
     const statusLower = status.toLowerCase();
     let classe = 'status-badge';
-    
+
     if (statusLower.includes('autorizado') || statusLower === 'autorizado') {
         classe += ' status-autorizado';
         return `<span class="${classe}">✓ Autorizado</span>`;
@@ -45,7 +45,7 @@ function formatarStatus(status) {
         classe += ' status-erro';
         return `<span class="${classe}">✗ Erro</span>`;
     }
-    
+
     return `<span class="status-badge">${status}</span>`;
 }
 
@@ -132,58 +132,58 @@ function renderizarTabelaBuscarNotas(notas) {
         const referencia = nota.referencia || nota.ref || '-';
         const pedidoId = nota.pedido_externo || nota.pedido_id || '-';
         const tipoNota = nota.tipo_nota || (nota.chave_nfe ? 'nfe' : 'nfse');
-        const tipoBadge = tipoNota === 'nfe' 
-            ? '<span class="badge badge-info">NFe</span>' 
+        const tipoBadge = tipoNota === 'nfe'
+            ? '<span class="badge badge-info">NFe</span>'
             : '<span class="badge badge-success">NFSe</span>';
-        
+
         // Badge de origem
         const origem = nota.origem || 'banco_local';
-        const origemBadge = origem === 'focus_nfe' 
+        const origemBadge = origem === 'focus_nfe'
             ? '<span class="badge badge-primary" title="Nota encontrada na Focus NFe">Focus NFe</span>'
             : '<span class="badge badge-secondary" title="Nota do banco local">Banco Local</span>';
-        
+
         // Extrair cliente baseado no tipo de nota
         let cliente = '-';
         if (tipoNota === 'nfe') {
-            cliente = nota.dados_completos?.destinatario?.nome_destinatario || 
-                     nota.dados_completos?.destinatario?.razao_social || 
-                     nota.nome_destinatario ||
-                     '-';
+            cliente = nota.dados_completos?.destinatario?.nome_destinatario ||
+                nota.dados_completos?.destinatario?.razao_social ||
+                nota.nome_destinatario ||
+                '-';
         } else {
-            cliente = nota.dados_completos?.tomador?.razao_social || 
-                     nota.dados_completos?.tomador?.nome || 
-                     nota.razao_social ||
-                     '-';
+            cliente = nota.dados_completos?.tomador?.razao_social ||
+                nota.dados_completos?.tomador?.nome ||
+                nota.razao_social ||
+                '-';
         }
-        
+
         // Extrair valor baseado no tipo de nota
         let valor = 0;
         if (tipoNota === 'nfe') {
             valor = nota.dados_completos?.valor_total || nota.valor_total || 0;
         } else {
-            valor = nota.dados_completos?.servico?.valor_servicos || 
-                   nota.dados_completos?.valor_total || 
-                   nota.valor_servicos ||
-                   nota.valor_total ||
-                   0;
+            valor = nota.dados_completos?.servico?.valor_servicos ||
+                nota.dados_completos?.valor_total ||
+                nota.valor_servicos ||
+                nota.valor_total ||
+                0;
         }
-        
+
         const ambiente = nota.ambiente || 'homologacao';
-        const ambienteBadge = ambiente === 'producao' 
-            ? '<span class="badge badge-success">Produção</span>' 
+        const ambienteBadge = ambiente === 'producao'
+            ? '<span class="badge badge-success">Produção</span>'
             : '<span class="badge badge-warning">Homologação</span>';
         const status = formatarStatus(nota.status || nota.status_focus);
-        
+
         // Verificar se pode cancelar (não cancelada e autorizada)
         const statusLower = (nota.status || nota.status_focus || '').toLowerCase();
-        const podeCancelar = !statusLower.includes('cancelado') && 
-                            (statusLower.includes('autorizado') || statusLower === 'autorizado');
-        
+        const podeCancelar = !statusLower.includes('cancelado') &&
+            (statusLower.includes('autorizado') || statusLower === 'autorizado');
+
         // URLs para visualizar
-        const baseUrl = ambiente === 'producao' 
+        const baseUrl = ambiente === 'producao'
             ? 'https://api.focusnfe.com.br'
             : 'https://homologacao.focusnfe.com.br';
-        
+
         let urlVisualizar = null;
         if (tipoNota === 'nfe') {
             // Para NFe, usar caminho_danfe ou caminho_xml_nota_fiscal
@@ -192,15 +192,15 @@ function renderizarTabelaBuscarNotas(notas) {
             urlVisualizar = caminhoDanfe || caminhoXml;
         } else if (tipoNota === 'nfse') {
             // Para NFSe, usar url ou caminho_xml
-            urlVisualizar = nota.url || nota.dados_completos?.url || 
-                          nota.caminho_xml || nota.dados_completos?.caminho_xml_nota_fiscal ||
-                          nota.dados_completos?.caminho_xml_nota_fsical;
+            urlVisualizar = nota.url || nota.dados_completos?.url ||
+                nota.caminho_xml || nota.dados_completos?.caminho_xml_nota_fiscal ||
+                nota.dados_completos?.caminho_xml_nota_fsical;
         }
-        
-        const urlCompleta = urlVisualizar 
+
+        const urlCompleta = urlVisualizar
             ? (urlVisualizar.startsWith('http') ? urlVisualizar : `${baseUrl}${urlVisualizar}`)
             : null;
-        
+
         const botaoVisualizar = urlCompleta
             ? `<button 
                    onclick="visualizarNota('${urlCompleta}', '${tipoNota}', '${ambiente}')" 
@@ -218,15 +218,15 @@ function renderizarTabelaBuscarNotas(notas) {
                >
                    👁️ Visualizar
                </button>`;
-        
+
         // Obter chave da nota para cancelamento alternativo
-        const chaveNota = nota.chave_nfe || nota.chave_nfse || nota.chave || 
-                         (nota.dados_completos && (nota.dados_completos.chave_nfe || nota.dados_completos.chave_nfse));
-        
+        const chaveNota = nota.chave_nfe || nota.chave_nfse || nota.chave ||
+            (nota.dados_completos && (nota.dados_completos.chave_nfe || nota.dados_completos.chave_nfse));
+
         // Se não tem referência mas tem chave, usar cancelamento por chave
         const temReferencia = referencia && referencia !== '-';
         const usarCancelamentoPorChave = !temReferencia && chaveNota;
-        
+
         const botaoCancelar = podeCancelar
             ? `<button 
                    onclick="${usarCancelamentoPorChave ? `cancelarNotaPorChave('${chaveNota}', '${tipoNota}', '${ambiente}')` : `cancelarNota('${referencia}', '${tipoNota}', '${ambiente}')`}" 
@@ -387,14 +387,14 @@ async function renderizarTabelaNotasEnviadas(notas) {
         const pedidoId = nota.pedido_externo || nota.pedido_id || '-';
         const tipoNota = nota.tipo_nota || 'nfse';
         const tipoLabel = tipoNota === 'nfe' ? 'NFe' : 'NFSe';
-        const tipoBadge = tipoNota === 'nfe' 
-            ? '<span class="badge badge-info">NFe</span>' 
+        const tipoBadge = tipoNota === 'nfe'
+            ? '<span class="badge badge-info">NFe</span>'
             : '<span class="badge badge-success">NFSe</span>';
-        
+
         // Parsear dados_completos se for string JSON
         let dadosCompletos = nota.dados_completos;
         const tipoOriginal = typeof dadosCompletos;
-        
+
         if (typeof dadosCompletos === 'string') {
             try {
                 dadosCompletos = JSON.parse(dadosCompletos);
@@ -403,7 +403,7 @@ async function renderizarTabelaNotasEnviadas(notas) {
                 dadosCompletos = {};
             }
         }
-        
+
         // Log para debug (apenas primeira nota)
         if (notas.indexOf(nota) === 0) {
             console.log('Debug Frontend - Nota:', referencia);
@@ -428,49 +428,53 @@ async function renderizarTabelaNotasEnviadas(notas) {
                 }
             }
         }
-        
+
         // Extrair cliente baseado no tipo de nota
         let cliente = '-';
         if (tipoNota === 'nfe') {
             // NFe: dados_completos.destinatario.nome_destinatario
-            cliente = dadosCompletos?.destinatario?.nome_destinatario || 
-                     dadosCompletos?.destinatario?.razao_social || 
-                     nota.nome_destinatario ||
-                     nota.razao_social ||
-                     '-';
+            cliente = dadosCompletos?.destinatario?.nome_destinatario ||
+                dadosCompletos?.destinatario?.razao_social ||
+                nota.nome_destinatario ||
+                nota.razao_social ||
+                '-';
         } else {
             // NFSe: dados_completos.tomador.razao_social ou nome
-            cliente = dadosCompletos?.tomador?.razao_social || 
-                     dadosCompletos?.tomador?.nome || 
-                     nota.razao_social ||
-                     nota.nome ||
-                     '-';
+            cliente = dadosCompletos?.tomador?.razao_social ||
+                dadosCompletos?.tomador?.nome ||
+                nota.razao_social ||
+                nota.nome ||
+                (nota.dados_pedido && (nota.dados_pedido.nome || nota.dados_pedido.razao_social ||
+                    (nota.dados_pedido.billing && (nota.dados_pedido.billing.first_name + ' ' + nota.dados_pedido.billing.last_name)) ||
+                    (nota.dados_pedido.billing && nota.dados_pedido.billing.company))) ||
+                '-';
         }
-        
+
         // Extrair valor baseado no tipo de nota
         let valor = 0;
         if (tipoNota === 'nfe') {
             // NFe: dados_completos.valor_total
-            valor = dadosCompletos?.valor_total || 
-                   nota.valor_total || 
-                   0;
+            valor = dadosCompletos?.valor_total ||
+                nota.valor_total ||
+                0;
         } else {
             // NFSe: dados_completos.servico.valor_servicos ou valor_total
-            valor = dadosCompletos?.servico?.valor_servicos || 
-                   dadosCompletos?.valor_total || 
-                   nota.valor_servicos ||
-                   nota.valor_total ||
-                   0;
+            valor = dadosCompletos?.servico?.valor_servicos ||
+                dadosCompletos?.valor_total ||
+                nota.valor_servicos ||
+                nota.valor_total ||
+                (nota.dados_pedido && (nota.dados_pedido.valor_servicos || nota.dados_pedido.valor_total || nota.dados_pedido.total)) ||
+                0;
         }
-        
+
         // Garantir que valor seja numérico
         valor = parseFloat(valor) || 0;
-        
+
         // Usar ambiente da nota se disponível, senão usar ambiente atual da configuração
         const ambiente = nota.ambiente || ambienteAtualConfig;
         const ambienteLabel = ambiente === 'producao' ? 'Produção' : 'Homologação';
-        const ambienteBadge = ambiente === 'producao' 
-            ? '<span class="badge badge-success">Produção</span>' 
+        const ambienteBadge = ambiente === 'producao'
+            ? '<span class="badge badge-success">Produção</span>'
             : '<span class="badge badge-warning">Homologação</span>';
         const status = formatarStatus(nota.status_focus);
 
@@ -528,7 +532,7 @@ function extrairCategoriasPedido(pedido) {
     if (!pedido.line_items || !Array.isArray(pedido.line_items)) {
         return [];
     }
-    
+
     const categorias = new Set();
     pedido.line_items.forEach(item => {
         // Tentar obter categorias de diferentes formas
@@ -549,7 +553,7 @@ function extrairCategoriasPedido(pedido) {
             categorias.add(item.name);
         }
     });
-    
+
     return Array.from(categorias);
 }
 
@@ -558,7 +562,7 @@ function extrairCategoriasPedido(pedido) {
  */
 function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
     console.log('renderizarTabelaPedidos chamado com:', pedidos ? pedidos.length : 0, 'pedidos');
-    
+
     if (!pedidos || pedidos.length === 0) {
         console.log('Nenhum pedido para renderizar');
         return `
@@ -574,7 +578,7 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
     }
 
     console.log('Renderizando', pedidos.length, 'pedidos na tabela');
-    
+
     // Mapear status para labels
     const statusLabels = {
         'pending': 'Pendente',
@@ -585,28 +589,28 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
         'refunded': 'Reembolsado',
         'failed': 'Falhou'
     };
-    
+
     let rows = '';
-    
+
     if (agruparPorCategoria) {
         // Agrupar pedidos por categoria
         const pedidosPorCategoria = {};
-        
+
         pedidos.forEach(pedido => {
             const categorias = extrairCategoriasPedido(pedido);
             const categoriaPrincipal = categorias.length > 0 ? categorias[0] : 'Sem categoria';
-            
+
             if (!pedidosPorCategoria[categoriaPrincipal]) {
                 pedidosPorCategoria[categoriaPrincipal] = [];
             }
             pedidosPorCategoria[categoriaPrincipal].push(pedido);
         });
-        
+
         // Renderizar por categoria
         Object.keys(pedidosPorCategoria).sort().forEach(categoria => {
             const pedidosCategoria = pedidosPorCategoria[categoria];
             const categoriaId = categoria.toLowerCase().replace(/\s+/g, '-');
-            
+
             rows += `
                 <tr style="background-color: var(--color-gray-light);">
                     <td colspan="7" style="padding: 12px; font-weight: 600; font-size: 16px;">
@@ -614,17 +618,17 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                     </td>
                 </tr>
             `;
-            
+
             pedidosCategoria.forEach(pedido => {
                 const id = pedido.id || pedido.number || '-';
                 const data = formatarData(pedido.date_created || pedido.created_at);
-                const cliente = pedido.billing 
+                const cliente = pedido.billing
                     ? `${pedido.billing.first_name || ''} ${pedido.billing.last_name || ''}`.trim() || pedido.billing.company || 'N/A'
                     : 'N/A';
                 const total = formatarValor(parseFloat(pedido.total || 0));
                 const statusAtual = pedido.status || 'pending';
                 const statusLabel = statusLabels[statusAtual] || statusAtual;
-                
+
                 rows += `
                     <tr>
                         <td>
@@ -667,13 +671,13 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
             }
             const id = pedido.id || pedido.number || '-';
             const data = formatarData(pedido.date_created || pedido.created_at);
-            const cliente = pedido.billing 
+            const cliente = pedido.billing
                 ? `${pedido.billing.first_name || ''} ${pedido.billing.last_name || ''}`.trim() || pedido.billing.company || 'N/A'
                 : 'N/A';
             const total = formatarValor(parseFloat(pedido.total || 0));
             const statusAtual = pedido.status || 'pending';
             const statusLabel = statusLabels[statusAtual] || statusAtual;
-            
+
             // Extrair categorias
             const categorias = extrairCategoriasPedido(pedido);
             const categoriaTexto = categorias.length > 0 ? categorias.join(', ') : 'Sem categoria';
@@ -709,10 +713,10 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
     }
 
     console.log('Tabela renderizada com', rows.split('</tr>').length - 1, 'linhas');
-    
+
     // Gerar ID único para esta tabela (baseado no timestamp)
     const tabelaId = 'tabela-pedidos-' + Date.now();
-    
+
     return `
         <div class="table-container">
             <table class="table" id="${tabelaId}">
@@ -753,7 +757,7 @@ function renderizarPaginacao(paginaAtual, totalPaginas, onPageChange) {
     const maxPaginas = 5;
     let inicio = Math.max(1, paginaAtual - Math.floor(maxPaginas / 2));
     let fim = Math.min(totalPaginas, inicio + maxPaginas - 1);
-    
+
     if (fim - inicio < maxPaginas - 1) {
         inicio = Math.max(1, fim - maxPaginas + 1);
     }
@@ -789,7 +793,7 @@ function renderizarPaginacao(paginaAtual, totalPaginas, onPageChange) {
  */
 function renderizarTabelaResumoMeses(dados) {
     if (!dados || dados.length <= 1) return '';
-    
+
     const rows = dados.slice(1).map(row => `
         <tr>
             <td>${row[0]}</td>
@@ -797,7 +801,7 @@ function renderizarTabelaResumoMeses(dados) {
             <td style="text-align: right;">${row[2]}</td>
         </tr>
     `).join('');
-    
+
     return `
         <div class="table-container">
             <table class="table">
@@ -821,7 +825,7 @@ function renderizarTabelaResumoMeses(dados) {
  */
 function renderizarProgressoEmissao(total, processados, sucesso, erros, resultados) {
     const percentual = total > 0 ? Math.round((processados / total) * 100) : 0;
-    
+
     const resultadosHtml = resultados.map((r, index) => {
         if (r.sucesso) {
             return `
@@ -840,7 +844,7 @@ function renderizarProgressoEmissao(total, processados, sucesso, erros, resultad
             `;
         }
     }).join('');
-    
+
     return `
         <div id="modal-progresso" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px;">
             <div style="background-color: white; border-radius: 8px; padding: 24px; max-width: 600px; width: 100%; max-height: 80vh; overflow-y: auto;">
@@ -964,14 +968,14 @@ function renderBackups(backups, mensagem = null, notasNFe = []) {
     function obterUrlXml(caminhoXml, ambiente) {
         if (!caminhoXml) return '#';
         if (caminhoXml.startsWith('http')) return caminhoXml;
-        const baseUrl = ambiente === 'producao' 
+        const baseUrl = ambiente === 'producao'
             ? 'https://api.focusnfe.com.br'
             : 'https://homologacao.focusnfe.com.br';
         return `${baseUrl}${caminhoXml}`;
     }
-    
+
     let htmlBackups = '';
-    
+
     if (!backups || backups.length === 0) {
         const mensagemExibicao = mensagem || 'Nenhum backup disponível no momento.';
         htmlBackups = `
@@ -1067,17 +1071,17 @@ function renderBackups(backups, mensagem = null, notasNFe = []) {
             </div>
         `;
     }
-    
+
     // Seção de notas individuais
     let notasHtml = '';
     // notasNFe pode ser um array ou um objeto com {notas: [], meses: []}
     const notasArray = Array.isArray(notasNFe) ? notasNFe : (notasNFe?.notas || []);
     const mesesBusca = notasNFe?.meses || [];
-    
+
     if (notasArray && notasArray.length > 0) {
         // Título fixo sem meses
         let tituloSecao = 'Notas Individuais';
-        
+
         let notasRows = '';
         notasArray.forEach(nota => {
             const dataNota = new Date(nota.created_at);
@@ -1101,7 +1105,7 @@ function renderBackups(backups, mensagem = null, notasNFe = []) {
                 </tr>
             `;
         });
-        
+
         notasHtml = `
             <div class="content-section" style="margin-top: 32px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -1183,7 +1187,7 @@ function renderBackups(backups, mensagem = null, notasNFe = []) {
             </div>
         `;
     }
-    
+
     return htmlBackups + notasHtml;
 }
 

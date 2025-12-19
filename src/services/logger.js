@@ -5,13 +5,18 @@ const fs = require('fs');
 // Detectar se está rodando na Vercel (serverless)
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
 
-// Importação lazy para evitar dependência circular
+// Tentar importar database, mas permitir falha (para scripts isolados)
 let salvarLog = null;
 try {
+  // Usar require dinâmico dentro de função ou verificar se módulo existe
   const db = require('../config/database');
-  salvarLog = db.salvarLog;
+  if (db && typeof db.salvarLog === 'function') {
+    salvarLog = db.salvarLog;
+  } else {
+    console.warn('⚠️ Logger: db.salvarLog não é uma função. Logs não serão salvos no banco.');
+  }
 } catch (error) {
-  // Ignorar se database não estiver disponível
+  console.warn('⚠️ Logger: Erro ao importar database. Logs não serão salvos no banco.', error.message);
 }
 
 // Formato customizado para logs
@@ -27,18 +32,18 @@ const consoleFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   winston.format.printf(({ timestamp, level, message, service, action, pedido_id, referencia, ...meta }) => {
     let log = `${timestamp} [${level}]`;
-    
+
     if (service) log += ` [${service}]`;
     if (action) log += ` [${action}]`;
     if (pedido_id) log += ` [Pedido: ${pedido_id}]`;
     if (referencia) log += ` [Ref: ${referencia}]`;
-    
+
     log += ` - ${message}`;
-    
+
     if (Object.keys(meta).length > 0) {
       log += ` ${JSON.stringify(meta)}`;
     }
-    
+
     return log;
   })
 );
@@ -56,12 +61,12 @@ const transports = [
 if (!isVercel) {
   const DailyRotateFile = require('winston-daily-rotate-file');
   const logsDir = path.join(process.cwd(), 'logs');
-  
+
   // Criar diretório de logs se não existir
   if (!fs.existsSync(logsDir)) {
     fs.mkdirSync(logsDir, { recursive: true });
   }
-  
+
   // Arquivo de erro
   transports.push(new DailyRotateFile({
     filename: path.join(logsDir, 'error-%DATE%.log'),
@@ -71,7 +76,7 @@ if (!isVercel) {
     maxSize: '20m',
     maxFiles: '14d'
   }));
-  
+
   // Arquivo geral
   transports.push(new DailyRotateFile({
     filename: path.join(logsDir, 'combined-%DATE%.log'),
@@ -116,7 +121,7 @@ async function logToDatabase(level, message, meta = {}) {
     message,
     data: meta.data || meta
   };
-  
+
   // Salva no banco de forma assíncrona (não bloqueia)
   if (salvarLog) {
     salvarLog(logEntry).catch(err => {
@@ -138,7 +143,7 @@ const customLogger = {
     logger.info(message, meta);
     logToDatabase('info', message, meta);
   },
-  
+
   /**
    * Log de aviso
    */
@@ -146,7 +151,7 @@ const customLogger = {
     logger.warn(message, meta);
     logToDatabase('warn', message, meta);
   },
-  
+
   /**
    * Log de erro
    */
@@ -154,7 +159,7 @@ const customLogger = {
     logger.error(message, meta);
     logToDatabase('error', message, meta);
   },
-  
+
   /**
    * Log de debug
    */
@@ -164,7 +169,7 @@ const customLogger = {
       logToDatabase('debug', message, meta);
     }
   },
-  
+
   /**
    * Log específico para webhook
    */
@@ -175,7 +180,7 @@ const customLogger = {
       ...meta
     });
   },
-  
+
   /**
    * Log específico para Focus NFe
    */
@@ -186,7 +191,7 @@ const customLogger = {
       ...meta
     });
   },
-  
+
   /**
    * Log específico para validação
    */
@@ -197,7 +202,7 @@ const customLogger = {
       ...meta
     });
   },
-  
+
   /**
    * Log específico para mapeamento
    */
@@ -208,7 +213,7 @@ const customLogger = {
       ...meta
     });
   },
-  
+
   /**
    * Log específico para CEP service
    */

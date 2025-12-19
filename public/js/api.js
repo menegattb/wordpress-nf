@@ -83,7 +83,7 @@ const NFSeAPI = {
     async cancelar(referencia, tipoNota, justificativa, ambiente = null) {
         return await apiRequest(`/api/nfse/cancelar/${referencia}`, {
             method: 'DELETE',
-            body: { 
+            body: {
                 tipo_nota: tipoNota,
                 justificativa,
                 ...(ambiente ? { ambiente } : {})
@@ -244,7 +244,7 @@ const PedidosAPI = {
         const params = new URLSearchParams();
         if (filtros.limite) params.append('limite', filtros.limite);
         if (filtros.offset) params.append('offset', filtros.offset);
-        
+
         const query = params.toString();
         return await apiRequest(`/api/pedidos/banco${query ? '?' + query : ''}`);
     },
@@ -269,18 +269,18 @@ const PedidosAPI = {
         let totalSalvos = 0;
         let totalAtualizados = 0;
         let totalErros = 0;
-        
+
         while (true) {
             const resultado = await this.sincronizarDoWooCommerce(pagina, 30);
-            
+
             if (!resultado.sucesso) {
                 return { sucesso: false, erro: resultado.erro };
             }
-            
+
             totalSalvos += resultado.salvos || 0;
             totalAtualizados += resultado.atualizados || 0;
             totalErros += resultado.erros || 0;
-            
+
             if (onProgress) {
                 onProgress({
                     pagina,
@@ -289,11 +289,11 @@ const PedidosAPI = {
                     erros: totalErros
                 });
             }
-            
+
             if (!resultado.tem_mais) break;
             pagina++;
         }
-        
+
         return {
             sucesso: true,
             paginas: pagina,
@@ -366,6 +366,8 @@ const ConfigAPI = {
         const params = new URLSearchParams();
         if (filtros.limite) params.append('limite', filtros.limite);
         if (filtros.nivel) params.append('nivel', filtros.nivel);
+        // Suporte para filtrar por Job ID
+        if (filtros.job_id) params.append('job_id', filtros.job_id);
 
         const query = params.toString();
         return await apiRequest(`/api/config/logs${query ? '?' + query : ''}`);
@@ -426,7 +428,7 @@ const BackupsAPI = {
     async listar() {
         return await apiRequest('/api/backups');
     },
-    
+
     /**
      * Lista notas NFe autorizadas para download de XMLs individuais
      */
