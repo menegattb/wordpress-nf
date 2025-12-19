@@ -116,22 +116,53 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
     is_homologacao: isHomologacao
   });
   
-  logger.focusNFe('emitir_nfse', 'Iniciando emissão de NFSe', {
+  // Log detalhado no início da emissão
+  logger.focusNFe('emitir_nfse', 'Iniciando emissão manual de NFSe', {
     pedido_id: dadosPedido.pedido_id,
     referencia,
     tipo_nf: tipoNF,
-    ambiente: apiConfig.ambiente
+    ambiente: apiConfig.ambiente,
+    cliente: dadosPedido.nome || dadosPedido.razao_social || 'N/A',
+    cpf_cnpj: dadosPedido.cpf_cnpj || 'N/A',
+    valor_total: dadosPedido.valor_total || dadosPedido.valor_servicos || 0,
+    quantidade_servicos: dadosPedido.servicos?.length || 0,
+    timestamp: new Date().toISOString()
   });
   
   try {
     // Mapear dados para formato Focus NFSe
     logger.focusNFe('emitir_nfse', 'Mapeando dados para formato Focus NFSe', {
       pedido_id: dadosPedido.pedido_id,
-      referencia
+      referencia,
+      dados_pedido_recebido: {
+        cliente: dadosPedido.nome || dadosPedido.razao_social,
+        cpf_cnpj: dadosPedido.cpf_cnpj,
+        valor_total: dadosPedido.valor_total || dadosPedido.valor_servicos,
+        quantidade_servicos: dadosPedido.servicos?.length || 0,
+        endereco_cidade: dadosPedido.endereco?.cidade,
+        endereco_estado: dadosPedido.endereco?.estado,
+        endereco_cep: dadosPedido.endereco?.cep
+      }
     });
     
     const fiscalConfig = configFiscal || config.fiscal;
+    const inicioMapeamento = Date.now();
     const nfseData = await mapearPedidoParaNFSe(dadosPedido, configEmitente, fiscalConfig, tipoNF);
+    const tempoMapeamento = Date.now() - inicioMapeamento;
+    
+    logger.focusNFe('emitir_nfse', 'Dados mapeados com sucesso', {
+      pedido_id: dadosPedido.pedido_id,
+      referencia,
+      tempo_mapeamento_ms: tempoMapeamento,
+      payload_resumo: {
+        prestador_cnpj: nfseData.prestador?.cnpj,
+        tomador_razao_social: nfseData.tomador?.razao_social,
+        tomador_cpf_cnpj: nfseData.tomador?.cpf || nfseData.tomador?.cnpj,
+        valor_servicos: nfseData.servico?.valor_servicos,
+        item_lista_servico: nfseData.servico?.item_lista_servico,
+        discriminacao: nfseData.servico?.discriminacao?.substring(0, 50) + (nfseData.servico?.discriminacao?.length > 50 ? '...' : '')
+      }
+    });
     
     // Validação básica (campos obrigatórios)
     logger.focusNFe('emitir_nfse', 'Validando campos obrigatórios', {
@@ -139,53 +170,141 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
       referencia
     });
     
+    const validacoes = [];
+    
     // Validação básica dos campos essenciais
     if (!nfseData.prestador?.cnpj) {
-      throw new Error('CNPJ do prestador é obrigatório');
+      validacoes.push('CNPJ do prestador é obrigatório');
+      logger.warn('Validação falhou: CNPJ do prestador', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        validacao: 'prestador_cnpj'
+      });
     }
     if (!nfseData.tomador?.cpf && !nfseData.tomador?.cnpj) {
-      throw new Error('CPF ou CNPJ do tomador é obrigatório');
+      validacoes.push('CPF ou CNPJ do tomador é obrigatório');
+      logger.warn('Validação falhou: CPF/CNPJ do tomador', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        validacao: 'tomador_cpf_cnpj'
+      });
     }
     if (!nfseData.servico?.valor_servicos) {
-      throw new Error('Valor dos serviços é obrigatório');
+      validacoes.push('Valor dos serviços é obrigatório');
+      logger.warn('Validação falhou: Valor dos serviços', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        validacao: 'servico_valor_servicos'
+      });
     }
     
     // Validar campos obrigatórios adicionais
     if (!nfseData.prestador?.codigo_municipio) {
-      throw new Error('Código do município do prestador é obrigatório');
+      validacoes.push('Código do município do prestador é obrigatório');
+      logger.warn('Validação falhou: Código município prestador', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        validacao: 'prestador_codigo_municipio'
+      });
     }
     if (!nfseData.tomador?.endereco?.codigo_municipio) {
-      throw new Error('Código do município do tomador é obrigatório');
+      validacoes.push('Código do município do tomador é obrigatório');
+      logger.warn('Validação falhou: Código município tomador', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        validacao: 'tomador_codigo_municipio'
+      });
     }
     if (!nfseData.tomador?.endereco?.cep) {
-      throw new Error('CEP do tomador é obrigatório');
+      validacoes.push('CEP do tomador é obrigatório');
+      logger.warn('Validação falhou: CEP tomador', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        validacao: 'tomador_cep'
+      });
     }
     if (!nfseData.tomador?.razao_social) {
-      throw new Error('Razão social do tomador é obrigatória');
+      validacoes.push('Razão social do tomador é obrigatória');
+      logger.warn('Validação falhou: Razão social tomador', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        validacao: 'tomador_razao_social'
+      });
     }
     if (!nfseData.servico?.discriminacao) {
-      throw new Error('Discriminação do serviço é obrigatória');
+      validacoes.push('Discriminação do serviço é obrigatória');
+      logger.warn('Validação falhou: Discriminação serviço', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        validacao: 'servico_discriminacao'
+      });
     }
     if (!nfseData.servico?.item_lista_servico) {
-      throw new Error('Item da lista de serviço é obrigatório');
+      validacoes.push('Item da lista de serviço é obrigatório');
+      logger.warn('Validação falhou: Item lista serviço', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        validacao: 'servico_item_lista_servico'
+      });
     }
     
     // Validar formato do CEP (deve ter 8 dígitos)
     const cepTomador = nfseData.tomador?.endereco?.cep?.replace(/\D/g, '') || '';
     if (cepTomador.length !== 8) {
-      throw new Error(`CEP do tomador deve ter 8 dígitos. Valor recebido: ${nfseData.tomador?.endereco?.cep}`);
+      validacoes.push(`CEP do tomador deve ter 8 dígitos. Valor recebido: ${nfseData.tomador?.endereco?.cep}`);
+      logger.warn('Validação falhou: Formato CEP', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        validacao: 'cep_formato',
+        cep_recebido: nfseData.tomador?.endereco?.cep,
+        cep_limpo: cepTomador,
+        cep_length: cepTomador.length
+      });
     }
     
     // Validar formato do código do município (deve ter 7 dígitos)
     const codMunicipioTomador = nfseData.tomador?.endereco?.codigo_municipio?.toString().replace(/\D/g, '') || '';
     if (codMunicipioTomador.length !== 7) {
-      throw new Error(`Código do município do tomador deve ter 7 dígitos (IBGE). Valor recebido: ${nfseData.tomador?.endereco?.codigo_municipio}`);
+      validacoes.push(`Código do município do tomador deve ter 7 dígitos (IBGE). Valor recebido: ${nfseData.tomador?.endereco?.codigo_municipio}`);
+      logger.warn('Validação falhou: Formato código município tomador', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        validacao: 'codigo_municipio_tomador_formato',
+        codigo_recebido: nfseData.tomador?.endereco?.codigo_municipio,
+        codigo_limpo: codMunicipioTomador,
+        codigo_length: codMunicipioTomador.length
+      });
     }
     
     const codMunicipioPrestador = nfseData.prestador?.codigo_municipio?.toString().replace(/\D/g, '') || '';
     if (codMunicipioPrestador.length !== 7) {
-      throw new Error(`Código do município do prestador deve ter 7 dígitos (IBGE). Valor recebido: ${nfseData.prestador?.codigo_municipio}`);
+      validacoes.push(`Código do município do prestador deve ter 7 dígitos (IBGE). Valor recebido: ${nfseData.prestador?.codigo_municipio}`);
+      logger.warn('Validação falhou: Formato código município prestador', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        validacao: 'codigo_municipio_prestador_formato',
+        codigo_recebido: nfseData.prestador?.codigo_municipio,
+        codigo_limpo: codMunicipioPrestador,
+        codigo_length: codMunicipioPrestador.length
+      });
     }
+    
+    // Se houver erros de validação, lançar exceção
+    if (validacoes.length > 0) {
+      logger.error('Validações falharam', {
+        pedido_id: dadosPedido.pedido_id,
+        referencia,
+        total_erros: validacoes.length,
+        erros: validacoes
+      });
+      throw new Error(validacoes.join('; '));
+    }
+    
+    logger.focusNFe('emitir_nfse', 'Todas as validações passaram', {
+      pedido_id: dadosPedido.pedido_id,
+      referencia,
+      validacoes_ok: true
+    });
     
     // Validar token antes de criar cliente
     if (!apiConfig.token) {
@@ -247,7 +366,9 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
       valor_servicos: nfseData.servico?.valor_servicos
     });
     
+    const inicioEnvio = Date.now();
     const response = await api.post(`/nfse?ref=${referencia}`, nfseData);
+    const tempoResposta = Date.now() - inicioEnvio;
     
     logger.focusNFe('emitir_nfse', 'Resposta recebida da Focus NFe', {
       pedido_id: dadosPedido.pedido_id,
@@ -255,8 +376,16 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
       tipo_nf: tipoNF,
       status: response.data.status,
       status_sefaz: response.data.status_sefaz,
+      mensagem_sefaz: response.data.mensagem_sefaz || null,
       status_code: response.status,
-      response_data: response.data
+      tempo_resposta_ms: tempoResposta,
+      numero_rps: response.data.numero_rps || response.data.numero || null,
+      codigo_verificacao: response.data.codigo_verificacao || null,
+      chave_nfse: response.data.chave_nfse || null,
+      caminho_xml: response.data.caminho_xml || response.data.caminho_xml_nota_fiscal || null,
+      caminho_pdf: response.data.caminho_pdf || response.data.caminho_pdf_nota_fiscal || null,
+      tem_erros: !!response.data.erros,
+      erros: response.data.erros || null
     });
     
     // Salvar no banco de dados
@@ -297,11 +426,30 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
         referencia,
         erro: dbError.message,
         stack: dbError.stack,
-        ambiente: apiConfig.ambiente || 'homologacao'
+        ambiente: apiConfig.ambiente || 'homologacao',
+        contexto: 'salvamento_apos_emissao'
       });
       // Continuar mesmo com erro no banco, mas logar o erro
       throw dbError;
     }
+    
+    // Log final de sucesso com todas as informações
+    logger.focusNFe('emitir_nfse', 'NFSe emitida com sucesso', {
+      pedido_id: dadosPedido.pedido_id,
+      referencia,
+      status: response.data.status,
+      status_sefaz: response.data.status_sefaz,
+      mensagem_sefaz: response.data.mensagem_sefaz || 'Autorizado',
+      numero_rps: response.data.numero_rps || response.data.numero || null,
+      codigo_verificacao: response.data.codigo_verificacao || null,
+      chave_nfse: response.data.chave_nfse || null,
+      caminho_xml: response.data.caminho_xml || response.data.caminho_xml_nota_fiscal || null,
+      caminho_pdf: response.data.caminho_pdf || response.data.caminho_pdf_nota_fiscal || null,
+      tempo_resposta_ms: tempoResposta,
+      ambiente: apiConfig.ambiente || 'homologacao',
+      cliente: dadosPedido.nome || dadosPedido.razao_social,
+      valor_total: dadosPedido.valor_total || dadosPedido.valor_servicos
+    });
     
     return {
       sucesso: true,
@@ -318,6 +466,8 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
     
   } catch (error) {
     const erro = error.response?.data || error.message;
+    const inicioEmissao = Date.now();
+    const tempoTotal = inicioEmissao - (inicioEmissao - (Date.now() - inicioEmissao));
     
     // Log completo do erro em modo desenvolvimento
     if (process.env.NODE_ENV !== 'production') {
@@ -332,12 +482,21 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
       console.log('═══════════════════════════════════════════════\n');
     }
     
-    logger.focusNFe('emitir_nfse', 'Erro ao emitir NFSe', {
+    logger.error('Erro ao emitir NFSe', {
+      service: 'focusNFe',
+      action: 'emitir_nfse',
       pedido_id: dadosPedido.pedido_id,
       referencia,
+      cliente: dadosPedido.nome || dadosPedido.razao_social || 'N/A',
+      valor_total: dadosPedido.valor_total || dadosPedido.valor_servicos || 0,
       erro: typeof erro === 'string' ? erro : JSON.stringify(erro),
       status_code: error.response?.status,
       error_message: error.message,
+      stack: error.stack,
+      ambiente: apiConfig?.ambiente || 'homologacao',
+      erro_detalhado: error.response?.data || null,
+      url_request: error.config?.url || null,
+      metodo_request: error.config?.method || null
       has_response: !!error.response,
       response_data: error.response?.data,
       response_data_full: JSON.stringify(error.response?.data, null, 2),

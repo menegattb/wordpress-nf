@@ -26,9 +26,14 @@ async function emitirNFSeLote(req, res) {
     }
     
     const tipoNF = tipo_nf || 'servico';
-    logger.info(`Iniciando emissão em lote de ${tipoNF === 'produto' ? 'NFe' : 'NFSe'}`, {
+    const inicioLote = Date.now();
+    const tipoNotaLabel = tipoNF === 'produto' ? 'NFe' : 'NFSe';
+    
+    logger.info(`Iniciando emissão em lote de ${tipoNotaLabel}`, {
       total: pedido_ids.length,
-      tipo_nf: tipoNF
+      tipo_nf: tipoNF,
+      timestamp: new Date().toISOString(),
+      pedido_ids: pedido_ids.slice(0, 10) // Log apenas primeiros 10 para não poluir
     });
     
     const resultados = [];
@@ -37,16 +42,28 @@ async function emitirNFSeLote(req, res) {
     
     for (let i = 0; i < pedido_ids.length; i++) {
       const pedidoId = pedido_ids[i];
+      const inicioPedido = Date.now();
       
       try {
-        logger.info(`Processando pedido ${i + 1}/${pedido_ids.length}`, {
-          pedido_id: pedidoId
+        logger.info(`[${i + 1}/${pedido_ids.length}] Processando pedido`, {
+          pedido_id: pedidoId,
+          tipo_nf: tipoNF,
+          progresso: `${i + 1}/${pedido_ids.length}`
         });
         
         // Buscar pedido do WooCommerce
+        logger.debug(`[${i + 1}/${pedido_ids.length}] Buscando pedido no WooCommerce`, {
+          pedido_id: pedidoId
+        });
+        
         const resultadoWC = await buscarPedidoWC(pedidoId);
         
         if (!resultadoWC.sucesso) {
+          logger.warn(`[${i + 1}/${pedido_ids.length}] Erro ao buscar pedido do WooCommerce`, {
+            pedido_id: pedidoId,
+            erro: resultadoWC.erro || 'Erro desconhecido'
+          });
+          
           resultados.push({
             pedido_id: pedidoId,
             sucesso: false,
@@ -56,10 +73,33 @@ async function emitirNFSeLote(req, res) {
           continue;
         }
         
+        logger.debug(`[${i + 1}/${pedido_ids.length}] Pedido encontrado no WooCommerce`, {
+          pedido_id: pedidoId,
+          cliente: resultadoWC.pedido?.billing?.first_name + ' ' + resultadoWC.pedido?.billing?.last_name || resultadoWC.pedido?.billing?.company,
+          valor_total: resultadoWC.pedido?.total
+        });
+        
         // Mapear para formato interno
+        logger.debug(`[${i + 1}/${pedido_ids.length}] Mapeando dados do pedido`, {
+          pedido_id: pedidoId
+        });
+        
         const pedidoMapeado = mapearWooCommerceParaPedido(resultadoWC.pedido);
         
+        logger.debug(`[${i + 1}/${pedido_ids.length}] Dados mapeados com sucesso`, {
+          pedido_id: pedidoId,
+          cliente: pedidoMapeado.nome || pedidoMapeado.razao_social,
+          valor_total: pedidoMapeado.valor_total || pedidoMapeado.valor_servicos,
+          quantidade_servicos: pedidoMapeado.servicos?.length || 0
+        });
+        
         // Emitir NFSe ou NFe baseado no tipo_nf
+        logger.info(`[${i + 1}/${pedido_ids.length}] Emitindo ${tipoNotaLabel}`, {
+          pedido_id: pedidoId,
+          tipo_nf: tipoNF,
+          cliente: pedidoMapeado.nome || pedidoMapeado.razao_social
+        });
+        
         let resultadoNFSe;
         
         if (tipoNF === 'produto') {
@@ -70,7 +110,17 @@ async function emitirNFSeLote(req, res) {
           resultadoNFSe = await emitirNFSe(pedidoMapeado, config.emitente, configFiscal, tipoNF);
         }
         
+        const tempoPedido = Date.now() - inicioPedido;
+        
         if (resultadoNFSe.sucesso) {
+          logger.info(`[${i + 1}/${pedido_ids.length}] ${tipoNotaLabel} emitida com sucesso`, {
+            pedido_id: pedidoId,
+            referencia: resultadoNFSe.referencia,
+            status: resultadoNFSe.status,
+            numero_rps: resultadoNFSe.numero || resultadoNFSe.chave_nfse || null,
+            tempo_processamento_ms: tempoPedido
+          });
+          
           resultados.push({
             pedido_id: pedidoId,
             sucesso: true,
@@ -80,6 +130,13 @@ async function emitirNFSeLote(req, res) {
           });
           sucesso++;
         } else {
+          logger.error(`[${i + 1}/${pedido_ids.length}] Erro ao emitir ${tipoNotaLabel}`, {
+            pedido_id: pedidoId,
+            erro: resultadoNFSe.erro || 'Erro desconhecido',
+            referencia: resultadoNFSe.referencia || null,
+            tempo_processamento_ms: tempoPedido
+          });
+          
           resultados.push({
             pedido_id: pedidoId,
             sucesso: false,
@@ -89,9 +146,13 @@ async function emitirNFSeLote(req, res) {
         }
         
       } catch (error) {
-        logger.error(`Erro ao processar pedido ${pedidoId}`, {
+        const tempoPedido = Date.now() - inicioPedido;
+        
+        logger.error(`[${i + 1}/${pedido_ids.length}] Erro ao processar pedido`, {
           pedido_id: pedidoId,
-          error: error.message
+          error: error.message,
+          stack: error.stack,
+          tempo_processamento_ms: tempoPedido
         });
         
         resultados.push({
@@ -103,10 +164,16 @@ async function emitirNFSeLote(req, res) {
       }
     }
     
+    const tempoTotal = Date.now() - inicioLote;
+    
     logger.info('Emissão em lote concluída', {
       total: pedido_ids.length,
       sucesso,
-      erros
+      erros,
+      tempo_total_ms: tempoTotal,
+      tempo_medio_ms: pedido_ids.length > 0 ? Math.round(tempoTotal / pedido_ids.length) : 0,
+      taxa_sucesso: pedido_ids.length > 0 ? ((sucesso / pedido_ids.length) * 100).toFixed(2) + '%' : '0%',
+      tipo_nf: tipoNF
     });
     
     res.json({

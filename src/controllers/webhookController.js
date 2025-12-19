@@ -167,46 +167,63 @@ async function processarWebhook(req, res) {
     // Livro Faíscas = NFe (produto), resto = NFSe (serviço)
     const tipoNota = verificarTipoNota(pedidoWC);
     
-    logger.webhook(`Iniciando emissão de ${tipoNota === 'produto' ? 'NFe (Produto)' : 'NFSe (Serviço)'}`, {
-      pedido_id: dadosPedido.pedido_id,
-      tipo_nota: tipoNota
-    });
-    
-    try {
-      let resultado;
+    if (tipoNota === 'produto') {
+      // Emitir NFe automaticamente para produtos (Livro Faíscas)
+      logger.webhook('Iniciando emissão automática de NFe (Produto)', {
+        pedido_id: dadosPedido.pedido_id,
+        tipo_nota: tipoNota,
+        cliente: dadosPedido.nome,
+        valor_total: dadosPedido.valor_total
+      });
       
-      if (tipoNota === 'produto') {
-        // Emitir NFe (produto - Livro Faíscas)
-        resultado = await emitirNFe(dadosPedido, config.emitente, configFiscal);
-      } else {
-        // Emitir NFSe (serviço - padrão)
-        resultado = await emitirNFSe(dadosPedido, config.emitente, configFiscal);
-      }
-      
-      if (resultado.sucesso) {
-        logger.webhook(`${tipoNota === 'produto' ? 'NFe' : 'NFSe'} emitida com sucesso`, {
-          pedido_id: dadosPedido.pedido_id,
-          referencia: resultado.referencia,
-          status: resultado.status,
-          tipo_nota: tipoNota
-        });
+      try {
+        const resultado = await emitirNFe(dadosPedido, config.emitente, configFiscal);
         
-        // Atualizar status do pedido
-        await atualizarPedido(dadosPedido.pedido_id_db, {
-          status: resultado.status === 'autorizado' ? 'emitida' : 'processando'
-        });
-        
-        return res.status(200).json({
-          mensagem: `Pedido processado e ${tipoNota === 'produto' ? 'NFe' : 'NFSe'} emitida`,
+        if (resultado.sucesso) {
+          logger.webhook('NFe emitida com sucesso automaticamente', {
+            pedido_id: dadosPedido.pedido_id,
+            referencia: resultado.referencia,
+            status: resultado.status,
+            tipo_nota: tipoNota
+          });
+          
+          // Atualizar status do pedido
+          await atualizarPedido(dadosPedido.pedido_id_db, {
+            status: resultado.status === 'autorizado' ? 'emitida' : 'processando'
+          });
+          
+          return res.status(200).json({
+            mensagem: 'Pedido processado e NFe emitida automaticamente',
+            pedido_id: dadosPedido.pedido_id,
+            status: resultado.status,
+            referencia: resultado.referencia,
+            tipo_nota: tipoNota
+          });
+        } else {
+          logger.webhook('Erro ao emitir NFe automaticamente', {
+            pedido_id: dadosPedido.pedido_id,
+            erro: resultado.erro,
+            tipo_nota: tipoNota
+          });
+          
+          // Atualizar status do pedido para erro
+          await atualizarPedido(dadosPedido.pedido_id_db, {
+            status: 'erro'
+          });
+          
+          // Retornar 200 para evitar reenvios do WooCommerce
+          return res.status(200).json({
+            mensagem: 'Pedido recebido, erro na emissão da NFe',
+            pedido_id: dadosPedido.pedido_id,
+            erro: resultado.erro,
+            tipo_nota: tipoNota
+          });
+        }
+      } catch (err) {
+        logger.error('Erro ao processar emissão automática de NFe', {
           pedido_id: dadosPedido.pedido_id,
-          status: resultado.status,
-          referencia: resultado.referencia,
-          tipo_nota: tipoNota
-        });
-      } else {
-        logger.webhook(`Erro ao emitir ${tipoNota === 'produto' ? 'NFe' : 'NFSe'}`, {
-          pedido_id: dadosPedido.pedido_id,
-          erro: resultado.erro,
+          error: err.message,
+          stack: err.stack,
           tipo_nota: tipoNota
         });
         
@@ -217,30 +234,35 @@ async function processarWebhook(req, res) {
         
         // Retornar 200 para evitar reenvios do WooCommerce
         return res.status(200).json({
-          mensagem: 'Pedido recebido, erro na emissão',
+          mensagem: 'Pedido recebido, erro no processamento da NFe',
           pedido_id: dadosPedido.pedido_id,
-          erro: resultado.erro,
+          erro: err.message,
           tipo_nota: tipoNota
         });
       }
-    } catch (err) {
-      logger.error(`Erro ao processar emissão de ${tipoNota === 'produto' ? 'NFe' : 'NFSe'}`, {
+    } else {
+      // Para serviços: apenas salvar pedido com status "pendente" - NÃO emitir NFSe automaticamente
+      logger.webhook('Pedido de serviço recebido - aguardando emissão manual', {
         pedido_id: dadosPedido.pedido_id,
-        error: err.message,
-        tipo_nota: tipoNota
+        tipo_nota: 'servico',
+        status_salvo: 'pendente',
+        cliente: dadosPedido.nome,
+        valor_total: dadosPedido.valor_total,
+        quantidade_servicos: dadosPedido.servicos?.length || 0,
+        acao: 'pedido_salvo_aguardando_emissao_manual'
       });
       
-      // Atualizar status do pedido para erro
+      // Garantir que o status está como "pendente" (já foi salvo acima, mas vamos garantir)
       await atualizarPedido(dadosPedido.pedido_id_db, {
-        status: 'erro'
+        status: 'pendente'
       });
       
-      // Retornar 200 para evitar reenvios do WooCommerce
       return res.status(200).json({
-        mensagem: 'Pedido recebido, erro no processamento',
+        mensagem: 'Pedido de serviço recebido e salvo - aguardando emissão manual',
         pedido_id: dadosPedido.pedido_id,
-        erro: err.message,
-        tipo_nota: tipoNota
+        status: 'pendente',
+        tipo_nota: 'servico',
+        observacao: 'NFSe será emitida manualmente através da interface'
       });
     }
     
