@@ -442,7 +442,7 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
         ambiente: apiConfig.ambiente || 'homologacao'
       });
     } catch (dbError) {
-      logger.error('ERRO CRÍTICO ao salvar NFSe no banco de dados', {
+      logger.error('ERRO ao salvar NFSe no banco de dados (continuando mesmo assim)', {
         pedido_id: dadosPedido.pedido_id,
         referencia,
         erro: dbError.message,
@@ -450,8 +450,9 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
         ambiente: apiConfig.ambiente || 'homologacao',
         contexto: 'salvamento_apos_emissao'
       });
-      // Continuar mesmo com erro no banco, mas logar o erro
-      throw dbError;
+      // NÃO lançar erro - a nota foi emitida com sucesso na Focus NFe
+      // Apenas logar o erro e continuar
+      nfse = null; // Marcar como null para indicar que não foi salvo no banco
     }
     
     // Log final de sucesso com todas as informações
@@ -482,7 +483,7 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
       caminho_xml: response.data.caminho_xml || null,
       caminho_pdf: response.data.caminho_pdf || null,
       dados: response.data,
-      nfse_id: nfse.id
+      nfse_id: nfse?.id || null
     };
     
   } catch (error) {
