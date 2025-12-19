@@ -2074,18 +2074,50 @@ async function emitirNotasMesServico(mes) {
             alert(`✓ ${resultado.sucesso} nota(s) emitida(s) com sucesso!`);
             await carregarPedidosServico();
             
+            // Garantir que o accordion do mês está expandido
+            const mesId = `mes-${mes.replace('-', '')}-servico`;
+            const mesContent = document.getElementById(mesId);
+            if (mesContent && mesContent.style.display === 'none') {
+                toggleMesServico(mesId);
+            }
+            
+            // Aguardar um pouco para garantir que os logs foram salvos no banco
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
             // Carregar logs automaticamente após emissão em lote
             // Expandir accordion de logs e carregar
             toggleLogsMesServico(mes);
             await carregarLogsMesServico(mes);
         } else {
             alert(`✗ Erro ao emitir notas: ${resultado.erro || 'Erro desconhecido'}`);
+            
+            // Garantir que o accordion do mês está expandido
+            const mesId = `mes-${mes.replace('-', '')}-servico`;
+            const mesContent = document.getElementById(mesId);
+            if (mesContent && mesContent.style.display === 'none') {
+                toggleMesServico(mesId);
+            }
+            
+            // Aguardar um pouco antes de carregar logs
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
             // Mesmo em caso de erro, tentar carregar logs para ver o que aconteceu
             toggleLogsMesServico(mes);
             await carregarLogsMesServico(mes);
         }
     } catch (error) {
         alert(`✗ Erro ao emitir notas: ${error.message}`);
+        
+        // Garantir que o accordion do mês está expandido
+        const mesId = `mes-${mes.replace('-', '')}-servico`;
+        const mesContent = document.getElementById(mesId);
+        if (mesContent && mesContent.style.display === 'none') {
+            toggleMesServico(mesId);
+        }
+        
+        // Aguardar um pouco antes de carregar logs
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         // Mesmo em caso de erro, tentar carregar logs
         toggleLogsMesServico(mes);
         await carregarLogsMesServico(mes);
@@ -4534,6 +4566,17 @@ async function emitirNFSePedido(pedidoId) {
                     if (pedidoWC.sucesso && pedidoWC.pedido) {
                         const dataPedido = new Date(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at);
                         const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
+                        
+                        // Garantir que o accordion do mês está expandido
+                        const mesId = `mes-${mes.replace('-', '')}-servico`;
+                        const mesContent = document.getElementById(mesId);
+                        if (mesContent && mesContent.style.display === 'none') {
+                            toggleMesServico(mesId);
+                        }
+                        
+                        // Aguardar um pouco para garantir que os logs foram salvos no banco
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        
                         // Expandir accordion de logs e carregar
                         toggleLogsMesServico(mes);
                         await carregarLogsMesServico(mes);
@@ -4545,6 +4588,17 @@ async function emitirNFSePedido(pedidoId) {
                     if (pedidoWC.sucesso && pedidoWC.pedido) {
                         const dataPedido = new Date(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at);
                         const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
+                        
+                        // Garantir que o accordion do mês está expandido
+                        const mesId = `mes-${mes.replace('-', '')}`;
+                        const mesContent = document.getElementById(mesId);
+                        if (mesContent && mesContent.style.display === 'none') {
+                            toggleMes(mesId);
+                        }
+                        
+                        // Aguardar um pouco para garantir que os logs foram salvos no banco
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        
                         // Expandir accordion de logs e carregar
                         toggleLogsMes(mes);
                         await carregarLogsMes(mes);
