@@ -1922,24 +1922,123 @@ function toggleLogsMesServico(mes) {
 /**
  * Carrega logs do mês para serviço
  */
-function carregarLogsMesServico(mes) {
-    const mesId = mes.replace('-', '');
-    const conteudo = document.getElementById(`conteudo-logs-mes-${mesId}-servico`);
-    
-    if (!conteudo) return;
-    
-    conteudo.innerHTML = '<div style="color: #888;">Carregando logs...</div>';
-    
-    // Buscar logs do estado ou API
-    const logs = estadoAtual.logsMes?.[mes] || [];
-    
-    if (logs.length === 0) {
-        conteudo.innerHTML = '<div style="color: #888;">Nenhum log disponível para este mês.</div>';
-    } else {
-        conteudo.innerHTML = logs.map(log => {
-            const cor = log.tipo === 'erro' ? '#f44336' : log.tipo === 'sucesso' ? '#4caf50' : '#ff9800';
-            return `<div style="color: ${cor}; margin-bottom: 4px;">${log.mensagem}</div>`;
-        }).join('');
+async function carregarLogsMesServico(mes) {
+    try {
+        const resultado = await API.Pedidos.listarLogs({ mes, limite: 50 });
+        
+        const logs = Array.isArray(resultado) ? resultado : (resultado.dados || []);
+        
+        // Limpar logs anteriores
+        const mesId = mes.replace('-', '');
+        const logsContainer = document.getElementById(`conteudo-logs-mes-${mesId}-servico`);
+        if (!logsContainer) return;
+        
+        // Garantir que o container está visível ao carregar logs
+        logsContainer.style.display = 'block';
+        const icon = document.getElementById(`logs-icon-${mesId}-servico`);
+        if (icon) {
+            icon.textContent = '▲';
+        }
+        
+        if (logs.length === 0) {
+            logsContainer.innerHTML = '<div style="color: #888;">Nenhum log disponível ainda. Os logs aparecerão aqui após iniciar a emissão.</div>';
+            return;
+        }
+        
+        logsContainer.innerHTML = '';
+        
+        // Ordenar logs por data (mais antigo primeiro para melhor leitura)
+        logs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        
+        logs.forEach(log => {
+            let tipo = 'info';
+            let mensagem = log.message || '';
+            
+            // Determinar tipo baseado no level e action
+            if (log.level === 'ERROR' || log.level === 'error') {
+                tipo = 'erro';
+            } else if (log.action === 'emitir_nfse' || log.action === 'emitir_nfe' || log.service === 'focusNFe') {
+                if (log.message && log.message.toLowerCase().includes('enviando')) {
+                    tipo = 'enviado';
+                } else if (log.message && (log.message.toLowerCase().includes('resposta') || log.message.toLowerCase().includes('recebido'))) {
+                    tipo = 'recebido';
+                } else if (log.message && (log.message.toLowerCase().includes('sucesso') || log.message.toLowerCase().includes('emitida') || log.message.toLowerCase().includes('autorizado'))) {
+                    tipo = 'sucesso';
+                }
+            }
+            
+            // Extrair dados relevantes com mais detalhes
+            let dados = null;
+            if (log.data) {
+                try {
+                    const dataObj = typeof log.data === 'string' ? JSON.parse(log.data) : log.data;
+                    dados = dataObj;
+                } catch (e) {
+                    dados = { raw: log.data };
+                }
+            }
+            
+            // Formatar mensagem com informações adicionais
+            let mensagemFormatada = mensagem;
+            if (dados) {
+                if (dados.pedido_id) {
+                    mensagemFormatada += ` [Pedido: #${dados.pedido_id}]`;
+                }
+                if (dados.referencia) {
+                    mensagemFormatada += ` [Ref: ${dados.referencia}]`;
+                }
+                if (dados.status) {
+                    mensagemFormatada += ` [Status: ${dados.status}]`;
+                }
+                if (dados.erro) {
+                    mensagemFormatada += ` [Erro: ${typeof dados.erro === 'string' ? dados.erro : JSON.stringify(dados.erro)}]`;
+                }
+            }
+            
+            // Determinar cor baseado no tipo
+            let cor = '#d4d4d4'; // Cor padrão
+            if (tipo === 'erro') {
+                cor = '#f48771'; // Vermelho claro
+            } else if (tipo === 'sucesso') {
+                cor = '#4ec9b0'; // Verde claro
+            } else if (tipo === 'enviado') {
+                cor = '#569cd6'; // Azul claro
+            } else if (tipo === 'recebido') {
+                cor = '#ce9178'; // Laranja claro
+            }
+            
+            // Criar elemento de log
+            const logDiv = document.createElement('div');
+            logDiv.style.marginBottom = '6px';
+            logDiv.style.padding = '4px 0';
+            logDiv.style.borderBottom = '1px solid #333';
+            
+            const data = new Date(log.created_at || Date.now()).toLocaleString('pt-BR');
+            const level = (log.level || 'INFO').toUpperCase();
+            const service = log.service || '';
+            const action = log.action || '';
+            
+            logDiv.innerHTML = `
+                <span style="color: #808080;">[${data}]</span>
+                <span style="color: ${cor}; font-weight: 600; margin-left: 8px;">[${level}]</span>
+                ${service ? `<span style="color: #569cd6; margin-left: 8px;">[${service}]</span>` : ''}
+                ${action ? `<span style="color: #ce9178; margin-left: 8px;">[${action}]</span>` : ''}
+                <span style="color: #d4d4d4; margin-left: 8px;">${mensagemFormatada}</span>
+            `;
+            
+            logsContainer.appendChild(logDiv);
+        });
+        
+        // Scroll para o final (logs mais recentes)
+        logsContainer.scrollTop = logsContainer.scrollHeight;
+        
+    } catch (error) {
+        console.error('Erro ao carregar logs do mês:', error);
+        const mesId = mes.replace('-', '');
+        const logsContainer = document.getElementById(`conteudo-logs-mes-${mesId}-servico`);
+        if (logsContainer) {
+            logsContainer.innerHTML = `<div style="color: #f48771;">Erro ao carregar logs: ${error.message}</div>`;
+        }
     }
 }
 
