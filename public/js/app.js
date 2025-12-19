@@ -4603,25 +4603,35 @@ function obterPedidosSelecionados() {
  * Detecta automaticamente o tipo baseado na categoria do pedido
  */
 async function emitirNFSePedido(pedidoId) {
+    console.log('[DEBUG] emitirNFSePedido chamado para pedido:', pedidoId);
+    
     try {
         // Buscar pedido completo do WooCommerce
+        console.log('[DEBUG] Buscando pedido no WooCommerce...');
         const resultado = await API.WooCommerce.buscarPedidoPorId(pedidoId);
         
         if (!resultado.sucesso) {
-            // Determinar o mês do pedido para adicionar log
-            const pedidoWC = await API.WooCommerce.buscarPedidoPorId(pedidoId);
-            if (pedidoWC.sucesso && pedidoWC.pedido) {
-                const dataPedido = new Date(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at);
-                const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
-                adicionarLogMesServico(mes, 'ERROR', `Erro ao buscar pedido #${pedidoId}: ${resultado.erro}`, { pedido_id: pedidoId });
+            console.error('[DEBUG] Erro ao buscar pedido:', resultado.erro);
+            // Tentar determinar o mês do pedido para adicionar log (se possível)
+            try {
+                const pedidoWC = await API.WooCommerce.buscarPedidoPorId(pedidoId);
+                if (pedidoWC.sucesso && pedidoWC.pedido) {
+                    const dataPedido = new Date(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at);
+                    const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
+                    adicionarLogMesServico(mes, 'ERROR', `Erro ao buscar pedido #${pedidoId}: ${resultado.erro}`, { pedido_id: pedidoId });
+                }
+            } catch (e) {
+                console.error('[DEBUG] Erro ao adicionar log de erro:', e);
             }
             return;
         }
         
         const pedido = resultado.pedido;
+        console.log('[DEBUG] Pedido encontrado:', pedido.id, pedido.number);
         
         // Extrair categorias do pedido
         const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
+        console.log('[DEBUG] Categorias do pedido:', categorias);
         
         // Verificar se tem categoria "Livro Faíscas" (produto)
         // Busca flexível: "livro" + "faíscas" ou "faiscas" (com ou sem acento)
@@ -4635,10 +4645,36 @@ async function emitirNFSePedido(pedidoId) {
         // Determinar tipo de NF
         const tipoNF = temLivroFaiscas ? 'produto' : 'servico';
         const tipoNFLabel = tipoNF === 'produto' ? 'NFe (Produto)' : 'NFSe (Serviço)';
+        console.log('[DEBUG] Tipo de NF determinado:', tipoNF, tipoNFLabel);
         
-        if (!confirm(`Deseja emitir ${tipoNFLabel} para este pedido?\n\nPedido: #${pedidoId}\nCategorias: ${categorias.length > 0 ? categorias.join(', ') : 'Sem categoria'}`)) {
-            return;
+        // Determinar o mês do pedido ANTES de emitir (para logs)
+        const dataPedido = new Date(pedido.date_created || pedido.created_at);
+        const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
+        console.log('[DEBUG] Mês do pedido:', mes);
+        
+        // Garantir que o accordion do mês está expandido e logs visíveis ANTES de emitir
+        const sufixoMes = tipoNF === 'servico' ? '-servico' : '';
+        const mesId = `mes-${mes.replace('-', '')}${sufixoMes}`;
+        const mesContent = document.getElementById(mesId);
+        if (mesContent && mesContent.style.display === 'none') {
+            if (tipoNF === 'servico') {
+                toggleMesServico(mesId);
+            } else {
+                toggleMes(mesId);
+            }
         }
+        
+        // Garantir que os logs estão visíveis
+        if (tipoNF === 'servico') {
+            toggleLogsMesServico(mes);
+            adicionarLogMesServico(mes, 'INFO', `Iniciando emissão de ${tipoNFLabel} para pedido #${pedidoId}...`, { 
+                pedido_id: pedidoId, 
+                tipo: tipoNF,
+                categorias: categorias.length > 0 ? categorias.join(', ') : 'Sem categoria'
+            });
+        }
+        
+        console.log('[DEBUG] Iniciando emissão automaticamente (sem confirmação)...');
         
         // Mostrar feedback visual - buscar botão pelo pedidoId
         const btnOriginal = document.querySelector(`button[onclick*="emitirNFSePedido(${pedidoId})"]`);
@@ -4647,25 +4683,18 @@ async function emitirNFSePedido(pedidoId) {
             btnOriginal.textContent = 'Emitindo...';
         }
         
+        if (tipoNF === 'servico') {
+            adicionarLogMesServico(mes, 'INFO', `Enviando ${tipoNFLabel} para Focus NFe...`, { pedido_id: pedidoId });
+        }
+        
         // Emitir usando a API de lote (com apenas 1 pedido)
         const resultadoEmissao = await API.NFSe.emitirLote([pedidoId], tipoNF);
+        console.log('[DEBUG] Resultado da emissão:', resultadoEmissao);
         
         if (btnOriginal) {
             btnOriginal.disabled = false;
             btnOriginal.textContent = 'Emitir NF';
         }
-        
-        // Determinar o mês do pedido para adicionar logs
-        const dataPedido = new Date(pedido.date_created || pedido.created_at);
-        const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
-        
-        // Garantir que o accordion do mês está expandido e logs visíveis
-        const mesId = `mes-${mes.replace('-', '')}-servico`;
-        const mesContent = document.getElementById(mesId);
-        if (mesContent && mesContent.style.display === 'none') {
-            toggleMesServico(mesId);
-        }
-        toggleLogsMesServico(mes);
         
         if (resultadoEmissao.sucesso) {
             const resultadoPedido = resultadoEmissao.resultados && resultadoEmissao.resultados[0];
@@ -4715,25 +4744,32 @@ async function emitirNFSePedido(pedidoId) {
                 }
             } else {
                 const erro = resultadoPedido?.erro || 'Erro desconhecido';
-                adicionarLogMesServico(mes, 'ERROR', `✗ Erro ao emitir ${tipoNFLabel}: ${erro}`, {
-                    pedido_id: pedidoId,
-                    tipo: tipoNF,
-                    erro: erro
-                });
-                await carregarLogsMesServico(mes);
+                console.error('[DEBUG] Erro na emissão (resultadoPedido):', erro);
+                if (tipoNF === 'servico') {
+                    adicionarLogMesServico(mes, 'ERROR', `✗ Erro ao emitir ${tipoNFLabel}: ${erro}`, {
+                        pedido_id: pedidoId,
+                        tipo: tipoNF,
+                        erro: erro
+                    });
+                    await carregarLogsMesServico(mes);
+                }
             }
         } else {
             const erroMsg = resultadoEmissao.erro || 'Erro desconhecido';
-            adicionarLogMesServico(mes, 'ERROR', `✗ Erro ao emitir ${tipoNFLabel}: ${erroMsg}`, {
-                pedido_id: pedidoId,
-                tipo: tipoNF,
-                erro: erroMsg
-            });
-            await carregarLogsMesServico(mes);
+            console.error('[DEBUG] Erro na emissão (resultadoEmissao):', erroMsg);
+            if (tipoNF === 'servico') {
+                adicionarLogMesServico(mes, 'ERROR', `✗ Erro ao emitir ${tipoNFLabel}: ${erroMsg}`, {
+                    pedido_id: pedidoId,
+                    tipo: tipoNF,
+                    erro: erroMsg
+                });
+                await carregarLogsMesServico(mes);
+            }
         }
         
     } catch (error) {
-        console.error('Erro ao emitir NF:', error);
+        console.error('[DEBUG] Erro ao emitir NF (catch):', error);
+        console.error('[DEBUG] Stack trace:', error.stack);
         
         // Determinar o mês do pedido para adicionar log de erro
         try {
@@ -4742,19 +4778,30 @@ async function emitirNFSePedido(pedidoId) {
                 const dataPedido = new Date(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at);
                 const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
                 
-                // Garantir que os logs estão visíveis
-                toggleLogsMesServico(mes);
-                
-                adicionarLogMesServico(mes, 'ERROR', `Erro ao emitir NF: ${error.message}`, {
-                    pedido_id: pedidoId,
-                    erro: error.message,
-                    stack: error.stack
+                // Determinar tipo de NF baseado nas categorias
+                const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedidoWC.pedido) : [];
+                const temLivroFaiscas = categorias.some(cat => {
+                    const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    return (catLower.includes('livro') && catLower.includes('faiscas')) ||
+                           catLower === 'livro faiscas' ||
+                           catLower.includes('livro faiscas');
                 });
-                await carregarLogsMesServico(mes);
+                const tipoNF = temLivroFaiscas ? 'produto' : 'servico';
+                
+                // Garantir que os logs estão visíveis apenas para serviço
+                if (tipoNF === 'servico') {
+                    toggleLogsMesServico(mes);
+                    adicionarLogMesServico(mes, 'ERROR', `Erro ao emitir NF: ${error.message}`, {
+                        pedido_id: pedidoId,
+                        erro: error.message,
+                        stack: error.stack
+                    });
+                    await carregarLogsMesServico(mes);
+                }
             }
         } catch (e) {
             // Se não conseguir determinar o mês, pelo menos logar no console
-            console.error('Erro ao adicionar log:', e);
+            console.error('[DEBUG] Erro ao adicionar log:', e);
         }
         
         // Restaurar botão em caso de erro
