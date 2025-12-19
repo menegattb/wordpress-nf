@@ -466,8 +466,7 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
     
   } catch (error) {
     const erro = error.response?.data || error.message;
-    const inicioEmissao = Date.now();
-    const tempoTotal = inicioEmissao - (inicioEmissao - (Date.now() - inicioEmissao));
+    const tempoTotal = Date.now() - inicioEmissao;
     
     // Log completo do erro em modo desenvolvimento
     if (process.env.NODE_ENV !== 'production') {
@@ -477,7 +476,11 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
       console.log('Request URL:', error.config?.url);
       console.log('Request Method:', error.config?.method);
       if (error.config?.data) {
-        console.log('Request Payload:', JSON.stringify(JSON.parse(error.config.data), null, 2));
+        try {
+          console.log('Request Payload:', JSON.stringify(JSON.parse(error.config.data), null, 2));
+        } catch (e) {
+          console.log('Request Payload:', error.config.data);
+        }
       }
       console.log('═══════════════════════════════════════════════\n');
     }
@@ -494,6 +497,7 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
       error_message: error.message,
       stack: error.stack,
       ambiente: apiConfig?.ambiente || 'homologacao',
+      tempo_total_ms: tempoTotal,
       erro_detalhado: error.response?.data || null,
       url_request: error.config?.url || null,
       metodo_request: error.config?.method || null
