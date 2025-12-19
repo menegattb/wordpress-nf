@@ -361,7 +361,7 @@ async function renderizarTabelaNotasEnviadas(notas) {
     // Buscar ambiente atual da configuração
     let ambienteAtualConfig = 'homologacao';
     try {
-        const configResult = await API.Config.buscarFocus();
+        const configResult = await API.Config.getFocus();
         if (configResult && configResult.sucesso && configResult.dados) {
             ambienteAtualConfig = configResult.dados.ambiente || 'homologacao';
         }
