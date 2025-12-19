@@ -3850,9 +3850,21 @@ async function emitirNotasMes(mes) {
             adicionarLogMes(mes, 'erro', `❌ Emissão falhou: ${totalErros} erro(s)`);
         }
         
+        // Recarregar dados
+        await carregarPedidos();
+        
+        // Carregar logs automaticamente após emissão
+        // Expandir accordion de logs e carregar
+        toggleLogsMes(mes);
+        await carregarLogsMes(mes);
+        
     } catch (error) {
         console.error('Erro ao emitir notas:', error);
         adicionarLogMes(mes, 'erro', `Erro: ${error.message}`);
+        
+        // Mesmo em caso de erro, tentar carregar logs
+        toggleLogsMes(mes);
+        await carregarLogsMes(mes);
     }
 }
 
