@@ -489,7 +489,7 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
       service: 'focusNFe',
       action: 'emitir_nfse',
       pedido_id: dadosPedido.pedido_id,
-      referencia,
+      referencia: referencia || 'N/A',
       cliente: dadosPedido.nome || dadosPedido.razao_social || 'N/A',
       valor_total: dadosPedido.valor_total || dadosPedido.valor_servicos || 0,
       erro: typeof erro === 'string' ? erro : JSON.stringify(erro),
@@ -500,18 +500,8 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
       tempo_total_ms: tempoTotal,
       erro_detalhado: error.response?.data || null,
       url_request: error.config?.url || null,
-      metodo_request: error.config?.method || null
-      has_response: !!error.response,
-      response_data: error.response?.data,
-      response_data_full: JSON.stringify(error.response?.data, null, 2),
-      request_url: error.config?.url,
-      request_method: error.config?.method,
-      api_config: {
-        ambiente: apiConfig?.ambiente,
-        baseUrl: apiConfig?.baseUrl,
-        has_token: !!apiConfig?.token,
-        token_length: apiConfig?.token ? apiConfig.token.length : 0
-      }
+      metodo_request: error.config?.method || null,
+      has_response: !!error.response
     });
     
     // Se o erro for de autenticação, logar detalhes
