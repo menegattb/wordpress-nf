@@ -811,32 +811,38 @@ async function atualizarNFSe(referencia, atualizacoes) {
 async function salvarLog(log) {
   const { level, service, action, pedido_id, referencia, message, data } = log;
   
-  if (hasDatabase) {
-    await query(
-      `INSERT INTO logs (level, service, action, pedido_id, referencia, message, data)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        level,
-        service,
-        action,
-        pedido_id,
-        referencia,
-        message,
-        data ? JSON.stringify(data) : null
-      ]
-    );
-  } else {
-    // Armazenamento em memória (limitado a 1000 logs)
-    memoryStorage.logs.push({
-      ...log,
-      id: memoryStorage.logs.length + 1,
-      created_at: new Date().toISOString()
-    });
-    
-    // Manter apenas os últimos 1000 logs
-    if (memoryStorage.logs.length > 1000) {
-      memoryStorage.logs.shift();
+  try {
+    if (hasDatabase && sql) {
+      await query(
+        `INSERT INTO logs (level, service, action, pedido_id, referencia, message, data)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          level,
+          service,
+          action,
+          pedido_id,
+          referencia,
+          message,
+          data ? JSON.stringify(data) : null
+        ]
+      );
+    } else {
+      // Armazenamento em memória (limitado a 1000 logs)
+      memoryStorage.logs.push({
+        ...log,
+        id: memoryStorage.logs.length + 1,
+        created_at: new Date().toISOString()
+      });
+      
+      // Manter apenas os últimos 1000 logs
+      if (memoryStorage.logs.length > 1000) {
+        memoryStorage.logs.shift();
+      }
     }
+  } catch (error) {
+    // Ignorar erros ao salvar log - não deve quebrar a aplicação
+    // Não usar logger aqui para evitar recursão infinita
+    console.error('Erro ao salvar log (ignorado):', error.message);
   }
 }
 
