@@ -536,9 +536,9 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     nfse.prestador.inscricao_municipal = configEmitente.inscricao_municipal.replace(/\D/g, ''); // Remover formatação (pontos, traços)
   }
   
-  // Validar formato final do item_lista_servico
-  if (!/^\d{5}$/.test(nfse.servico.item_lista_servico)) {
-    throw new Error(`Item da lista de serviço deve ter exatamente 5 dígitos. Valor: ${nfse.servico.item_lista_servico}`);
+  // Validar formato final do item_lista_servico (formato "X.XX" para Ipojuca/PE)
+  if (!/^\d{1,2}\.\d{2}$/.test(nfse.servico.item_lista_servico)) {
+    throw new Error(`Item da lista de serviço inválido para Ipojuca/PE. Deve estar no formato "X.XX" (ex: "8.02"). Valor recebido: ${nfse.servico.item_lista_servico}`);
   }
   
   // Validar que valor_servicos é positivo
@@ -556,7 +556,7 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     tomador: tomador.razao_social,
     valor_servicos: valorServicosFinal,
     item_lista_servico: itemListaServicoFinal,
-    item_lista_servico_original: configFiscal?.item_lista_servico || '70101',
+    item_lista_servico_original: configFiscal?.item_lista_servico || '8.02',
     aliquota: nfseSanitizado.servico.aliquota,
     codigo_tributario: nfseSanitizado.servico.codigo_tributario_municipio
   });
