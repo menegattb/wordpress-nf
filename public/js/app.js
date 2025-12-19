@@ -2073,11 +2073,22 @@ async function emitirNotasMesServico(mes) {
         if (resultado.sucesso) {
             alert(`✓ ${resultado.sucesso} nota(s) emitida(s) com sucesso!`);
             await carregarPedidosServico();
+            
+            // Carregar logs automaticamente após emissão em lote
+            // Expandir accordion de logs e carregar
+            toggleLogsMesServico(mes);
+            await carregarLogsMesServico(mes);
         } else {
             alert(`✗ Erro ao emitir notas: ${resultado.erro || 'Erro desconhecido'}`);
+            // Mesmo em caso de erro, tentar carregar logs para ver o que aconteceu
+            toggleLogsMesServico(mes);
+            await carregarLogsMesServico(mes);
         }
     } catch (error) {
         alert(`✗ Erro ao emitir notas: ${error.message}`);
+        // Mesmo em caso de erro, tentar carregar logs
+        toggleLogsMesServico(mes);
+        await carregarLogsMesServico(mes);
     }
 }
 
@@ -4499,13 +4510,33 @@ async function emitirNFSePedido(pedidoId) {
             const resultadoPedido = resultadoEmissao.resultados && resultadoEmissao.resultados[0];
             if (resultadoPedido && resultadoPedido.sucesso) {
                 alert(`✓ ${tipoNFLabel} emitida com sucesso!\n\nReferência: ${resultadoPedido.referencia}\nStatus: ${resultadoPedido.status || 'Processando'}`);
+                
                 // Recarregar dados para atualizar a tabela
                 // Verificar qual aba está ativa e recarregar apropriadamente
                 const secaoAtiva = estadoAtual.secaoAtiva || 'pedidos';
                 if (secaoAtiva === 'pedidos-servico') {
                     await carregarPedidosServico();
+                    // Carregar logs automaticamente após emissão
+                    // Determinar o mês do pedido para carregar os logs corretos
+                    const pedidoWC = await API.WooCommerce.buscarPedidoPorId(pedidoId);
+                    if (pedidoWC.sucesso && pedidoWC.pedido) {
+                        const dataPedido = new Date(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at);
+                        const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
+                        // Expandir accordion de logs e carregar
+                        toggleLogsMesServico(mes);
+                        await carregarLogsMesServico(mes);
+                    }
                 } else if (secaoAtiva === 'pedidos-produto' || secaoAtiva === 'pedidos') {
                     await carregarPedidos();
+                    // Carregar logs automaticamente após emissão
+                    const pedidoWC = await API.WooCommerce.buscarPedidoPorId(pedidoId);
+                    if (pedidoWC.sucesso && pedidoWC.pedido) {
+                        const dataPedido = new Date(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at);
+                        const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
+                        // Expandir accordion de logs e carregar
+                        toggleLogsMes(mes);
+                        await carregarLogsMes(mes);
+                    }
                 } else {
                     atualizarDadosWooCommerce();
                 }

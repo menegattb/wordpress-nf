@@ -844,7 +844,7 @@ async function salvarLog(log) {
  * Lista logs
  */
 async function listarLogs(filtros = {}) {
-  const { limite = 100, offset = 0, level, pedido_id, service } = filtros;
+  const { limite = 100, offset = 0, level, pedido_id, service, mes } = filtros;
   
   if (hasDatabase) {
     let whereClause = [];
@@ -867,6 +867,16 @@ async function listarLogs(filtros = {}) {
       whereClause.push(`service = $${paramCount}`);
       params.push(service);
       paramCount++;
+    }
+    
+    // Filtrar por mês diretamente no SQL se fornecido (formato YYYY-MM)
+    if (mes) {
+      const [ano, mesNum] = mes.split('-');
+      const dataInicio = new Date(Date.UTC(parseInt(ano), parseInt(mesNum) - 1, 1, 0, 0, 0, 0));
+      const dataFim = new Date(Date.UTC(parseInt(ano), parseInt(mesNum), 0, 23, 59, 59, 999));
+      whereClause.push(`created_at >= $${paramCount} AND created_at <= $${paramCount + 1}`);
+      params.push(dataInicio.toISOString(), dataFim.toISOString());
+      paramCount += 2;
     }
     
     const where = whereClause.length > 0 ? `WHERE ${whereClause.join(' AND ')}` : '';
@@ -893,6 +903,18 @@ async function listarLogs(filtros = {}) {
     
     if (service) {
       logs = logs.filter(l => l.service === service);
+    }
+    
+    // Filtrar por mês se fornecido
+    if (mes) {
+      const [ano, mesNum] = mes.split('-');
+      const dataInicio = new Date(Date.UTC(parseInt(ano), parseInt(mesNum) - 1, 1, 0, 0, 0, 0));
+      const dataFim = new Date(Date.UTC(parseInt(ano), parseInt(mesNum), 0, 23, 59, 59, 999));
+      logs = logs.filter(log => {
+        if (!log.created_at) return false;
+        const dataLog = new Date(log.created_at);
+        return dataLog >= dataInicio && dataLog <= dataFim;
+      });
     }
     
     logs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));

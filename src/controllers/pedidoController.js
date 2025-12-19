@@ -293,27 +293,10 @@ async function listarLogsPedidos(req, res) {
       return res.json(todosLogs.slice(0, parseInt(limite)));
     }
     
-    // Se mes for fornecido (formato YYYY-MM), filtrar por data
+    // Se mes for fornecido (formato YYYY-MM), filtrar por data diretamente no banco
     if (mes) {
-      const [ano, mesNum] = mes.split('-');
-      // Criar datas no início e fim do mês (UTC)
-      const dataInicio = new Date(Date.UTC(parseInt(ano), parseInt(mesNum) - 1, 1, 0, 0, 0, 0));
-      const dataFim = new Date(Date.UTC(parseInt(ano), parseInt(mesNum), 0, 23, 59, 59, 999));
-      
-      // Buscar mais logs para garantir que temos todos do mês
-      const logs = await listarLogs({ ...filtros, limite: 1000 });
-      
-      // Filtrar por data
-      const logsFiltrados = logs.filter(log => {
-        if (!log.created_at) return false;
-        const dataLog = new Date(log.created_at);
-        return dataLog >= dataInicio && dataLog <= dataFim;
-      });
-      
-      // Ordenar por data (mais recente primeiro)
-      logsFiltrados.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      
-      return res.json(logsFiltrados.slice(0, parseInt(limite)));
+      const logs = await listarLogs({ ...filtros, mes, limite: parseInt(limite) });
+      return res.json(logs);
     }
     
     // Sem filtros, retornar logs recentes
