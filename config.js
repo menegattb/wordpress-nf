@@ -43,9 +43,9 @@ module.exports = {
     inscricao_estadual: process.env.EMITENTE_INSCRICAO_ESTADUAL || '128257946'
   },
   fiscal: {
-    item_lista_servico: process.env.ITEM_LISTA_SERVICO || '1401', // Código padrão para serviços de psicologia (5 dígitos)
-    codigo_tributario_municipio: process.env.CODIGO_TRIBUTARIO_MUNICIPIO || '101',
-    aliquota: parseFloat(process.env.ALIQUOTA || '3'),
+    item_lista_servico: process.env.ITEM_LISTA_SERVICO || '8.02', // Formato correto para Ipojuca/PE: "8.02" (com ponto)
+    codigo_tributario_municipio: process.env.CODIGO_TRIBUTARIO_MUNICIPIO || '802', // Código correto para Ipojuca/PE
+    aliquota: parseFloat(process.env.ALIQUOTA || '0.02'), // 2% = 0.02 (decimal), não 3 ou "2%"
     tomador_municipio: process.env.TOMADOR_MUNICIPIO || process.env.PRESTADOR_MUNICIPIO || '2607208',
     // Configurações para NFe (produto)
     cfop_padrao: process.env.CFOP_PADRAO || '5102', // CFOP padrão para venda de produto

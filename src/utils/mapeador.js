@@ -3,6 +3,91 @@ const { validarCPFCNPJ, limparDocumento, validarCEP } = require('../services/val
 const { buscarCodigoMunicipioPorCEP, buscarCodigoMunicipioPorCidadeEstado } = require('../services/cepService');
 
 /**
+ * Sanitiza o payload NFSe removendo todos os campos proibidos
+ * Garante que apenas campos permitidos sejam enviados no objeto servico
+ */
+function sanitizarPayloadNFSe(nfse) {
+  // Lista completa de campos proibidos relacionados a cálculos
+  const camposProibidos = [
+    'base_calculo',
+    'valor_iss',
+    'base_calculo_iss',
+    'valor_deducao',
+    'deducao',
+    'reducao',
+    'desconto_iss',
+    'valor_iss_retido',
+    'base_calculo_iss_retido',
+    'valor_iss_retido_total',
+    'base_calculo_iss_retido_total'
+  ];
+  
+  // Criar novo objeto servico apenas com campos permitidos explicitamente
+  const servicoLimpo = {
+    valor_servicos: nfse.servico.valor_servicos,
+    discriminacao: nfse.servico.discriminacao,
+    item_lista_servico: nfse.servico.item_lista_servico,
+    codigo_tributario_municipio: nfse.servico.codigo_tributario_municipio,
+    codigo_municipio: nfse.servico.codigo_municipio,
+    aliquota: nfse.servico.aliquota,
+    iss_retido: nfse.servico.iss_retido
+  };
+  
+  // Remover campos undefined/null
+  Object.keys(servicoLimpo).forEach(key => {
+    if (servicoLimpo[key] === undefined || servicoLimpo[key] === null) {
+      delete servicoLimpo[key];
+    }
+  });
+  
+  // Verificar se há campos proibidos no objeto original e logar
+  const camposEncontrados = camposProibidos.filter(campo => 
+    nfse.servico[campo] !== undefined
+  );
+  
+  if (camposEncontrados.length > 0) {
+    logger.warn('Campos proibidos encontrados e removidos durante sanitização', {
+      service: 'mapeador',
+      action: 'sanitizar_payload',
+      pedido_id: nfse.prestador?.cnpj ? 'N/A' : 'N/A',
+      campos_removidos: camposEncontrados,
+      valores_removidos: camposEncontrados.reduce((acc, campo) => {
+        acc[campo] = nfse.servico[campo];
+        return acc;
+      }, {})
+    });
+  }
+  
+  // Garantir que codigo_tributario_municipio seja string
+  if (servicoLimpo.codigo_tributario_municipio !== undefined) {
+    servicoLimpo.codigo_tributario_municipio = String(servicoLimpo.codigo_tributario_municipio);
+  }
+  
+  // Garantir que codigo_municipio seja string
+  if (servicoLimpo.codigo_municipio !== undefined) {
+    servicoLimpo.codigo_municipio = String(servicoLimpo.codigo_municipio);
+  }
+  
+  // Garantir que item_lista_servico seja string e preserve formato "X.XX"
+  if (servicoLimpo.item_lista_servico !== undefined) {
+    servicoLimpo.item_lista_servico = String(servicoLimpo.item_lista_servico);
+    // Validar formato se necessário
+    if (!/^\d{1,2}\.\d{2}$/.test(servicoLimpo.item_lista_servico)) {
+      logger.warn('Formato de item_lista_servico pode estar incorreto', {
+        valor: servicoLimpo.item_lista_servico,
+        formato_esperado: 'X.XX',
+        exemplo: '8.02'
+      });
+    }
+  }
+  
+  return {
+    ...nfse,
+    servico: servicoLimpo
+  };
+}
+
+/**
  * Mapeia dados do WooCommerce para formato interno
  */
 function mapearWooCommerceParaPedido(pedidoWC) {
@@ -389,32 +474,55 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
       // IMPORTANTE: Para Ipojuca/PE, o formato deve ser exatamente 5 dígitos
       // Se vier com 6 dígitos (070101), remover o último dígito ou ajustar conforme necessário
       item_lista_servico: (() => {
-        // Obter valor do config, remover tudo que não é dígito
-        let item = (configFiscal?.item_lista_servico || '70101').toString();
-        // Remover pontos, espaços, traços e qualquer caractere não numérico
-        item = item.replace(/\D/g, '');
+        // Obter valor do config
+        let item = (configFiscal?.item_lista_servico || '8.02').toString().trim();
         
-        // Se tiver 6 dígitos (ex: 070101), usar apenas os 5 primeiros
-        if (item.length === 6) {
-          item = item.substring(0, 5);
+        // IMPORTANTE: Para Ipojuca/PE, o formato é "8.02" (com ponto), não 5 dígitos numéricos
+        // Validar formato: deve ser "X.XX" ou "XX.XX" (ex: "8.02", "14.01")
+        if (!/^\d{1,2}\.\d{2}$/.test(item)) {
+          // Se não estiver no formato correto, tentar identificar o problema
+          const itemOriginal = configFiscal?.item_lista_servico || '8.02';
+          throw new Error(`Item da lista de serviço inválido para Ipojuca/PE. Deve estar no formato "X.XX" (ex: "8.02"). Valor recebido: ${itemOriginal}`);
         }
         
-        // Garantir exatamente 5 dígitos (adicionar zeros à esquerda se necessário)
-        item = item.padStart(5, '0');
+        // Log do código formatado para debug
+        logger.mapping('Item da lista de serviço formatado', {
+          pedido_id: dadosPedido.pedido_id,
+          valor_original: configFiscal?.item_lista_servico || '8.02',
+          valor_formatado: item,
+          formato: 'X.XX'
+        });
         
-        // Garantir que não tenha mais de 5 dígitos
-        item = item.substring(0, 5);
-        
-        // Validar que é exatamente 5 dígitos numéricos
-        if (!/^\d{5}$/.test(item)) {
-          throw new Error(`Item da lista de serviço inválido. Deve ter exatamente 5 dígitos. Valor recebido: ${configFiscal?.item_lista_servico || '70101'}`);
-        }
-        
-        return item;
+        return item; // Retornar exatamente como está (ex: "8.02")
       })(),
-      codigo_tributario_municipio: String(configFiscal?.codigo_tributario_municipio || '101'),
+      codigo_tributario_municipio: String(configFiscal?.codigo_tributario_municipio || '802'),
       codigo_municipio: configEmitente.codigo_municipio,
-      aliquota: parseFloat((configFiscal?.aliquota || 3).toFixed(2)),
+      aliquota: (() => {
+        let aliquota = configFiscal?.aliquota || 0.02;
+        
+        // Se vier como percentual (ex: 2, 3), converter para decimal (0.02, 0.03)
+        if (aliquota >= 1) {
+          const aliquotaOriginal = aliquota;
+          aliquota = aliquota / 100;
+          logger.warn('Alíquota convertida de percentual para decimal', {
+            pedido_id: dadosPedido.pedido_id,
+            valor_original: aliquotaOriginal,
+            valor_convertido: aliquota
+          });
+        }
+        
+        // Garantir que seja decimal (ex: 0.02 para 2%)
+        const aliquotaFinal = parseFloat(aliquota.toFixed(4)); // 4 casas decimais para precisão
+        
+        logger.mapping('Alíquota processada', {
+          pedido_id: dadosPedido.pedido_id,
+          valor_config: configFiscal?.aliquota,
+          valor_final: aliquotaFinal,
+          formato: 'decimal'
+        });
+        
+        return aliquotaFinal;
+      })(),
       iss_retido: false
       // IMPORTANTE: NÃO enviar base_calculo e valor_iss
       // A Focus NFe calcula automaticamente baseado em valor_servicos e aliquota
