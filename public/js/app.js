@@ -1940,6 +1940,64 @@ function toggleLogsMesServico(mes) {
 }
 
 /**
+ * Adiciona log ao container de logs do mês (serviço)
+ */
+function adicionarLogMesServico(mes, nivel, mensagem, dados = null) {
+    const mesId = mes.replace('-', '');
+    const logsContainer = document.getElementById(`conteudo-logs-mes-${mesId}-servico`);
+    if (!logsContainer) return;
+    
+    // Garantir que está visível
+    logsContainer.style.display = 'block';
+    const icon = document.getElementById(`logs-icon-${mesId}-servico`);
+    if (icon) {
+        icon.textContent = '▲';
+    }
+    
+    // Determinar cor baseado no nível
+    let cor = '#d4d4d4'; // Cor padrão
+    if (nivel === 'ERROR' || nivel === 'erro') {
+        cor = '#f48771'; // Vermelho claro
+    } else if (nivel === 'SUCCESS' || nivel === 'sucesso') {
+        cor = '#4ec9b0'; // Verde claro
+    } else if (nivel === 'WARN' || nivel === 'aviso') {
+        cor = '#dcdcaa'; // Amarelo claro
+    } else if (nivel === 'INFO' || nivel === 'info') {
+        cor = '#569cd6'; // Azul claro
+    }
+    
+    const data = new Date().toLocaleString('pt-BR');
+    const nivelUpper = nivel.toUpperCase();
+    
+    // Formatar mensagem com dados adicionais
+    let mensagemFormatada = mensagem;
+    if (dados) {
+        if (typeof dados === 'object') {
+            const dadosStr = Object.keys(dados).map(key => `${key}: ${typeof dados[key] === 'object' ? JSON.stringify(dados[key]) : dados[key]}`).join(', ');
+            mensagemFormatada += ` [${dadosStr}]`;
+        } else {
+            mensagemFormatada += ` [${dados}]`;
+        }
+    }
+    
+    const logDiv = document.createElement('div');
+    logDiv.style.marginBottom = '6px';
+    logDiv.style.padding = '4px 0';
+    logDiv.style.borderBottom = '1px solid #333';
+    
+    logDiv.innerHTML = `
+        <span style="color: #808080;">[${data}]</span>
+        <span style="color: ${cor}; font-weight: 600; margin-left: 8px;">[${nivelUpper}]</span>
+        <span style="color: #d4d4d4; margin-left: 8px;">${mensagemFormatada}</span>
+    `;
+    
+    logsContainer.appendChild(logDiv);
+    
+    // Scroll para o final (logs mais recentes)
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+}
+
+/**
  * Carrega logs do mês para serviço
  */
 async function carregarLogsMesServico(mes) {
@@ -2077,7 +2135,7 @@ async function emitirNotasMesServico(mes) {
     }) || [];
     
     if (pedidosMes.length === 0) {
-        alert('Nenhum pedido de serviço encontrado para este mês.');
+        adicionarLogMesServico(mes, 'WARN', 'Nenhum pedido de serviço encontrado para este mês.');
         return;
     }
     
@@ -2090,44 +2148,6 @@ async function emitirNotasMesServico(mes) {
     try {
         const resultado = await API.NFSe.emitirLote(pedidoIds, 'servico');
         
-        if (resultado.sucesso) {
-            alert(`✓ ${resultado.sucesso} nota(s) emitida(s) com sucesso!`);
-            await carregarPedidosServico();
-            
-            // Garantir que o accordion do mês está expandido
-            const mesId = `mes-${mes.replace('-', '')}-servico`;
-            const mesContent = document.getElementById(mesId);
-            if (mesContent && mesContent.style.display === 'none') {
-                toggleMesServico(mesId);
-            }
-            
-            // Aguardar um pouco para garantir que os logs foram salvos no banco
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            
-            // Carregar logs automaticamente após emissão em lote
-            // Expandir accordion de logs e carregar
-            toggleLogsMesServico(mes);
-            await carregarLogsMesServico(mes);
-        } else {
-            alert(`✗ Erro ao emitir notas: ${resultado.erro || 'Erro desconhecido'}`);
-            
-            // Garantir que o accordion do mês está expandido
-            const mesId = `mes-${mes.replace('-', '')}-servico`;
-            const mesContent = document.getElementById(mesId);
-            if (mesContent && mesContent.style.display === 'none') {
-                toggleMesServico(mesId);
-            }
-            
-            // Aguardar um pouco antes de carregar logs
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Mesmo em caso de erro, tentar carregar logs para ver o que aconteceu
-            toggleLogsMesServico(mes);
-            await carregarLogsMesServico(mes);
-        }
-    } catch (error) {
-        alert(`✗ Erro ao emitir notas: ${error.message}`);
-        
         // Garantir que o accordion do mês está expandido
         const mesId = `mes-${mes.replace('-', '')}-servico`;
         const mesContent = document.getElementById(mesId);
@@ -2135,11 +2155,49 @@ async function emitirNotasMesServico(mes) {
             toggleMesServico(mesId);
         }
         
+        // Garantir que os logs estão visíveis
+        toggleLogsMesServico(mes);
+        
+        if (resultado.sucesso) {
+            adicionarLogMesServico(mes, 'SUCCESS', `✓ ${resultado.sucesso} nota(s) emitida(s) com sucesso!`, { pedidos: pedidoIds.length });
+            await carregarPedidosServico();
+            
+            // Aguardar um pouco para garantir que os logs foram salvos no banco
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+            // Carregar logs automaticamente após emissão em lote
+            await carregarLogsMesServico(mes);
+        } else {
+            const erroMsg = resultado.erro || 'Erro desconhecido';
+            adicionarLogMesServico(mes, 'ERROR', `✗ Erro ao emitir notas: ${erroMsg}`, { pedidos: pedidoIds.length, erro: resultado.erro });
+            
+            // Aguardar um pouco antes de carregar logs
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Mesmo em caso de erro, tentar carregar logs para ver o que aconteceu
+            await carregarLogsMesServico(mes);
+        }
+    } catch (error) {
+        // Garantir que o accordion do mês está expandido
+        const mesId = `mes-${mes.replace('-', '')}-servico`;
+        const mesContent = document.getElementById(mesId);
+        if (mesContent && mesContent.style.display === 'none') {
+            toggleMesServico(mesId);
+        }
+        
+        // Garantir que os logs estão visíveis
+        toggleLogsMesServico(mes);
+        
+        adicionarLogMesServico(mes, 'ERROR', `✗ Erro ao emitir notas: ${error.message}`, { 
+            pedidos: pedidoIds.length, 
+            erro: error.message,
+            stack: error.stack 
+        });
+        
         // Aguardar um pouco antes de carregar logs
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Mesmo em caso de erro, tentar carregar logs
-        toggleLogsMesServico(mes);
         await carregarLogsMesServico(mes);
     }
 }
@@ -4549,7 +4607,13 @@ async function emitirNFSePedido(pedidoId) {
         const resultado = await API.WooCommerce.buscarPedidoPorId(pedidoId);
         
         if (!resultado.sucesso) {
-            alert('Erro ao buscar pedido: ' + resultado.erro);
+            // Determinar o mês do pedido para adicionar log
+            const pedidoWC = await API.WooCommerce.buscarPedidoPorId(pedidoId);
+            if (pedidoWC.sucesso && pedidoWC.pedido) {
+                const dataPedido = new Date(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at);
+                const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
+                adicionarLogMesServico(mes, 'ERROR', `Erro ao buscar pedido #${pedidoId}: ${resultado.erro}`, { pedido_id: pedidoId });
+            }
             return;
         }
         
@@ -4590,37 +4654,39 @@ async function emitirNFSePedido(pedidoId) {
             btnOriginal.textContent = 'Emitir NF';
         }
         
+        // Determinar o mês do pedido para adicionar logs
+        const dataPedido = new Date(pedido.date_created || pedido.created_at);
+        const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
+        
+        // Garantir que o accordion do mês está expandido e logs visíveis
+        const mesId = `mes-${mes.replace('-', '')}-servico`;
+        const mesContent = document.getElementById(mesId);
+        if (mesContent && mesContent.style.display === 'none') {
+            toggleMesServico(mesId);
+        }
+        toggleLogsMesServico(mes);
+        
         if (resultadoEmissao.sucesso) {
             const resultadoPedido = resultadoEmissao.resultados && resultadoEmissao.resultados[0];
             if (resultadoPedido && resultadoPedido.sucesso) {
-                alert(`✓ ${tipoNFLabel} emitida com sucesso!\n\nReferência: ${resultadoPedido.referencia}\nStatus: ${resultadoPedido.status || 'Processando'}`);
+                adicionarLogMesServico(mes, 'SUCCESS', `✓ ${tipoNFLabel} emitida com sucesso!`, {
+                    pedido_id: pedidoId,
+                    referencia: resultadoPedido.referencia,
+                    status: resultadoPedido.status || 'Processando',
+                    tipo: tipoNF
+                });
                 
                 // Recarregar dados para atualizar a tabela
                 // Verificar qual aba está ativa e recarregar apropriadamente
                 const secaoAtiva = estadoAtual.secaoAtiva || 'pedidos';
                 if (secaoAtiva === 'pedidos-servico') {
                     await carregarPedidosServico();
+                    
+                    // Aguardar um pouco para garantir que os logs foram salvos no banco
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
                     // Carregar logs automaticamente após emissão
-                    // Determinar o mês do pedido para carregar os logs corretos
-                    const pedidoWC = await API.WooCommerce.buscarPedidoPorId(pedidoId);
-                    if (pedidoWC.sucesso && pedidoWC.pedido) {
-                        const dataPedido = new Date(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at);
-                        const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
-                        
-                        // Garantir que o accordion do mês está expandido
-                        const mesId = `mes-${mes.replace('-', '')}-servico`;
-                        const mesContent = document.getElementById(mesId);
-                        if (mesContent && mesContent.style.display === 'none') {
-                            toggleMesServico(mesId);
-                        }
-                        
-                        // Aguardar um pouco para garantir que os logs foram salvos no banco
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                        
-                        // Expandir accordion de logs e carregar
-                        toggleLogsMesServico(mes);
-                        await carregarLogsMesServico(mes);
-                    }
+                    await carregarLogsMesServico(mes);
                 } else if (secaoAtiva === 'pedidos-produto' || secaoAtiva === 'pedidos') {
                     await carregarPedidos();
                     // Carregar logs automaticamente após emissão
@@ -4648,15 +4714,47 @@ async function emitirNFSePedido(pedidoId) {
                 }
             } else {
                 const erro = resultadoPedido?.erro || 'Erro desconhecido';
-                alert(`✗ Erro ao emitir ${tipoNFLabel}:\n\n${erro}`);
+                adicionarLogMesServico(mes, 'ERROR', `✗ Erro ao emitir ${tipoNFLabel}: ${erro}`, {
+                    pedido_id: pedidoId,
+                    tipo: tipoNF,
+                    erro: erro
+                });
+                await carregarLogsMesServico(mes);
             }
         } else {
-            alert(`✗ Erro ao emitir ${tipoNFLabel}:\n\n${resultadoEmissao.erro || 'Erro desconhecido'}`);
+            const erroMsg = resultadoEmissao.erro || 'Erro desconhecido';
+            adicionarLogMesServico(mes, 'ERROR', `✗ Erro ao emitir ${tipoNFLabel}: ${erroMsg}`, {
+                pedido_id: pedidoId,
+                tipo: tipoNF,
+                erro: erroMsg
+            });
+            await carregarLogsMesServico(mes);
         }
         
     } catch (error) {
         console.error('Erro ao emitir NF:', error);
-        alert('Erro ao emitir NF: ' + error.message);
+        
+        // Determinar o mês do pedido para adicionar log de erro
+        try {
+            const pedidoWC = await API.WooCommerce.buscarPedidoPorId(pedidoId);
+            if (pedidoWC.sucesso && pedidoWC.pedido) {
+                const dataPedido = new Date(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at);
+                const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
+                
+                // Garantir que os logs estão visíveis
+                toggleLogsMesServico(mes);
+                
+                adicionarLogMesServico(mes, 'ERROR', `Erro ao emitir NF: ${error.message}`, {
+                    pedido_id: pedidoId,
+                    erro: error.message,
+                    stack: error.stack
+                });
+                await carregarLogsMesServico(mes);
+            }
+        } catch (e) {
+            // Se não conseguir determinar o mês, pelo menos logar no console
+            console.error('Erro ao adicionar log:', e);
+        }
         
         // Restaurar botão em caso de erro
         const btnOriginal = document.querySelector(`button[onclick*="emitirNFSePedido(${pedidoId})"]`);
