@@ -4401,7 +4401,15 @@ async function emitirNFSePedido(pedidoId) {
             if (resultadoPedido && resultadoPedido.sucesso) {
                 alert(`✓ ${tipoNFLabel} emitida com sucesso!\n\nReferência: ${resultadoPedido.referencia}\nStatus: ${resultadoPedido.status || 'Processando'}`);
                 // Recarregar dados para atualizar a tabela
-                atualizarDadosWooCommerce();
+                // Verificar qual aba está ativa e recarregar apropriadamente
+                const secaoAtiva = estadoAtual.secaoAtiva || 'pedidos';
+                if (secaoAtiva === 'pedidos-servico') {
+                    await carregarPedidosServico();
+                } else if (secaoAtiva === 'pedidos-produto' || secaoAtiva === 'pedidos') {
+                    await carregarPedidos();
+                } else {
+                    atualizarDadosWooCommerce();
+                }
             } else {
                 const erro = resultadoPedido?.erro || 'Erro desconhecido';
                 alert(`✗ Erro ao emitir ${tipoNFLabel}:\n\n${erro}`);
