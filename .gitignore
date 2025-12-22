@@ -42,4 +42,10 @@ uploads/
 # Data storage (quando usando armazenamento em memória)
 data/
 
+# Credentials
+*.json
+!package.json
+!package-lock.json
+!vercel.json
+
 .env

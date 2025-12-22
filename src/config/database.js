@@ -799,7 +799,7 @@ async function atualizarNFSe(referencia, atualizacoes) {
         updated_at: new Date().toISOString()
       };
       // Salvar no arquivo
-      saveStorageToFile();
+      // saveStorageToFile(); // Desabilitado para evitar restart do nodemon ao atualizar status
       return memoryStorage.nfse[index];
     }
     return null;

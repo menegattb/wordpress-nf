@@ -36,6 +36,10 @@ async function apiRequest(endpoint, options = {}) {
         return { sucesso: true, dados: data };
     } catch (error) {
         console.error('Erro na requisição:', error);
+        // Mostrar erro via Toast se disponível e não for "abort" (cancelamento)
+        if (window.Toast && error.name !== 'AbortError') {
+            window.Toast.error(`Erro: ${error.message}`);
+        }
         return { sucesso: false, erro: error.message };
     }
 }
@@ -441,12 +445,46 @@ const BackupsAPI = {
     }
 };
 
+/**
+ * API de Integração Excel
+ */
+const ExcelAPI = {
+    async listar() {
+        return await apiRequest('/api/excel/pedidos');
+    },
+    async sincronizar(dias = 7) {
+        return await apiRequest('/api/excel/sincronizar', {
+            method: 'POST',
+            body: { dias }
+        });
+    },
+    async emitir(pedidoId) {
+        return await apiRequest('/api/excel/emitir', {
+            method: 'POST',
+            body: { pedido_id: pedidoId }
+        });
+    },
+    async importarNubank(mes, ano) {
+        return await apiRequest('/api/excel/importar-nubank', {
+            method: 'POST',
+            body: { mes, ano }
+        });
+    },
+    async removerNubank(mes, ano) {
+        return await apiRequest('/api/excel/remover-nubank', {
+            method: 'POST',
+            body: { mes, ano }
+        });
+    }
+};
+
 // Exportar APIs
 window.API = {
     NFSe: NFSeAPI,
     Pedidos: PedidosAPI,
     WooCommerce: WooCommerceAPI,
     Config: ConfigAPI,
-    Backups: BackupsAPI
+    Backups: BackupsAPI,
+    Excel: ExcelAPI
 };
 

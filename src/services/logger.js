@@ -53,7 +53,8 @@ const transports = [
   // Console - sempre usar
   new winston.transports.Console({
     format: consoleFormat,
-    level: process.env.LOG_LEVEL || (isVercel ? 'info' : 'warn')
+    // Alterado para 'debug' no ambiente local para mostrar todos os passos da emissão como solicitado
+    level: process.env.LOG_LEVEL || (isVercel ? 'info' : 'debug')
   })
 ];
 

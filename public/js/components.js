@@ -55,7 +55,7 @@ function formatarStatus(status) {
 function renderizarFiltrosBuscarNotas() {
     return `
         <div style="padding: 20px; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
-            <h3 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600; color: #333;">🗑️ Cancelar Nota por Referência</h3>
+            <h3 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600; color: #333;">🗑️ Cancelar Nota por Referência (NFe/NFSe)</h3>
             <p style="margin: 0 0 16px 0; color: #666; font-size: 14px;">
                 Digite a referência da nota que deseja cancelar:
             </p>
@@ -94,6 +94,38 @@ function renderizarFiltrosBuscarNotas() {
                     style="margin: 0; padding: 12px 24px; font-size: 16px;"
                 >
                     Limpar
+                </button>
+            </div>
+        </div>
+
+        <div style="margin-top: 24px; padding: 20px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffeeba;">
+            <h3 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600; color: #856404;">🛠️ Cancelar Nota de Serviço (NFSe)</h3>
+            <p style="margin: 0 0 16px 0; color: #856404; font-size: 14px;">
+                Específico para NFSe. Atualiza planilha e API.
+            </p>
+            
+            <div style="margin-bottom: 16px;">
+                <label for="ref-nfse-cancelar" style="display: block; margin-bottom: 6px; font-weight: 600; color: #856404;">
+                    Referência da NFSe
+                </label>
+                <input 
+                    type="text" 
+                    id="ref-nfse-cancelar" 
+                    name="ref-nfse"
+                    class="form-input" 
+                    placeholder="Ex: PED-1234"
+                    style="width: 100%; font-size: 16px; padding: 12px; border-color: #ffeeba;"
+                />
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <button 
+                    type="button" 
+                    onclick="cancelarNFSePorReferenciaInput()" 
+                    class="btn btn-warning"
+                    style="margin: 0; padding: 12px 24px; font-size: 16px; color: #856404; font-weight: bold;"
+                >
+                    ⚠️ Cancelar NFSe e Atualizar Sheets
                 </button>
             </div>
         </div>
@@ -653,6 +685,13 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                                 style="padding: 4px 12px; font-size: 12px; white-space: nowrap;">
                                 Emitir NF
                             </button>
+                            <button 
+                                type="button"
+                                class="btn btn-danger"
+                                onclick="event.stopPropagation(); event.preventDefault(); cancelarNFSePedido('${id}'); return false;"
+                                style="padding: 4px 12px; font-size: 12px; white-space: nowrap; margin-left: 5px;">
+                                Cancelar Nota
+                            </button>
                         </td>
                     </tr>
                 `;
@@ -705,6 +744,13 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                             onclick="event.stopPropagation(); event.preventDefault(); emitirNFSePedido('${id}'); return false;"
                             style="padding: 4px 12px; font-size: 12px; white-space: nowrap;">
                             Emitir NF
+                        </button>
+                        <button 
+                            type="button"
+                            class="btn btn-danger"
+                            onclick="event.stopPropagation(); event.preventDefault(); cancelarNFSePedido('${id}'); return false;"
+                            style="padding: 4px 12px; font-size: 12px; white-space: nowrap; margin-left: 5px;">
+                            Cancelar Nota
                         </button>
                     </td>
                 </tr>

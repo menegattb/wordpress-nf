@@ -142,12 +142,7 @@ async function carregarSecao(secao) {
     if (estadoAtual.secaoAtiva === 'pedidos') {
         pararPollingPedidos();
     }
-    if (estadoAtual.secaoAtiva === 'pedidos-servico') {
-        if (pollingIntervalServico) {
-            clearInterval(pollingIntervalServico);
-            pollingIntervalServico = null;
-        }
-    }
+
     if (estadoAtual.secaoAtiva === 'notas-enviadas') {
         pararPollingNotas();
     }
@@ -190,8 +185,9 @@ async function carregarSecao(secao) {
         case 'pedidos':
             await carregarPedidos();
             break;
-        case 'pedidos-servico':
-            await carregarPedidosServico();
+
+        case 'pedidos-excel':
+            await carregarPedidosExcel();
             break;
         default:
             contentArea.innerHTML = '<div class="content-section"><h2>Seção não encontrada</h2></div>';
@@ -4704,6 +4700,77 @@ function obterPedidosSelecionados() {
  * Emite NF (NFe ou NFSe) para um pedido individual
  * Detecta automaticamente o tipo baseado na categoria do pedido
  */
+async function cancelarNFSePedido(pedidoId, referenciaOriginal = null) {
+    // 1. Pedir justificativa (com valor padrão)
+    const justificativaPadrao = "A ordem das notas foi gerada incorretamente, necessitamos cancelar para reemitir";
+    const justificativa = prompt('Digite a justificativa para o cancelamento (mínimo 15 caracteres):', justificativaPadrao);
+
+    if (!justificativa) return; // Cancelado pelo usuário
+
+    if (justificativa.length < 15) {
+        alert('A justificativa deve ter pelo menos 15 caracteres.');
+        return;
+    }
+
+    // 2. Confirmar ação
+    if (!confirm(`Tem certeza que deseja CANCELAR a nota do pedido #${pedidoId}? Esta ação não pode ser desfeita.`)) {
+        return;
+    }
+
+    // 3. Mostrar loading
+    const btn = document.querySelector(`button[onclick*="cancelarNFSePedido('${pedidoId}')"]`);
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Cancelando...';
+    }
+
+    try {
+        console.log('Enviando solicitação de cancelamento:', { pedido_id: pedidoId, referencia: referenciaOriginal, justificativa });
+
+        // 4. Chamar API
+        const response = await fetch('/api/excel/cancelar', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                pedido_id: pedidoId,
+                referencia: referenciaOriginal, // Enviar referência se conhecida
+                justificativa
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.sucesso) {
+            if (result.aviso) {
+                alert('⚠️ ' + (result.mensagem || 'Atenção: verifique o status na planilha.'));
+            } else {
+                alert('✅ ' + (result.mensagem || 'Solicitação de cancelamento enviada com sucesso!'));
+            }
+            // Recarregar tabela para atualizar status
+            if (typeof carregarPedidosExcel === 'function') {
+                carregarPedidosExcel();
+            }
+        } else {
+            throw new Error(result.erro || 'Erro desconhecido');
+        }
+
+    } catch (error) {
+        console.error('Erro ao cancelar nota:', error);
+        alert(`❌ Erro ao cancelar nota: ${error.message}`);
+    } finally {
+        // Restaurar botão
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+
+window.cancelarNFSePedido = cancelarNFSePedido;
+
 async function emitirNFSePedido(pedidoId) {
     console.log('[DEBUG] emitirNFSePedido chamado para pedido:', pedidoId);
 
@@ -6037,6 +6104,98 @@ async function verLogsNota(referencia) {
 }
 
 /**
+ * Atualiza o status de todas as notas "Processando..." do mês
+ */
+async function atualizarStatusGeral(mesValue) {
+    if (!confirm('Deseja atualizar o status de todas as notas pendentes deste mês? Isso será feito uma por uma.')) {
+        return;
+    }
+
+    const tbody = document.getElementById(`lista-excel-${mesValue}`);
+    if (!tbody) return;
+
+    // Encontrar todos os botões de atualização dentro deste mês
+    const botoes = Array.from(tbody.querySelectorAll('button[id^="btn-status-"]'));
+
+    if (botoes.length === 0) {
+        alert('Nenhuma nota pendente de atualização encontrada neste mês.');
+        return;
+    }
+
+    const total = botoes.length;
+    let atualizados = 0;
+
+    mostrarFeedbackExcel('info', `Iniciando atualização de ${total} notas...`);
+
+    for (const btn of botoes) {
+        const id = btn.id.replace('btn-status-', '');
+
+        // Verificar status atual (pode ter mudado)
+        if (btn.disabled) continue;
+
+        try {
+            await verificarStatusNota(id);
+            atualizados++;
+            // Pequeno delay para visualização e não sobrecarregar
+            await new Promise(r => setTimeout(r, 500));
+        } catch (e) {
+            console.error(`Erro ao atualizar ${id}:`, e);
+        }
+    }
+
+    mostrarFeedbackExcel('success', `Atualização concluída: ${atualizados} notas verificadas.`);
+}
+
+async function verificarStatusNota(pedidoId) {
+    const btnId = `btn-status-${pedidoId}`;
+    const btn = document.getElementById(btnId);
+    const originalContent = btn ? btn.innerHTML : '';
+
+    if (btn) {
+        btn.innerHTML = '↻';
+        btn.disabled = true;
+    }
+
+    try {
+        const res = await fetch(`/api/excel/status/${pedidoId}`);
+        const data = await res.json();
+
+        if (data.sucesso) {
+            mostrarFeedbackExcel('success', `Status atualizado: ${data.status}`);
+
+            // Encontrar elementos da linha
+            const row = Array.from(document.querySelectorAll('td')).find(td => td.textContent.includes(`#${pedidoId}`))?.parentElement;
+
+            if (row) {
+                const statusNotaCell = row.cells[5]; // Coluna Status Nota
+                const linkPdfCell = row.cells[6]; // Coluna Links
+
+                if (data.status === 'autorizado') {
+                    statusNotaCell.innerHTML = '<span class="badge badge-success">Autorizada</span>';
+                    linkPdfCell.innerHTML = `<a href="${data.link_pdf}" target="_blank" class="btn btn-sm btn-secondary" title="Ver PDF">📄 PDF</a>`;
+                } else if (data.status === 'erro_autorizacao') {
+                    statusNotaCell.innerHTML = '<span class="badge badge-error">Erro</span>';
+                } else if (data.status === 'cancelado') {
+                    statusNotaCell.innerHTML = '<span class="badge badge-error">Cancelada</span>';
+                } else {
+                    statusNotaCell.innerHTML = `<span class="badge badge-warning">${data.status}</span> <button id="btn-status-${pedidoId}" onclick="verificarStatusNota('${pedidoId}')" class="btn-icon-sm" title="Atualizar Status">↻</button>`;
+                }
+            }
+        } else {
+            mostrarFeedbackExcel('error', `Erro ao verificar: ${data.erro}`);
+        }
+    } catch (error) {
+        console.error('Erro ao verificar status:', error);
+        mostrarFeedbackExcel('error', 'Erro de conexão ao verificar status');
+    } finally {
+        if (btn && btn.innerHTML === '↻') { // Se ainda estiver lá e não foi substituído
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+        }
+    }
+}
+
+/**
  * Carrega seção de Municípios (placeholder)
  */
 function carregarMunicipios() {
@@ -6316,6 +6475,58 @@ async function carregarLogsServidor() {
 }
 
 /**
+ * Verifica o status de uma nota na Focus NFe e atualiza a interface
+ */
+async function verificarStatusNota(pedidoId) {
+    const btnId = `btn-status-${pedidoId}`;
+    const btn = document.getElementById(btnId);
+    const originalContent = btn ? btn.innerHTML : '';
+
+    if (btn) {
+        btn.innerHTML = '↻';
+        btn.disabled = true;
+    }
+
+    try {
+        const res = await fetch(`/api/excel/status/${pedidoId}`);
+        const data = await res.json();
+
+        if (data.sucesso) {
+            mostrarFeedbackExcel('success', `Status atualizado: ${data.status}`);
+
+            // Encontrar elementos da linha
+            const row = Array.from(document.querySelectorAll('td')).find(td => td.textContent.includes(`#${pedidoId}`))?.parentElement;
+
+            if (row) {
+                const statusNotaCell = row.cells[5]; // Coluna Status Nota
+                const linkPdfCell = row.cells[6]; // Coluna Links
+
+                if (data.status === 'autorizado') {
+                    statusNotaCell.innerHTML = '<span class="badge badge-success">Autorizada</span>';
+                    linkPdfCell.innerHTML = `<a href="${data.link_pdf}" target="_blank" class="btn btn-sm btn-secondary" title="Ver PDF">📄 PDF</a>`;
+                } else if (data.status === 'erro_autorizacao') {
+                    statusNotaCell.innerHTML = '<span class="badge badge-error">Erro</span>';
+                } else if (data.status === 'cancelado') {
+                    statusNotaCell.innerHTML = '<span class="badge badge-error">Cancelada</span>';
+                } else {
+                    statusNotaCell.innerHTML = `<span class="badge badge-warning">${data.status}</span> <button id="btn-status-${pedidoId}" onclick="verificarStatusNota('${pedidoId}')" class="btn-icon-sm" title="Atualizar Status">↻</button>`;
+                }
+            }
+        } else {
+            mostrarFeedbackExcel('error', `Erro ao verificar: ${data.erro}`);
+        }
+    } catch (error) {
+        console.error('Erro ao verificar status:', error);
+        mostrarFeedbackExcel('error', 'Erro de conexão ao verificar status');
+    } finally {
+        if (btn && btn.innerHTML === '↻') { // Se ainda estiver lá e não foi substituído
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+        }
+    }
+}
+
+/**
  * Toggle para expandir/colapsar logs do mês
  */
 function toggleLogsMes(mes) {
@@ -6499,7 +6710,731 @@ async function cancelarPorReferencia() {
     referenciaInput.value = '';
 }
 
+/**
+ * Handler para o card de cancelamento de NFSe específico
+ */
+async function cancelarNFSePorReferenciaInput() {
+    const input = document.getElementById('ref-nfse-cancelar');
+    if (!input) return; // Se o elemento não existir
+
+    const referencia = input.value.trim();
+    if (!referencia) {
+        alert('Digite a referência da NFSe (ex: PED-1234)');
+        return;
+    }
+
+    // Extrair ID do pedido da referência (assumindo PED-XXXX ou NFSE-XXXX)
+    // Se for apenas número, usar como ID
+    let pedidoId = referencia;
+
+    // Remover prefixos comuns
+    const prefixos = ['PED-', 'NFSE-', 'NFE-'];
+
+    for (const prefixo of prefixos) {
+        if (referencia.toUpperCase().startsWith(prefixo)) {
+            pedidoId = referencia.substring(prefixo.length);
+            break;
+        }
+    }
+
+    if (!pedidoId) {
+        alert('ID do pedido inválido.');
+        return;
+    }
+
+    console.log('Iniciando cancelamento NFSe para Pedido ID:', pedidoId);
+    // Passar a referência original também para garantir
+    await cancelarNFSePedido(pedidoId, referencia);
+}
+
+window.cancelarNFSePorReferenciaInput = cancelarNFSePorReferenciaInput;
 window.cancelarPorReferencia = cancelarPorReferencia;
 
+/**
+ * Carrega a seção de Pedidos Excel com layout de Accordion por Mês
+ */
+async function carregarPedidosExcel() {
+    const contentArea = document.getElementById('content-area');
+    const meses = gerarListaMeses(); // Reutiliza função global do app.js
 
+    contentArea.innerHTML = `
+        <div class="content-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h2 class="section-title" style="margin: 0;">Pedidos Woo Excel (Google Sheets)</h2>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <a href="https://docs.google.com/spreadsheets" target="_blank" class="btn btn-secondary" style="padding: 8px 16px; font-size: 14px; text-decoration: none;">
+                        Abrir Planilha ↗
+                    </a>
+                    <button 
+                        type="button" 
+                        class="btn btn-primary" 
+                        onclick="sincronizarExcel()"
+                        id="btn-sincronizar-excel"
+                        style="padding: 8px 16px; font-size: 14px;">
+                        🔄 Sincronizar (Geral)
+                    </button>
+                </div>
+            </div>
+            
+            <div id="status-excel" style="margin-bottom: 16px; display: none; padding: 12px; border-radius: 8px;"></div>
+
+            <div class="accordion" id="accordion-meses-excel">
+                ${meses.map((mes, index) => {
+        const [anoM, mesM] = mes.value.split('-'); // 2025-11
+        // Usar label do mês para interface (Novembro, Dezembro...)
+        const mesNome = mes.label.split(' ')[0];
+
+        return `
+                    <div id="card-excel-${mes.value}" class="accordion-item">
+                        <div class="accordion-header ${index === 0 ? 'active' : ''}" onclick="toggleMesExcel('${mes.value}')">
+                            <h3>${mes.label}</h3>
+                            <span class="badge" id="count-excel-${mes.value}">0 pedidos</span>
+                            <span class="accordion-icon">▼</span>
+                        </div>
+                        <div class="accordion-content ${index === 0 ? 'active' : ''}" id="content-excel-${mes.value}">
+                             <div style="padding: 10px 0; display: flex; justify-content: flex-end;">
+                                <button 
+                                    class="btn-sm" 
+                                    style="background-color: #fff; border: 1px solid #e0e0e0; color: #333; display: flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
+                                    onclick="importarNubankMes('${mesNome}', '${anoM}')">
+                                    <span style="font-size: 14px;">🏦</span> Importar Nubank
+                                </button>
+                                <button 
+                                    class="btn-sm" 
+                                    style="background-color: #fff; border: 1px solid #e0e0e0; color: #666; display: flex; align-items: center; gap: 6px; margin-left: 8px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
+                                    onclick="removerNubankMes('${mesNome}', '${anoM}')">
+                                    <span style="font-size: 14px;">🗑️</span> Retirar
+                                </button>
+                                <button 
+                                    class="btn-sm" 
+                                    style="background-color: #fff; border: 1px solid #e0e0e0; color: #333; display: flex; align-items: center; gap: 6px; margin-left: 8px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
+                                    onclick="ordenarPedidosPorDataLocal('${mes.value}')">
+                                    <span style="font-size: 14px;">📅</span> Ordenar por Data
+                                </button>
+                                <button 
+                                    class="btn-sm" 
+                                    style="background-color: #fff; border: 1px solid #e0e0e0; color: #e65100; display: flex; align-items: center; gap: 6px; margin-left: 8px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
+                                    onclick="atualizarStatusGeral('${mes.value}')">
+                                    <span style="font-size: 14px;">↻</span> Atualizar Status (Geral)
+                                </button>
+                             </div>
+                            <div class="table-container">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Data</th>
+                                            <th>Cliente</th>
+                                            <th>Valor</th>
+                                            <th>Status Woo</th>
+                                            <th>Status Nota</th>
+                                            <th>Links</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lista-excel-${mes.value}">
+                                        <tr><td colspan="8" style="text-align: center; padding: 20px;">Carregando...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `}).join('')}
+            </div>
+        </div>
+    `;
+
+    try {
+        // Capturar meses abertos atualmente para preservar estado
+        const activeMonths = [];
+        document.querySelectorAll('.accordion-content.active').forEach(el => {
+            const id = el.id.replace('content-excel-', '');
+            activeMonths.push(id);
+        });
+
+        // Buscar todos os pedidos da planilha
+        const resultado = await API.Excel.listar();
+
+        if (resultado.sucesso) {
+            window.pedidosExcelCache = resultado.dados || [];
+            distribuirPedidosExcelPorMes(window.pedidosExcelCache);
+
+            // Restaurar meses abertos
+            activeMonths.forEach(mesId => {
+                toggleMesExcel(mesId);
+            });
+            // Se nenhum estava aberto, abre o primeiro por padrão (comportamento original)
+            if (activeMonths.length === 0 && window.pedidosExcelCache.length > 0) {
+                // A função original já abre o primeiro no template string, então ok.
+            }
+        } else {
+            document.querySelectorAll('[id^="lista-excel-"]').forEach(el => {
+                el.innerHTML = `
+                    <tr><td colspan="7" style="text-align: center; padding: 20px; color: red;">
+                        Erro ao carregar: ${resultado.erro}. <br>
+                        Verifique se configurou as credenciais do Google Sheets.
+                    </td></tr>`;
+            });
+        }
+    } catch (error) {
+        console.error(error);
+        mostrarFeedbackExcel('error', `Erro de conexão: ${error.message}`);
+    }
+}
+
+function toggleMesExcel(mesId) {
+    const content = document.getElementById(`content-excel-${mesId}`);
+    const header = document.querySelector(`[onclick="toggleMesExcel('${mesId}')"]`); // Find the header triggering this
+
+    if (content) {
+        // Toggle active class on content
+        content.classList.toggle('active');
+
+        // Find icon within header if header exists
+        if (header) {
+            header.classList.toggle('active');
+            const icon = header.querySelector('.accordion-icon');
+            if (icon) {
+                // The CSS likely handles rotation based on .active class on header or we can set text
+                icon.textContent = content.classList.contains('active') ? '▼' : '▶';
+                // If using CSS rotation on .accordion-header.active .accordion-icon, text change might not be needed or should be consistent.
+                // Assuming the 'active' class on header drives CSS. Let's force update text for safety as per original code.
+                icon.textContent = content.classList.contains('active') ? '▼' : '▶';
+            }
+        } else {
+            // Fallback if header selection fails (legacy ID based?)
+            const icon = document.getElementById(`icon-excel-${mesId}`); // This ID wasn't in template but good for safety
+            if (icon) icon.textContent = content.classList.contains('active') ? '▼' : '▶';
+        }
+    }
+}
+
+function distribuirPedidosExcelPorMes(pedidos) {
+    const meses = gerarListaMeses();
+
+    // Primeiro, esconder todos os meses
+    meses.forEach(mes => {
+        const countEl = document.getElementById(`count-excel-${mes.value}`);
+        const tbody = document.getElementById(`lista-excel-${mes.value}`);
+        const monthCard = document.getElementById(`card-excel-${mes.value}`); // Assuming card ID exists or I can find it
+
+        if (countEl) countEl.textContent = '0 pedidos';
+        if (tbody) tbody.innerHTML = '';
+        if (monthCard) monthCard.style.display = 'none'; // Hide by default
+    });
+
+    if (!pedidos || pedidos.length === 0) return;
+
+    // Agrupar pedidos
+    const pedidosPorMes = {};
+
+    pedidos.forEach(p => {
+        let dataStr = p.data;
+        if (!dataStr) return;
+
+        let ano, mes;
+        let dataObj;
+
+        // Limpar string de data
+        dataStr = String(dataStr).trim();
+
+        // 1. Tentar detectar formato BR explícito DD/MM/YYYY
+        // Isso evita que 01/11 seja lido como Jan 11 (US) em vez de Nov 01 (BR)
+        const matchBR = dataStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+
+        if (matchBR) {
+            // dia = matchBR[1], mes = matchBR[2], ano = matchBR[3]
+            const dia = parseInt(matchBR[1]);
+            const mesNum = parseInt(matchBR[2]);
+            const anoNum = parseInt(matchBR[3]);
+
+            dataObj = new Date(anoNum, mesNum - 1, dia); // Note: Month is 0-indexed in Date
+        }
+        else {
+            // 2. Tentar ISO YYYY-MM-DD
+            const matchISO = dataStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (matchISO) {
+                dataObj = new Date(matchISO[0]);
+            } else {
+                // 3. Fallback para new Date() padrão (pode ser perigoso para datas ambíguas)
+                dataObj = new Date(dataStr);
+            }
+        }
+
+        if (dataObj && !isNaN(dataObj.getTime())) {
+            ano = dataObj.getFullYear();
+            mes = (dataObj.getMonth() + 1).toString().padStart(2, '0');
+        }
+
+        if (ano && mes) {
+            const chave = `${ano}-${mes}`;
+            if (!pedidosPorMes[chave]) pedidosPorMes[chave] = [];
+            pedidosPorMes[chave].push(p);
+        }
+    });
+
+    // Renderizar
+    Object.keys(pedidosPorMes).forEach(chave => {
+        const accordId = chave;
+        const tbody = document.getElementById(`lista-excel-${accordId}`);
+        const countEl = document.getElementById(`count-excel-${accordId}`);
+        const monthCard = document.getElementById(`card-excel-${accordId}`);
+
+        if (tbody && countEl) {
+            const lista = pedidosPorMes[chave];
+
+            // Show card if it has items
+            if (lista.length > 0 && monthCard) {
+                monthCard.style.display = 'block'; // Show only if has items
+            }
+
+            // Ordenar por ID desc (Tratamento seguro para strings vs numeros)
+            lista.sort((a, b) => {
+                const idA = a.id;
+                const idB = b.id;
+                // Se ambos numericos
+                if (!isNaN(idA) && !isNaN(idB)) return Number(idB) - Number(idA);
+                // String comparison
+                return String(idB).localeCompare(String(idA));
+            });
+
+            countEl.textContent = `${lista.length} pedidos`;
+
+            // Renderização Segura com try-catch por item para não quebrar tudo
+            tbody.innerHTML = lista.map(p => {
+                try {
+                    // Parsear JSON para obter status real e categoria
+                    let dadosPedido = {};
+                    // Handle json_pedido being object or string
+                    if (p.json_pedido && typeof p.json_pedido === 'object') {
+                        dadosPedido = p.json_pedido;
+                    } else if (typeof p.json_pedido === 'string') {
+                        try {
+                            dadosPedido = JSON.parse(p.json_pedido);
+                        } catch (e) { }
+                    }
+
+                    // Status do Pedido (WooCommerce)
+                    const statusWoo = p.status_woo || dadosPedido.status || 'pending';
+                    const statusLabels = {
+                        'pending': 'Pendente',
+                        'processing': 'Processando',
+                        'on-hold': 'Em espera',
+                        'completed': 'Concluído',
+                        'cancelled': 'Cancelado',
+                        'refunded': 'Reembolsado',
+                        'failed': 'Falhou'
+                    };
+                    const statusLabel = statusLabels[statusWoo] || statusWoo;
+
+                    // Status da Nota (Excel)
+                    const statusNota = p.status_nota || 'Pendente';
+                    let statusHtml = '';
+
+                    if (statusNota === 'Autorizada') {
+                        statusHtml = '<span class="badge badge-success">Autorizada</span>';
+                    } else if (statusNota === 'Erro') {
+                        statusHtml = '<span class="badge badge-danger">Erro</span>';
+                    } else if (statusNota === 'Processando...') {
+                        statusHtml = `<div style="display:flex;align-items:center;gap:5px;"><span class="badge badge-warning">Processando...</span> <button id="btn-status-${p.id}" onclick="verificarStatusNota('${p.id}')" class="btn-icon-sm" title="Atualizar Status" style="background:none;border:none;cursor:pointer;font-size:16px;color:#f90;padding:0;line-height:1;">↻</button></div>`;
+                    } else if (statusNota === 'Cancelada') {
+                        statusHtml = '<span class="badge badge-error" style="background-color: #dc3545; color: white;">Cancelada</span>';
+                    } else {
+                        statusHtml = `<span class="badge badge-secondary">${statusNota}</span>`;
+                    }
+
+                    // Categorias
+                    let categorias = [];
+                    if (dadosPedido.servicos) {
+                        dadosPedido.servicos.forEach(s => {
+                            if (s.categorias) categorias.push(...s.categorias);
+                        });
+                    }
+                    const categoriaTexto = categorias.length > 0 ? [...new Set(categorias)].join(', ') : 'Serviço';
+
+                    // Extrair CPF/CNPJ para validação
+                    const cpfCnpj = (dadosPedido.cpf_cnpj || p.cpf_cnpj || '').replace(/\D/g, '');
+                    const temDocumentoValido = cpfCnpj.length === 11 || cpfCnpj.length === 14;
+
+                    // Verificar se é Nubank para estilo
+                    const isNubank = (p.id && String(p.id).startsWith('NBK-')) ||
+                        dadosPedido.origem === 'nubank' ||
+                        (typeof p.json_pedido === 'string' && p.json_pedido.includes('"origem":"nubank"'));
+                    const rowStyle = isNubank ? 'background-color: #f7f7f7; border-left: 3px solid #6c757d;' : ''; // Destacar mais
+
+                    // Valor Seguro
+                    let valorNum = parseFloat(p.valor);
+                    if (isNaN(valorNum)) valorNum = 0;
+
+                    return `
+                        <tr style="${rowStyle}">
+                            <td><strong>${isNubank ? '🏦 ' : ''}#${p.id}</strong></td>
+                            <td>${formatarDataHuman(p.data)}</td>
+                            <td>
+                                ${p.cliente}<br>
+                                <small style="color: #666;">${p.email || ''}</small>
+                            </td>
+                            <td>${window.Components ? window.Components.formatarValor(valorNum) : `R$ ${valorNum.toFixed(2)}`}</td>
+                            <td>${statusLabel}</td>
+                            <td>${statusHtml}</td>
+                            <td>
+                             ${p.link_pdf ? `<a href="${p.link_pdf}" target="_blank" class="btn btn-sm btn-secondary" title="Ver PDF">📄 PDF</a>` : ''}
+                             ${p.numero_nota ? `<small class="d-block mt-1">Nota: ${p.numero_nota}</small>` : ''}
+                        </td>
+                        <td>
+                            ${statusNota !== 'Autorizada' ? `
+                                ${temDocumentoValido ? `
+                                    <button class="btn btn-primary" onclick="emitirNotaExcel('${p.id}')" style="padding: 4px 12px; font-size: 12px; white-space: nowrap;">
+                                        Emitir NFSe
+                                    </button>
+                                ` : `
+                                    <button class="btn btn-secondary" disabled style="padding: 4px 12px; font-size: 12px; white-space: nowrap; opacity: 0.6; cursor: not-allowed;" title="Documento (CPF/CNPJ) inválido ou ausente">
+                                        ⚠️ Dados Inválidos
+                                    </button>
+                                    <div style="font-size: 10px; color: #dc3545; margin-top: 2px;">CPF/CNPJ ausente</div>
+                                `}
+                            ` : '✅'}
+                            ${p.mensagem_erro ? `<div style="font-size: 10px; color: red; max-width: 200px; margin-top: 4px;">${p.mensagem_erro}</div>` : ''}
+                        </td>
+                    </tr>
+                `;
+                } catch (e) {
+                    console.error('Erro ao renderizar item:', e);
+                    return '';
+                }
+            }).join('');
+        }
+    });
+}
+
+function formatarDataHuman(dataIso) {
+    if (!dataIso) return '-';
+    // Espera YYYY-MM-DD
+    const parts = dataIso.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return dataIso;
+}
+
+// Atualiza a sincronização para buscar 30 dias por padrão ou perguntar
+async function sincronizarExcel() {
+    const btn = document.getElementById('btn-sincronizar-excel');
+
+    // Forçar busca completa sem perguntar
+    const dias = 'todos';
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Sincronizando TUDO...';
+    }
+
+    try {
+        const res = await API.Excel.sincronizar(dias);
+        if (res.sucesso) {
+            // Recarregar lista
+            await carregarPedidosExcel();
+            mostrarFeedbackExcel('success', `Sincronização concluída: ${res.resumo.inseridos} novos, ${res.resumo.atualizados} atualizados.`);
+        } else {
+            mostrarFeedbackExcel('error', `Erro na sincronização: ${res.erro}`);
+        }
+    } catch (err) {
+        mostrarFeedbackExcel('error', `Erro ao chamar sincronização: ${err.message}`);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '🔄 Sincronizar (Geral)';
+        }
+    }
+}
+
+
+/**
+ * Importar Nubank por mês específico
+ */
+async function importarNubankMes(mesNome, ano) {
+    if (!confirm(`Importar dados do Nubank para ${mesNome}/${ano}?`)) return;
+
+    try {
+        if (window.Toast) window.Toast.info(`Lendo aba "${mesNome}-${ano}-Nubank"...`);
+
+        const res = await API.Excel.importarNubank(mesNome, ano);
+
+        if (res.sucesso) {
+            const resumo = res.resumo;
+            const msg = `Sucesso! Lidos: ${resumo.lidos}, Importados: ${resumo.inseridos}`;
+            if (window.Toast) window.Toast.success(msg);
+
+            // Recarregar a lista
+            await carregarPedidosExcel();
+        } else {
+            const erro = res.erro || 'Erro desconhecido';
+            if (window.Toast) window.Toast.error(`Erro: ${erro}`);
+        }
+    } catch (err) {
+        if (window.Toast) window.Toast.error(`Falha: ${err.message}`);
+    }
+}
+window.importarNubankMes = importarNubankMes;
+
+async function emitirNotaExcel(pedidoId) {
+    if (!confirm(`Emitir NFSe para o pedido #${pedidoId}?`)) return;
+
+    // Encontrar elementos da linha para feedback visual imediato
+    const row = Array.from(document.querySelectorAll('td')).find(td => td.textContent.includes(`#${pedidoId}`))?.parentElement;
+    let originalButtonHtml = '';
+
+    if (row) {
+        const btnCell = row.cells[7]; // Coluna Ações
+        if (btnCell) {
+            originalButtonHtml = btnCell.innerHTML;
+            btnCell.innerHTML = '<div class="loading-spinner" style="width: 20px; height: 20px;"></div>';
+        }
+    }
+
+    try {
+        mostrarFeedbackExcel('info', `Emitindo nota para pedido #${pedidoId}... aguarde.`);
+        const res = await API.Excel.emitir(pedidoId);
+
+        if (res.sucesso) {
+            mostrarFeedbackExcel('success', `Nota enviada, aguardando confirmação!`);
+
+            // Atualizar UI Localmente sem recarregar tudo
+            if (row) {
+                // Atualizar Status Nota (Coluna 6, índice 5)
+                const statusCell = row.cells[5];
+                if (statusCell) {
+                    if (res.status === 'autorizado') {
+                        statusCell.innerHTML = '<span class="badge badge-success">Autorizada</span>';
+                    } else {
+                        statusCell.innerHTML = '<span class="badge badge-warning">Processando...</span>';
+                    }
+                }
+
+                // Atualizar Links (Coluna 7, índice 6)
+                const linksCell = row.cells[6];
+                if (linksCell && res.link_pdf) {
+                    linksCell.innerHTML = `
+                        <a href="${res.link_pdf}" target="_blank" class="btn btn-sm btn-secondary" title="Ver PDF">📄 PDF</a>
+                        ${res.numero ? `<small class="d-block mt-1">Nota: ${res.numero}</small>` : ''}
+                    `;
+                }
+
+                // Atualizar Ações (Coluna 8, índice 7) - Remover botão emitir
+                const actionCell = row.cells[7];
+                if (actionCell) {
+                    actionCell.innerHTML = '✅';
+                }
+
+                // Atualizar cache global se existir
+                if (window.pedidosExcelCache) {
+                    const pedidoCached = window.pedidosExcelCache.find(p => p.id == pedidoId);
+                    if (pedidoCached) {
+                        pedidoCached.status_nota = 'Autorizada';
+                        pedidoCached.link_pdf = res.link_pdf;
+                        pedidoCached.numero_nota = res.numero;
+                    }
+                }
+            } else {
+                // Fallback se não achou a linha (raro)
+                await carregarPedidosExcel();
+            }
+
+        } else {
+            mostrarFeedbackExcel('error', `Erro ao emitir: ${res.erro}`);
+            // Restaurar botão original em caso de erro
+            if (row && originalButtonHtml) {
+                row.cells[7].innerHTML = originalButtonHtml;
+            }
+            // Adicionar mensagem de erro na linha
+            if (row) {
+                const actionCell = row.cells[7];
+                const existingError = actionCell.querySelector('.error-msg');
+                if (!existingError) {
+                    actionCell.innerHTML += `<div class="error-msg" style="font-size: 10px; color: red; max-width: 200px; margin-top: 4px;">${res.erro}</div>`;
+                }
+            }
+        }
+    } catch (err) {
+        mostrarFeedbackExcel('error', `Falha na requisição: ${err.message}`);
+        // Restaurar botão original
+        if (row && originalButtonHtml) {
+            row.cells[7].innerHTML = originalButtonHtml;
+        }
+    }
+}
+
+function mostrarFeedbackExcel(tipo, msg) {
+    const div = document.getElementById('status-excel');
+    if (!div) return;
+    div.style.display = 'block';
+    if (tipo === 'success') {
+        div.style.backgroundColor = '#d4edda';
+        div.style.color = '#155724';
+        div.style.border = '1px solid #c3e6cb';
+    } else if (tipo === 'error') {
+        div.style.backgroundColor = '#f8d7da';
+        div.style.color = '#721c24';
+        div.style.border = '1px solid #f5c6cb';
+    } else {
+        div.style.backgroundColor = '#e2e3e5';
+        div.style.color = '#383d41';
+        div.style.border = '1px solid #d6d8db';
+    }
+    div.innerHTML = msg;
+    if (tipo === 'success') {
+        setTimeout(() => { div.style.display = 'none'; }, 5000);
+    }
+}
+
+window.carregarPedidosExcel = carregarPedidosExcel;
+window.sincronizarExcel = sincronizarExcel;
+window.emitirNotaExcel = emitirNotaExcel;
+window.toggleMesExcel = toggleMesExcel;
+
+
+/**
+ * Sistema de Notificações Toast
+ */
+const Toast = {
+    container: null,
+
+    init() {
+        if (!this.container) {
+            this.container = document.createElement('div');
+            this.container.className = 'toast-container';
+            document.body.appendChild(this.container);
+        }
+    },
+
+    show(message, type = 'info', duration = 5000) {
+        this.init();
+
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+
+        toast.innerHTML = `
+            <span class="toast-icon">${icons[type] || icons.info}</span>
+            <span class="toast-message">${message}</span>
+        `;
+
+        this.container.appendChild(toast);
+
+        // Auto remove
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out forwards';
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
+    },
+
+    success(msg) { this.show(msg, 'success'); },
+    error(msg) { this.show(msg, 'error'); },
+    warning(msg) { this.show(msg, 'warning'); },
+    info(msg) { this.show(msg, 'info'); }
+};
+
+/**
+ * Remove pedidos importados do Nubank de um mês específico
+ */
+async function removerNubankMes(mesNome, ano) {
+    // Converter mês nome para número
+    const mesesMap = {
+        'Janeiro': '01', 'Fevereiro': '02', 'Março': '03', 'Abril': '04',
+        'Maio': '05', 'Junho': '06', 'Julho': '07', 'Agosto': '08',
+        'Setembro': '09', 'Outubro': '10', 'Novembro': '11', 'Dezembro': '12'
+    };
+
+    // Simplificação: o mesNome vem como "Novembro", etc.
+    const mesNum = mesesMap[mesNome];
+
+    if (!confirm(`Tem certeza que deseja REMOVER TODOS os pedidos importados do Nubank de ${mesNome}/${ano}?\n\nEssa ação não pode ser desfeita.`)) {
+        return;
+    }
+
+    // Usar toast ou alert para feedback imediato
+    if (window.Toast) window.Toast.info('Processando remoção...');
+
+    try {
+        const resultado = await API.Excel.removerNubank(mesNum, ano);
+
+        if (resultado.sucesso) {
+            if (window.Toast) window.Toast.success(resultado.mensagem);
+            else alert(resultado.mensagem);
+
+            // Recarregar lista para refletir mudanças
+            await carregarPedidosExcel();
+        } else {
+            if (window.Toast) window.Toast.error('Erro: ' + resultado.erro);
+            else alert('Erro: ' + resultado.erro);
+        }
+    } catch (error) {
+        console.error(error);
+        if (window.Toast) window.Toast.error('Erro ao processar solicitação: ' + error.message);
+        else alert('Erro ao processar solicitação: ' + error.message);
+    }
+}
+
+
+window.Toast = Toast;
+
+
+/**
+ * Ordena os pedidos de um mês específico pela data (decrescente) no front-end
+ * @param {string} mesValue Valor do mês (ex: 2025-11)
+ */
+async function ordenarPedidosPorDataLocal(mesValue) {
+    const tbody = document.getElementById(`lista-excel-${mesValue}`);
+    if (!tbody) return;
+
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    if (rows.length === 0 || rows[0].innerText.includes('Nenhum pedido')) return;
+
+    // Função auxiliar para parsear data (reutilizando lógica robusta)
+    const getTimestamp = (dtStr) => {
+        if (!dtStr) return 0;
+        const str = dtStr.trim();
+        let dia, mes, ano;
+
+        // Formato DD/MM/YYYY
+        const matchBR = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+        // Formato Corrompido: 01T11:14:34/12/2025
+        const matchCorrupt = str.match(/^(\d{2})T.*?\/(\d{2})\/(\d{4})/);
+        // Formato ISO
+        const matchISO = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+        if (matchBR) {
+            [, dia, mes, ano] = matchBR;
+        } else if (matchCorrupt) {
+            [, dia, mes, ano] = matchCorrupt;
+        } else if (matchISO) {
+            [, ano, mes, dia] = matchISO;
+        }
+
+        if (dia && mes && ano) {
+            return new Date(Date.UTC(ano, mes - 1, dia, 12, 0, 0)).getTime();
+        }
+        return 0;
+    };
+
+    rows.sort((a, b) => {
+        // Obter data da celula (coluna 2, index 1)
+        const dateA = a.children[1]?.innerText || '';
+        const dateB = b.children[1]?.innerText || '';
+
+        const tsA = getTimestamp(dateA);
+        const tsB = getTimestamp(dateB);
+
+        return tsB - tsA; // Decrescente
+    });
+
+    // Reanexar ordenado
+    rows.forEach(row => tbody.appendChild(row));
+
+    if (window.Toast) window.Toast.success('Ordenado por data!');
+}
 

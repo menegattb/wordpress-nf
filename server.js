@@ -15,6 +15,7 @@ const pedidoRoutes = require('./src/routes/pedidos');
 const woocommerceRoutes = require('./src/routes/woocommerce');
 const configRoutes = require('./src/routes/config');
 const backupRoutes = require('./src/routes/backups');
+const excelRoutes = require('./src/routes/excel');
 
 // Importar middleware de autenticação
 const { requireAuth, checkAuth } = require('./src/middleware/auth');
@@ -107,6 +108,7 @@ app.use('/api/pedidos', pedidoRoutes); // requireAuth comentado
 app.use('/api/woocommerce', woocommerceRoutes); // requireAuth comentado
 app.use('/api/config', configRoutes); // requireAuth comentado
 app.use('/api/backups', backupRoutes); // requireAuth comentado
+app.use('/api/excel', excelRoutes);
 
 // Função auxiliar para ler ambiente do .env
 function lerAmbienteDoEnv() {
@@ -124,12 +126,12 @@ function lerAmbienteDoEnv() {
 // Rota de health check
 app.get('/health', async (req, res) => {
   const ambiente = lerAmbienteDoEnv();
-  
+
   // Verificar conexão com banco
   let dbStatus = 'desconectado';
   let dbInfo = {};
   let tabelas = [];
-  
+
   try {
     const { sql } = require('@vercel/postgres');
     const result = await sql`SELECT NOW() as time, current_database() as db`;
@@ -138,7 +140,7 @@ app.get('/health', async (req, res) => {
       database: result.rows[0]?.db,
       time: result.rows[0]?.time
     };
-    
+
     // Listar tabelas existentes
     const tabelasResult = await sql`
       SELECT table_name 
@@ -150,7 +152,7 @@ app.get('/health', async (req, res) => {
   } catch (err) {
     dbStatus = 'erro: ' + err.message;
   }
-  
+
   res.json({
     status: 'ok',
     ambiente: ambiente,
@@ -208,7 +210,7 @@ app.use((err, req, res, next) => {
     path: req.path,
     method: req.method
   });
-  
+
   res.status(err.status || 500).json({
     erro: err.message || 'Erro interno do servidor'
   });
@@ -248,7 +250,7 @@ try {
       port: PORT,
       ambiente: process.env.FOCUS_NFE_AMBIENTE || 'homologacao'
     });
-    
+
     console.log(`\n🚀 Servidor rodando na porta ${PORT}`);
     console.log(`📊 Ambiente: ${process.env.FOCUS_NFE_AMBIENTE || 'homologacao'}`);
     console.log(`🌐 Health check: http://localhost:${PORT}/health`);

@@ -890,3 +890,114 @@ body {
     pointer-events: none;
 }
 
+/* Accordion */
+.accordion {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.accordion-item {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background-color: var(--color-white);
+    overflow: hidden;
+}
+
+.accordion-header {
+    padding: 16px 20px;
+    background-color: var(--color-white);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background-color 0.2s;
+}
+
+.accordion-header:hover {
+    background-color: #fafafa;
+}
+
+.accordion-header.active {
+    background-color: #f0f0f0;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.accordion-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-gray-dark);
+}
+
+.accordion-icon {
+    font-size: 12px;
+    color: var(--color-gray-medium);
+    transition: transform 0.2s;
+}
+
+.accordion-header.active .accordion-icon {
+    transform: rotate(180deg);
+}
+
+.accordion-content {
+    display: none;
+    padding: 24px;
+    border-top: 1px solid var(--color-border);
+}
+
+.accordion-content.active {
+    display: block;
+}
+
+
+/* Toast Notifications */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.toast {
+    background-color: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-radius: 4px;
+    padding: 12px 16px;
+    min-width: 300px;
+    max-width: 400px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: slideIn 0.3s ease-out;
+    border-left: 4px solid #666;
+}
+
+.toast.success { border-left-color: #2E7D32; }
+.toast.error { border-left-color: #C62828; }
+.toast.info { border-left-color: #1976D2; }
+.toast.warning { border-left-color: #E65100; }
+
+.toast-icon { font-size: 18px; }
+.toast.success .toast-icon { color: #2E7D32; }
+.toast.error .toast-icon { color: #C62828; }
+.toast.info .toast-icon { color: #1976D2; }
+.toast.warning .toast-icon { color: #E65100; }
+
+.toast-message {
+    color: #333;
+    font-size: 14px;
+    flex: 1;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fadeOut {
+    to { opacity: 0; }
+}
