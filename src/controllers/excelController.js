@@ -343,8 +343,8 @@ const excelController = {
                 // Col F(5): Serviço
                 // Col G(6): Valor
 
-                // Verificação básica: precisa ter Data (1) ou Nome (2)
-                if (!row[1] || !row[2]) return;
+                // Verificação básica: precisa ter Data (obrigatório)
+                if (!row[1]) return;
 
                 // Parse Data (Coluna B=1)
                 let dataIso = '';
@@ -377,12 +377,15 @@ const excelController = {
                 const pedidoId = `NBK-${timestamp}-${index + 1}`;
 
                 // Construir Objeto Pedido
+                // Se não tiver nome, usar CPF como identificação ou nome padrão
+                const nomeCliente = row[2] || row[3] || 'Cliente Nubank';
+                
                 const pedido = {
                     pedido_id: pedidoId,
                     data_pedido: dataIso,
                     data_emissao: dataIso,
-                    nome: row[2], // Coluna 2
-                    razao_social: row[2],
+                    nome: nomeCliente,
+                    razao_social: nomeCliente,
                     cpf_cnpj: row[3] || '',
                     email: row[4] || '',
                     valor_total: valor,

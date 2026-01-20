@@ -86,6 +86,78 @@ function createApiClient() {
 }
 
 /**
+ * Remove campos de telefone problemáticos do payload NFSe
+ * Evita erro RNG6110: campo fone vazio no XML
+ */
+function limparCamposTelefonePayload(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+
+  const limpo = { ...payload };
+  const camposRemovidos = [];
+  const camposModificados = [];
+
+  // Limpar no nível raiz (caso raro, mas possível)
+  if ('fone' in limpo) {
+    camposRemovidos.push('fone (raiz)');
+    delete limpo.fone;
+  }
+
+  // Limpar em tomador
+  if (limpo.tomador && typeof limpo.tomador === 'object') {
+    const tomadorOriginal = { ...limpo.tomador };
+    
+    // Remover fone se existir
+    if ('fone' in limpo.tomador) {
+      camposRemovidos.push('tomador.fone');
+      delete limpo.tomador.fone;
+    }
+    
+    // Limpar telefone se estiver vazio ou inválido
+    if (limpo.tomador.telefone !== undefined) {
+      const telefone = String(limpo.tomador.telefone || '').trim();
+      if (telefone === '' || telefone === 'null' || telefone === 'undefined' || telefone.length < 10) {
+        camposRemovidos.push('tomador.telefone (inválido)');
+        delete limpo.tomador.telefone;
+      } else if (telefone !== String(tomadorOriginal.telefone || '').trim()) {
+        camposModificados.push(`tomador.telefone: "${tomadorOriginal.telefone}" → "${telefone}"`);
+      }
+    }
+  }
+
+  // Limpar em destinatario (se existir)
+  if (limpo.destinatario && typeof limpo.destinatario === 'object') {
+    if ('fone' in limpo.destinatario) {
+      camposRemovidos.push('destinatario.fone');
+      delete limpo.destinatario.fone;
+    }
+    
+    if (limpo.destinatario.telefone !== undefined) {
+      const telefone = String(limpo.destinatario.telefone || '').trim();
+      if (telefone === '' || telefone === 'null' || telefone === 'undefined' || telefone.length < 10) {
+        camposRemovidos.push('destinatario.telefone (inválido)');
+        delete limpo.destinatario.telefone;
+      }
+    }
+  }
+
+  // Log detalhado se houver alterações
+  if (camposRemovidos.length > 0 || camposModificados.length > 0) {
+    logger.warn('Campos de telefone limpos do payload NFSe', {
+      service: 'focusNFe',
+      action: 'limpar_campos_telefone',
+      campos_removidos: camposRemovidos,
+      campos_modificados: camposModificados,
+      payload_antes: JSON.stringify(payload.tomador || {}),
+      payload_depois: JSON.stringify(limpo.tomador || {})
+    });
+  }
+
+  return limpo;
+}
+
+/**
  * Emite uma NFSe
  */
 async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipoNF = 'servico') {
@@ -389,8 +461,89 @@ async function emitirNFSe(dadosPedido, configEmitente, configFiscal = null, tipo
       valor_servicos: nfseData.servico?.valor_servicos
     });
 
+    // FIX: Garantir que telefone esteja presente ANTES da limpeza
+    // Se não houver telefone válido, adicionar telefone padrão primeiro
+    // Telefone padrão: +55 81 98875‑1104 (processado para 81988751104)
+    if (nfseData.tomador) {
+      const telefoneAtual = nfseData.tomador.telefone;
+      const telefoneValido = telefoneAtual && 
+                            String(telefoneAtual).trim() !== '' && 
+                            String(telefoneAtual).replace(/\D/g, '').length >= 10;
+      
+      if (!telefoneValido) {
+        // Telefone padrão fornecido pelo usuário: +55 81 98875‑1104
+        const telefonePadrao = '81988751104'; // DDD 81 + número (11 dígitos válidos)
+        nfseData.tomador.telefone = telefonePadrao;
+        logger.warn('Telefone padrão adicionado ao tomador ANTES da limpeza para evitar erro RNG6110', {
+          service: 'focusNFe',
+          action: 'emitir_nfse',
+          referencia,
+          telefone_anterior: telefoneAtual || 'ausente',
+          telefone_adicionado: telefonePadrao,
+          motivo: 'Campo telefone ausente ou inválido - Focus NFe adiciona fone vazio no XML se não houver telefone válido'
+        });
+      }
+    }
+
+    // FIX: Limpar campos de telefone problemáticos antes do envio
+    // Evita erro RNG6110: campo fone vazio no XML
+    const nfseDataLimpo = limparCamposTelefonePayload(nfseData);
+
+    // FIX: Garantir novamente que telefone esteja presente APÓS limpeza
+    // A limpeza pode ter removido o telefone se estiver inválido
+    if (nfseDataLimpo.tomador && !nfseDataLimpo.tomador.telefone) {
+      const telefonePadrao = '81988751104';
+      nfseDataLimpo.tomador.telefone = telefonePadrao;
+      logger.warn('Telefone padrão adicionado APÓS limpeza (telefone foi removido na limpeza)', {
+        service: 'focusNFe',
+        action: 'emitir_nfse',
+        referencia,
+        telefone_adicionado: telefonePadrao
+      });
+    }
+
+    // Log final do payload limpo (apenas se houver diferenças)
+    if (JSON.stringify(nfseData) !== JSON.stringify(nfseDataLimpo)) {
+      logger.debug('Payload limpo antes do envio', {
+        service: 'focusNFe',
+        action: 'emitir_nfse',
+        referencia,
+        diferenca_detectada: true,
+        tomador_keys_antes: Object.keys(nfseData.tomador || {}),
+        tomador_keys_depois: Object.keys(nfseDataLimpo.tomador || {})
+      });
+    }
+
+    // Verificação final: garantir que não há campos fone
+    const temFone = 'fone' in nfseDataLimpo || 
+                    (nfseDataLimpo.tomador && 'fone' in nfseDataLimpo.tomador) ||
+                    (nfseDataLimpo.destinatario && 'fone' in nfseDataLimpo.destinatario);
+
+    if (temFone) {
+      logger.error('ERRO: Campo fone ainda presente após limpeza!', {
+        service: 'focusNFe',
+        action: 'emitir_nfse',
+        referencia,
+        payload_tomador: JSON.stringify(nfseDataLimpo.tomador || {})
+      });
+    }
+
+    // Log FINAL do payload antes do envio (para debug do erro RNG6110)
+    logger.debug('Payload FINAL antes do envio para Focus NFe', {
+      service: 'focusNFe',
+      action: 'emitir_nfse',
+      referencia,
+      tem_tomador: !!nfseDataLimpo.tomador,
+      tem_telefone: !!(nfseDataLimpo.tomador && nfseDataLimpo.tomador.telefone),
+      telefone_value: nfseDataLimpo.tomador?.telefone || 'AUSENTE',
+      tem_fone: !!(nfseDataLimpo.tomador && nfseDataLimpo.tomador.fone),
+      fone_value: nfseDataLimpo.tomador?.fone || 'AUSENTE',
+      tomador_keys: nfseDataLimpo.tomador ? Object.keys(nfseDataLimpo.tomador) : [],
+      payload_tomador_completo: JSON.stringify(nfseDataLimpo.tomador || {})
+    });
+
     const inicioEnvio = Date.now();
-    const response = await api.post(`/nfse?ref=${referencia}`, nfseData);
+    const response = await api.post(`/nfse?ref=${referencia}`, nfseDataLimpo);
     const tempoResposta = Date.now() - inicioEnvio;
 
     logger.focusNFe('emitir_nfse', 'Resposta recebida da Focus NFe', {

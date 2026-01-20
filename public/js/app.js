@@ -3692,28 +3692,9 @@ function mostrarPopupDetalhesPedido(pedido) {
 
     body.appendChild(conteudo);
 
-    // Footer do modal
-    const footer = document.createElement('div');
-    footer.style.cssText = `
-        padding: 16px 20px;
-        border-top: 1px solid #dee2e6;
-        display: flex;
-        justify-content: flex-end;
-        background-color: var(--color-gray-light);
-    `;
-
-    const btnFecharFooter = document.createElement('button');
-    btnFecharFooter.textContent = 'Fechar';
-    btnFecharFooter.className = 'btn btn-secondary';
-    btnFecharFooter.style.cssText = 'padding: 8px 16px;';
-    btnFecharFooter.onclick = () => overlay.remove();
-
-    footer.appendChild(btnFecharFooter);
-
     // Montar modal
     modal.appendChild(header);
     modal.appendChild(body);
-    modal.appendChild(footer);
     overlay.appendChild(modal);
 
     // Fechar ao clicar no overlay (fora do modal)
@@ -6066,26 +6047,9 @@ async function verLogsNota(referencia) {
             body.innerHTML = logsHtml;
         }
 
-        // Footer
-        const footer = document.createElement('div');
-        footer.style.cssText = `
-            padding: 16px 20px;
-            border-top: 1px solid #dee2e6;
-            display: flex;
-            justify-content: flex-end;
-        `;
-
-        const btnFecharFooter = document.createElement('button');
-        btnFecharFooter.textContent = 'Fechar';
-        btnFecharFooter.className = 'btn btn-secondary';
-        btnFecharFooter.onclick = () => overlay.remove();
-
-        footer.appendChild(btnFecharFooter);
-
         // Montar modal
         modal.appendChild(header);
         modal.appendChild(body);
-        modal.appendChild(footer);
         overlay.appendChild(modal);
 
         // Fechar ao clicar fora

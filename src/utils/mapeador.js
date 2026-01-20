@@ -423,6 +423,88 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     }
   };
 
+  // FIX: Garantir que endereço do tomador esteja sempre completo
+  // Se algum campo faltar, usar endereço do prestador (emitente) como fallback
+  if (tomador.endereco) {
+    // Campos obrigatórios do endereço - usar dados do emitente como fallback
+    const enderecoOriginal = { ...tomador.endereco };
+    
+    tomador.endereco = {
+      logradouro: tomador.endereco.logradouro || configEmitente.logradouro || '',
+      numero: tomador.endereco.numero || configEmitente.numero || 'S/N',
+      bairro: tomador.endereco.bairro || configEmitente.bairro || '',
+      cidade: tomador.endereco.cidade || configEmitente.municipio || 'Ipojuca',
+      uf: tomador.endereco.uf || configEmitente.uf || 'PE',
+      codigo_municipio: tomador.endereco.codigo_municipio || configEmitente.codigo_municipio || '2607208',
+      cep: tomador.endereco.cep || configEmitente.cep || '55590000'
+    };
+
+    // Log se usar dados do emitente
+    const usouDadosEmitente = {
+      logradouro: !enderecoOriginal.logradouro && configEmitente.logradouro,
+      numero: !enderecoOriginal.numero && configEmitente.numero,
+      bairro: !enderecoOriginal.bairro && configEmitente.bairro,
+      cidade: !enderecoOriginal.cidade && configEmitente.municipio,
+      uf: !enderecoOriginal.uf && configEmitente.uf,
+      codigo_municipio: !enderecoOriginal.codigo_municipio && configEmitente.codigo_municipio,
+      cep: !enderecoOriginal.cep && configEmitente.cep
+    };
+
+    const camposUsadosDoEmitente = Object.keys(usouDadosEmitente).filter(campo => usouDadosEmitente[campo]);
+
+    if (camposUsadosDoEmitente.length > 0) {
+      logger.warn('Usando endereço do prestador para completar endereço do tomador', {
+        pedido_id: dadosPedido.pedido_id,
+        campos_preenchidos_com_emitente: camposUsadosDoEmitente,
+        endereco_original: {
+          logradouro: enderecoOriginal.logradouro || 'vazio',
+          numero: enderecoOriginal.numero || 'vazio',
+          bairro: enderecoOriginal.bairro || 'vazio',
+          cidade: enderecoOriginal.cidade || 'vazio',
+          uf: enderecoOriginal.uf || 'vazio',
+          codigo_municipio: enderecoOriginal.codigo_municipio || 'vazio',
+          cep: enderecoOriginal.cep || 'vazio'
+        },
+        endereco_final: tomador.endereco
+      });
+    }
+  }
+
+  // FIX: Adicionar telefone apenas se estiver presente e válido (não vazio)
+  // O campo telefone deve seguir o padrão TSTelefone (apenas números, sem caracteres especiais)
+  // Evita erro RNG6110: "The value '' is invalid according to its datatype 'TSTelefone'"
+  // IMPORTANTE: Conforme documentação Focus NFe, o campo no JSON é "telefone", não "fone"
+  if (dadosPedido.telefone && dadosPedido.telefone.trim() !== '') {
+    // Remover todos os caracteres não numéricos (incluindo +, espaços, hífens, parênteses, etc)
+    const telefoneLimpo = dadosPedido.telefone.replace(/\D/g, '');
+    // Validar que tenha pelo menos 10 dígitos (DDD + número)
+    // Aceita com ou sem código do país (55)
+    if (telefoneLimpo.length >= 10) {
+      // Se tiver código do país (55), remover para manter apenas DDD + número
+      // O Focus NFe espera formato brasileiro: DDD + número (10 ou 11 dígitos)
+      const telefoneFinal = telefoneLimpo.startsWith('55') && telefoneLimpo.length > 11
+        ? telefoneLimpo.substring(2) // Remove código do país
+        : telefoneLimpo;
+      
+      // Garantir que tenha entre 10 e 11 dígitos (DDD + número com 8 ou 9 dígitos)
+      if (telefoneFinal.length >= 10 && telefoneFinal.length <= 11) {
+        tomador.telefone = telefoneFinal; // CORREÇÃO: usar "telefone" conforme documentação
+      }
+    }
+  }
+
+  // FIX: Remover campo telefone se estiver vazio ou inválido (evita erro RNG6110)
+  if (tomador.telefone !== undefined) {
+    if (!tomador.telefone || tomador.telefone === '' || String(tomador.telefone).trim() === '') {
+      logger.warn('Removendo campo telefone vazio ou inválido do tomador', {
+        pedido_id: dadosPedido.pedido_id,
+        telefone_original: tomador.telefone,
+        telefone_origem: dadosPedido.telefone
+      });
+      delete tomador.telefone;
+    }
+  }
+
   // Remover campos undefined do tomador (mas não do endereco)
   Object.keys(tomador).forEach(key => {
     if (tomador[key] === undefined && key !== 'endereco') {
@@ -430,31 +512,56 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     }
   });
 
-  // Limpar campos vazios do endereco (exceto CEP, codigo_municipio e cidade que são obrigatórios)
-  Object.keys(tomador.endereco).forEach(key => {
-    if (key !== 'cep' && key !== 'codigo_municipio' && key !== 'cidade') {
-      if (tomador.endereco[key] === undefined || tomador.endereco[key] === '') {
-        delete tomador.endereco[key];
-      }
+  // FIX: Remover também campos que são strings vazias do tomador (exceto endereco)
+  Object.keys(tomador).forEach(key => {
+    if (key !== 'endereco' && typeof tomador[key] === 'string' && tomador[key].trim() === '') {
+      delete tomador[key];
     }
   });
 
-  // Garantir que CEP, codigo_municipio e cidade sempre estejam presentes
-  // FIX: CEP não é estritamente obrigatório se tivermos o código IBGE
-  // if (!tomador.endereco.cep || tomador.endereco.cep === '') {
-  //   throw new Error('CEP do tomador é obrigatório e não pode estar vazio.');
-  // }
-  // if (!tomador.endereco.codigo_municipio) {
-  //   throw new Error('Código IBGE do município do tomador é obrigatório e não foi obtido.');
-  // }
-  // Garantir que cidade esteja presente (Focus NFe exige mesmo com codigo_municipio)
-  if (!tomador.endereco.cidade || tomador.endereco.cidade === '') {
-    // Se não tiver cidade, tentar usar a cidade retornada pela API ou do pedido
-    tomador.endereco.cidade = cidadeCorreta || dadosPedido.endereco?.cidade || '';
-    // if (!tomador.endereco.cidade) {
-    //   throw new Error('Cidade do tomador é obrigatória e não foi obtida.');
-    // }
+  // FIX: NÃO remover campos do endereço após garantir que está completo
+  // O endereço já foi preenchido com valores padrão acima, então todos os campos devem estar presentes
+  // Remover campos vazios pode causar erro RNG6110 se o Focus NFe esperar campos específicos no XML
+  
+  // Garantir que todos os campos obrigatórios do endereço estejam presentes e válidos
+  // Se algum campo ainda estiver vazio após usar dados do emitente, usar valores padrão mínimos
+  if (!tomador.endereco.logradouro || tomador.endereco.logradouro.trim() === '') {
+    tomador.endereco.logradouro = 'Não informado';
   }
+  if (!tomador.endereco.numero || tomador.endereco.numero.trim() === '') {
+    tomador.endereco.numero = 'S/N';
+  }
+  if (!tomador.endereco.bairro || tomador.endereco.bairro.trim() === '') {
+    tomador.endereco.bairro = 'Centro';
+  }
+  if (!tomador.endereco.cidade || tomador.endereco.cidade.trim() === '') {
+    tomador.endereco.cidade = cidadeCorreta || dadosPedido.endereco?.cidade || 'Ipojuca';
+  }
+  if (!tomador.endereco.uf || tomador.endereco.uf.trim() === '') {
+    tomador.endereco.uf = ufCorreta || 'PE';
+  }
+  if (!tomador.endereco.codigo_municipio || tomador.endereco.codigo_municipio === '') {
+    tomador.endereco.codigo_municipio = codigoMunicipioTomador || configEmitente.codigo_municipio || '2607208';
+  }
+  if (!tomador.endereco.cep || tomador.endereco.cep.trim() === '') {
+    tomador.endereco.cep = cepTomador || configEmitente.cep || '55590000';
+  }
+
+  // Log se usar valores padrão mínimos
+  const enderecoCompleto = {
+    logradouro: tomador.endereco.logradouro,
+    numero: tomador.endereco.numero,
+    bairro: tomador.endereco.bairro,
+    cidade: tomador.endereco.cidade,
+    uf: tomador.endereco.uf,
+    codigo_municipio: tomador.endereco.codigo_municipio,
+    cep: tomador.endereco.cep
+  };
+  
+  logger.debug('Endereço do tomador garantido como completo', {
+    pedido_id: dadosPedido.pedido_id,
+    endereco_completo: enderecoCompleto
+  });
 
   // Discriminação dos serviços (juntar todos os produtos em uma string)
   const discriminacao = (dadosPedido.servicos || [])
@@ -469,7 +576,26 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
     regime_especial_tributacao: '3',
     // FIX: Incentivador cultural = 1 (Sim) conforme XML de sucesso (atual estava indo 2)
     incentivador_cultural: '1',
-    optante_simples_nacional: configEmitente.optante_simples_nacional !== false,
+    // FIX: Enviar como número (1 = Sim, 2 = Não) conforme XML de sucesso, não boolean
+    optante_simples_nacional: configEmitente.optante_simples_nacional !== false ? 1 : 2,
+    // FIX: Adicionar regime de apuração tributária (obrigatório para Simples Nacional - E2055)
+    // Campo correto conforme documentação Focus NFe: regime_tributario_simples_nacional
+    // 1 = Regime de apuração dos tributos federais e municipal pelo SN (todos os tributos dentro do SN)
+    // 2 = Regime de apuração dos tributos federais pelo SN e ISSQN por fora do SN
+    // 3 = Regime de apuração dos tributos federais e municipal por fora do SN
+    // Garantir que sempre tenha valor quando optante do Simples Nacional (padrão: 1)
+    regime_tributario_simples_nacional: (() => {
+      // Se tiver configurado explicitamente, usar
+      if (configFiscal?.regime_tributario_simples_nacional !== undefined && configFiscal?.regime_tributario_simples_nacional !== null) {
+        return configFiscal.regime_tributario_simples_nacional;
+      }
+      // Se for optante do Simples Nacional, sempre enviar 1 (Opção 1 - padrão mais comum)
+      if (configEmitente.optante_simples_nacional !== false) {
+        return 1;
+      }
+      // Se não for optante, não enviar o campo
+      return undefined;
+    })(),
 
     // Prestador
     // Nota: inscricao_municipal é opcional no schema, mas alguns municípios exigem
@@ -585,6 +711,65 @@ async function mapearPedidoParaNFSe(dadosPedido, configEmitente, configFiscal, t
   // Validar que valor_servicos é positivo
   if (nfse.servico.valor_servicos <= 0) {
     throw new Error(`Valor dos serviços deve ser maior que zero. Valor: ${nfse.servico.valor_servicos}`);
+  }
+
+  // FIX: Garantir que endereço do tomador esteja sempre presente e completo antes de sanitizar
+  // Isso evita erro RNG6110 e outros erros relacionados a endereço incompleto
+  if (nfse.tomador) {
+    // Garantir que endereço existe
+    if (!nfse.tomador.endereco) {
+      logger.warn('Endereço do tomador ausente - criando endereço completo com dados do prestador', {
+        pedido_id: dadosPedido.pedido_id
+      });
+      nfse.tomador.endereco = {
+        logradouro: configEmitente.logradouro || 'Não informado',
+        numero: configEmitente.numero || 'S/N',
+        bairro: configEmitente.bairro || 'Centro',
+        cidade: configEmitente.municipio || 'Ipojuca',
+        uf: configEmitente.uf || 'PE',
+        codigo_municipio: configEmitente.codigo_municipio || '2607208',
+        cep: configEmitente.cep || '55590000'
+      };
+    } else {
+      // Garantir que todos os campos do endereço estejam preenchidos
+      const endereco = nfse.tomador.endereco;
+      if (!endereco.logradouro || endereco.logradouro.trim() === '') {
+        endereco.logradouro = configEmitente.logradouro || 'Não informado';
+      }
+      if (!endereco.numero || endereco.numero.trim() === '') {
+        endereco.numero = configEmitente.numero || 'S/N';
+      }
+      if (!endereco.bairro || endereco.bairro.trim() === '') {
+        endereco.bairro = configEmitente.bairro || 'Centro';
+      }
+      if (!endereco.cidade || endereco.cidade.trim() === '') {
+        endereco.cidade = configEmitente.municipio || 'Ipojuca';
+      }
+      if (!endereco.uf || endereco.uf.trim() === '') {
+        endereco.uf = configEmitente.uf || 'PE';
+      }
+      if (!endereco.codigo_municipio || endereco.codigo_municipio === '') {
+        endereco.codigo_municipio = configEmitente.codigo_municipio || '2607208';
+      }
+      if (!endereco.cep || endereco.cep.trim() === '') {
+        endereco.cep = configEmitente.cep || '55590000';
+      }
+    }
+
+    // FIX: Garantir que campo telefone do tomador não esteja vazio antes de sanitizar
+    // Isso evita erro RNG6110 do schema XML
+    // IMPORTANTE: Conforme documentação Focus NFe, o campo no JSON é "telefone", não "fone"
+    if (nfse.tomador.telefone !== undefined) {
+      const telefoneValue = String(nfse.tomador.telefone || '').trim();
+      if (telefoneValue === '' || telefoneValue.length < 10) {
+        logger.warn('Removendo campo telefone inválido do tomador antes de sanitizar', {
+          pedido_id: dadosPedido.pedido_id,
+          telefone_value: nfse.tomador.telefone,
+          telefone_length: telefoneValue.length
+        });
+        delete nfse.tomador.telefone;
+      }
+    }
   }
 
   // Sanitizar payload antes de retornar
