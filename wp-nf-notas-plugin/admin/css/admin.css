@@ -1,0 +1,149 @@
+/* NF Notas Admin - Estilos para páginas do plugin (WP Admin) */
+.nf-notas-wrap .content-section {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.nf-notas-wrap .section-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 20px 0;
+    padding-left: 12px;
+    border-left: 3px solid #d63638;
+}
+
+.nf-notas-wrap .form-group {
+    margin-bottom: 16px;
+}
+
+.nf-notas-wrap .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+
+.nf-notas-wrap .form-input,
+.nf-notas-wrap .form-select,
+.nf-notas-wrap .form-textarea {
+    width: 100%;
+    max-width: 400px;
+    padding: 8px 12px;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.nf-notas-wrap .btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.nf-notas-wrap .btn-primary {
+    background: #d63638;
+    color: #fff;
+}
+
+.nf-notas-wrap .btn-primary:hover {
+    background: #b32d2e;
+}
+
+.nf-notas-wrap .btn-secondary {
+    background: #f0f0f1;
+    color: #1d2327;
+}
+
+.nf-notas-wrap .btn-secondary:hover {
+    background: #dcdcde;
+}
+
+.nf-notas-wrap .table-container {
+    overflow-x: auto;
+    margin-top: 16px;
+}
+
+.nf-notas-wrap .table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.nf-notas-wrap .table th,
+.nf-notas-wrap .table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid #c3c4c7;
+}
+
+.nf-notas-wrap .table th {
+    background: #f6f7f7;
+    font-weight: 600;
+}
+
+.nf-notas-wrap .table tbody tr:hover {
+    background: #f6f7f7;
+}
+
+.nf-notas-wrap .status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+}
+
+.nf-notas-wrap .status-autorizado { background: #d4edda; color: #155724; }
+.nf-notas-wrap .status-processando { background: #fff3cd; color: #856404; }
+.nf-notas-wrap .status-erro { background: #f8d7da; color: #721c24; }
+
+.nf-notas-wrap .loading {
+    text-align: center;
+    padding: 40px;
+    color: #646970;
+}
+
+.nf-notas-wrap .notice {
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-left: 4px solid #00a32a;
+    background: #edfaef;
+}
+
+.nf-notas-wrap .notice-error {
+    border-left-color: #d63638;
+    background: #fcf0f1;
+}
+
+.nf-notas-wrap .notice-warning {
+    border-left-color: #dba617;
+    background: #fcf9e8;
+}
+
+.nf-notas-wrap .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.nf-notas-wrap .card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px;
+}
+
+.nf-notas-wrap .card h3 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    color: #646970;
+}
+
+.nf-notas-wrap .card .value {
+    font-size: 24px;
+    font-weight: 600;
+}
