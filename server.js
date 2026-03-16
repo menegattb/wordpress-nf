@@ -39,6 +39,9 @@ const app = express();
   }
 })();
 
+// Trust proxy (Vercel, nginx, etc.) - necessário para cookies secure e req.ip corretos
+app.set('trust proxy', 1);
+
 // Middlewares
 app.use(cors({
   origin: true,
@@ -54,9 +57,16 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Configurar sessões (cookie-session = funciona em Vercel serverless, sessão no cookie)
-const sessionSecret = process.env.SESSION_SECRET || 'sua-chave-secreta-alterar-em-producao-' + Date.now();
 const isProduction = process.env.NODE_ENV === 'production';
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
+// IMPORTANTE: SESSION_SECRET deve estar definido na Vercel (Settings > Environment Variables)
+// Sem isso, cada cold start usa chave diferente e o login não persiste
+const sessionSecret = process.env.SESSION_SECRET || (() => {
+  if (isVercel || isProduction) {
+    console.error('⚠️ SESSION_SECRET não configurado! Configure em Vercel > Settings > Environment Variables');
+  }
+  return 'fallback-' + Date.now();
+})();
 
 app.use(cookieSession({
   name: 'mj-notas.sid',
@@ -64,7 +74,8 @@ app.use(cookieSession({
   maxAge: 24 * 60 * 60 * 1000, // 24 horas
   secure: isVercel || isProduction,
   httpOnly: true,
-  sameSite: 'lax'
+  sameSite: 'lax',
+  path: '/'
 }));
 
 // Middleware para verificar autenticação (não bloqueia, apenas adiciona info) - LOGIN DESABILITADO
