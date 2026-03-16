@@ -107,35 +107,15 @@ router.post('/login', async (req, res) => {
       action: 'login',
       username: username,
       ip: req.ip,
-      sessionId: req.sessionID,
       hasSession: !!req.session,
       authenticated: req.session.authenticated
     });
     
-    // Salvar sessão antes de enviar resposta
-    req.session.save((err) => {
-      if (err) {
-        logger.error('Erro ao salvar sessão', {
-          service: 'auth',
-          action: 'login',
-          error: err.message,
-          sessionId: req.sessionID
-        });
-        
-        return res.status(500).json({
-          sucesso: false,
-          erro: 'Erro ao salvar sessão',
-          mensagem: 'Não foi possível salvar a sessão. Tente novamente.'
-        });
-      }
-      
-      // Enviar resposta após salvar sessão
-      res.json({
-        sucesso: true,
-        mensagem: 'Login realizado com sucesso',
-        usuario: username,
-        sessionId: req.sessionID
-      });
+    // cookie-session salva automaticamente no cookie ao enviar resposta
+    res.json({
+      sucesso: true,
+      mensagem: 'Login realizado com sucesso',
+      usuario: username
     });
     
   } catch (error) {
@@ -161,32 +141,19 @@ router.post('/login', async (req, res) => {
 router.post('/logout', (req, res) => {
   const username = req.session?.usuario;
   
-  // Destruir sessão
-  req.session.destroy((err) => {
-    if (err) {
-      logger.error('Erro ao destruir sessão', {
-        service: 'auth',
-        action: 'logout',
-        error: err.message
-      });
-      
-      return res.status(500).json({
-        sucesso: false,
-        erro: 'Erro ao realizar logout'
-      });
-    }
-    
-    logger.info('Logout realizado com sucesso', {
-      service: 'auth',
-      action: 'logout',
-      username: username,
-      ip: req.ip
-    });
-    
-    res.json({
-      sucesso: true,
-      mensagem: 'Logout realizado com sucesso'
-    });
+  // Destruir sessão (cookie-session)
+  req.session = null;
+  
+  logger.info('Logout realizado com sucesso', {
+    service: 'auth',
+    action: 'logout',
+    username: username,
+    ip: req.ip
+  });
+  
+  res.json({
+    sucesso: true,
+    mensagem: 'Logout realizado com sucesso'
   });
 });
 

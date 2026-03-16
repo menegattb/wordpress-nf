@@ -4,7 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const cookieParser = require('cookie-parser');
-const session = require('express-session');
+const cookieSession = require('cookie-session');
 const logger = require('./src/services/logger');
 
 // Importar rotas
@@ -53,22 +53,18 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), stri
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Configurar sessões
+// Configurar sessões (cookie-session = funciona em Vercel serverless, sessão no cookie)
 const sessionSecret = process.env.SESSION_SECRET || 'sua-chave-secreta-alterar-em-producao-' + Date.now();
 const isProduction = process.env.NODE_ENV === 'production';
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
 
-app.use(session({
-  secret: sessionSecret,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: isVercel || isProduction, // HTTPS na Vercel e produção
-    httpOnly: true, // Não acessível via JavaScript
-    sameSite: 'lax', // Permite cookies em navegação cross-site
-    maxAge: 24 * 60 * 60 * 1000 // 24 horas
-  },
-  name: 'mj-notas.sid' // Nome customizado para o cookie
+app.use(cookieSession({
+  name: 'mj-notas.sid',
+  keys: [sessionSecret],
+  maxAge: 24 * 60 * 60 * 1000, // 24 horas
+  secure: isVercel || isProduction,
+  httpOnly: true,
+  sameSite: 'lax'
 }));
 
 // Middleware para verificar autenticação (não bloqueia, apenas adiciona info) - LOGIN DESABILITADO
@@ -112,7 +108,10 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/webhook', webhookRateLimiter, webhookRoutes); // Webhooks públicos
 app.use('/api/tenants', tenantRateLimiter, tenantRoutes); // Registrar/renovar token (ADMIN_SECRET ou token)
-app.use('/api/stripe', tenantRateLimiter, stripeRoutes); // Checkout Stripe
+// Stripe: só ativar se configurado (modelo manual não usa checkout)
+if (process.env.STRIPE_SECRET_KEY) {
+  app.use('/api/stripe', tenantRateLimiter, stripeRoutes);
+}
 
 // Rotas com tenant (optionalTenantAuth: injeta req.tenant_id quando token presente)
 app.use('/api/nfse', apiRateLimiter, optionalTenantAuth, nfseRoutes);

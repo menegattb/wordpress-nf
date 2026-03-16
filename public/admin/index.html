@@ -36,6 +36,16 @@
         .usage-over { color: var(--danger); }
         .loading { text-align: center; padding: 48px; color: var(--text-muted); }
         .error-msg { background: rgba(239,68,68,0.15); color: var(--danger); padding: 16px; border-radius: 8px; margin-bottom: 16px; }
+        .btn-primary { background: var(--accent); color: var(--bg); border: none; }
+        .btn-primary:hover { opacity: 0.9; }
+        .form-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+        .form-card h2 { font-size: 1rem; margin-bottom: 16px; }
+        .form-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+        .form-row input { flex: 1; min-width: 200px; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.9375rem; }
+        .form-row input:focus { outline: none; border-color: var(--accent); }
+        .token-result { background: var(--bg); border: 1px solid var(--accent); border-radius: 8px; padding: 16px; margin-top: 16px; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; word-break: break-all; }
+        .token-result .label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
+        .instructions { font-size: 0.8125rem; color: var(--text-muted); margin-top: 12px; line-height: 1.5; }
     </style>
 </head>
 <body>
@@ -49,6 +59,18 @@
     </header>
     <main class="main">
         <div id="error-container"></div>
+
+        <div class="form-card">
+            <h2>Criar cliente</h2>
+            <div class="form-row">
+                <input type="text" id="novo-nome" placeholder="Nome do cliente" />
+                <input type="text" id="novo-site" placeholder="URL do site (opcional)" />
+                <button class="btn btn-primary" id="btn-criar">Criar cliente</button>
+            </div>
+            <div id="token-result"></div>
+            <p class="instructions" id="instrucoes" style="display:none;">Envie ao cliente: plugin (ZIP) + token acima + URL da API (<span id="api-url"></span>). O cliente instala o plugin, cola o token em NF Notas &gt; Token API, e configura WooCommerce.</p>
+        </div>
+
         <div class="stats" id="stats">
             <div class="stat-card">
                 <div class="label">Total de clientes</div>
@@ -156,6 +178,41 @@
         btnLogout.addEventListener('click', async () => {
             await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
             window.location.href = '/admin/login';
+        });
+
+        document.getElementById('btn-criar').addEventListener('click', async () => {
+            const nome = document.getElementById('novo-nome').value.trim();
+            const tokenResult = document.getElementById('token-result');
+            const instrucoes = document.getElementById('instrucoes');
+            tokenResult.innerHTML = '';
+            instrucoes.style.display = 'none';
+            if (!nome) {
+                tokenResult.innerHTML = '<span style="color:var(--danger)">Informe o nome do cliente.</span>';
+                return;
+            }
+            try {
+                const res = await fetch('/api/admin/criar-cliente', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ nome, site_url: document.getElementById('novo-site').value.trim() || undefined })
+                });
+                const data = await res.json();
+                if (!data.sucesso) throw new Error(data.erro || data.mensagem || 'Erro');
+                const d = data.dados;
+                window._ultimoToken = d.token;
+                tokenResult.innerHTML = '<div class="label">Token (copie e envie ao cliente):</div><div style="margin-top:8px;background:var(--bg);padding:12px;border-radius:8px;font-family:JetBrains Mono,monospace;font-size:0.875rem;word-break:break-all">' + escapeHtml(d.token) + '</div><button class="btn" style="margin-top:8px" id="btn-copy-token">Copiar token</button>';
+                document.getElementById('btn-copy-token').onclick = function() {
+                    navigator.clipboard.writeText(window._ultimoToken || '').then(() => { this.textContent = 'Copiado!'; });
+                };
+                document.getElementById('api-url').textContent = d.api_url || window.location.origin;
+                instrucoes.style.display = 'block';
+                document.getElementById('novo-nome').value = '';
+                document.getElementById('novo-site').value = '';
+                loadDashboard();
+            } catch (e) {
+                tokenResult.innerHTML = '<span style="color:var(--danger)">' + escapeHtml(e.message || 'Erro ao criar cliente') + '</span>';
+            }
         });
 
         fetch('/api/auth/status', { credentials: 'include' }).then(r => r.json()).then(d => {

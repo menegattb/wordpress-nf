@@ -8,5 +8,6 @@ const adminController = require('../controllers/adminController');
 
 // Rota protegida por requireAuth no server.js (mount)
 router.get('/dashboard', adminController.getDashboard);
+router.post('/criar-cliente', adminController.criarCliente);
 
 module.exports = router;
