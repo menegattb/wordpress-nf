@@ -24,6 +24,17 @@ async function apiRequest(endpoint, options = {}) {
         const data = await response.json();
 
         if (!response.ok) {
+            // 402 = limite atingido - retornar dados para exibir mensagem com link de upgrade
+            if (response.status === 402 && data.erro === 'limite_atingido') {
+                return {
+                    sucesso: false,
+                    erro: 'limite_atingido',
+                    mensagem: data.mensagem || 'Limite de notas atingido.',
+                    upgrade_url: data.upgrade_url || '',
+                    usado: data.usado,
+                    limite: data.limite
+                };
+            }
             throw new Error(data.erro || data.mensagem || `Erro ${response.status}`);
         }
 

@@ -7,6 +7,7 @@ const { validarCPFCNPJ } = require('../services/validator');
 const { buscarPedidoPorId: buscarPedidoWC } = require('../services/woocommerce');
 const { mapearWooCommerceParaPedido } = require('../utils/mapeador');
 const { getConfigForTenant } = require('../services/tenantService');
+const { verificarLimite, registrarEmissao } = require('../services/usageService');
 const config = require('../../config');
 
 /**
@@ -110,6 +111,17 @@ async function emitirNFSeLote(req, res) {
 
         const pedidoMapeado = mapearWooCommerceParaPedido(resultadoWC.pedido);
 
+        const limiteCheck = await verificarLimite(tenantId);
+        if (!limiteCheck.pode) {
+          resultados.push({
+            pedido_id: pedidoId,
+            sucesso: false,
+            erro: limiteCheck.mensagem || 'Limite de notas atingido'
+          });
+          erros++;
+          continue;
+        }
+
         logger.info(`[${i + 1}/${pedido_ids.length}] Emitindo ${tipoNotaLabel}`, {
           pedido_id: pedidoId,
           tipo_nf: tipoNF,
@@ -122,6 +134,7 @@ async function emitirNFSeLote(req, res) {
         const tempoPedido = Date.now() - inicioPedido;
 
         if (resultadoNFSe.sucesso) {
+          await registrarEmissao(tenantId);
           logger.info(`[${i + 1}/${pedido_ids.length}] ${tipoNotaLabel} emitida com sucesso`, {
             pedido_id: pedidoId,
             referencia: resultadoNFSe.referencia,
@@ -252,10 +265,23 @@ async function processarLoteAsync(pedido_ids, tipoNF, jobId, tenantId = null) {
 
       const pedidoMapeado = mapearWooCommerceParaPedido(resultadoWC.pedido);
 
+      const limiteCheck = await verificarLimite(tenantId);
+      if (!limiteCheck.pode) {
+        logger.warn(`${progresso} Limite atingido - pulando ${pedidoId}`, {
+          job_id: jobId,
+          tenant_id: tenantId,
+          usado: limiteCheck.usado,
+          limite: limiteCheck.limite
+        });
+        erros++;
+        continue;
+      }
+
       // Emitir NFSe
       const resultadoNFSe = await emitirNFSe(pedidoMapeado, cfg.emitente, configFiscal, tipoNF, configFocus);
 
       if (resultadoNFSe.sucesso) {
+        await registrarEmissao(tenantId);
         logger.info(`${progresso} NFSe emitida com sucesso para ${pedidoId}`, {
           job_id: jobId,
           pedido_id: pedidoId,
@@ -336,8 +362,25 @@ async function emitirNFSeManual(req, res) {
       }
     }
 
+    // Verificar limite de notas
+    const limiteCheck = await verificarLimite(tenantId);
+    if (!limiteCheck.pode) {
+      return res.status(402).json({
+        sucesso: false,
+        erro: 'limite_atingido',
+        mensagem: limiteCheck.mensagem,
+        usado: limiteCheck.usado,
+        limite: limiteCheck.limite,
+        upgrade_url: (process.env.APP_URL || '').replace(/\/$/, '') + '/landing'
+      });
+    }
+
     // Emitir NFSe
     const resultado = await emitirNFSe(dadosPedido, cfg.emitente, configFiscal, 'servico', configFocus);
+
+    if (resultado.sucesso) {
+      await registrarEmissao(tenantId);
+    }
 
     if (resultado.sucesso && dadosPedido.pedido_id_db) {
       // Atualizar status do pedido
@@ -500,6 +543,18 @@ async function emitirTeste(req, res) {
     const configFiscal = cfg.fiscal || config.fiscal;
     const configFocus = tenantId && cfg.focusNFe ? { token: cfg.focusNFe.token, ambiente: cfg.focusNFe.ambiente } : null;
 
+    const limiteCheck = await verificarLimite(tenantId);
+    if (!limiteCheck.pode) {
+      return res.status(402).json({
+        sucesso: false,
+        erro: 'limite_atingido',
+        mensagem: limiteCheck.mensagem,
+        usado: limiteCheck.usado,
+        limite: limiteCheck.limite,
+        upgrade_url: (process.env.APP_URL || '').replace(/\/$/, '') + '/landing'
+      });
+    }
+
     let resultado;
 
     if (tipoNF === 'produto') {
@@ -508,6 +563,10 @@ async function emitirTeste(req, res) {
     } else {
       // Emitir NFSe de serviço
       resultado = await emitirNFSe(dadosTeste, cfg.emitente, configFiscal, tipoNF, configFocus);
+    }
+
+    if (resultado && resultado.sucesso) {
+      await registrarEmissao(tenantId);
     }
 
     res.json(resultado);

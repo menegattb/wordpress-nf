@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Admin — NF-Notas</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #0a0a0f; --surface: #12121a; --surface-elevated: #1a1a24; --text: #e8e8ed; --text-muted: #8b8b9a; --accent: #22c55e; --border: #2a2a36; --warn: #eab308; --danger: #ef4444; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 1.25rem; font-weight: 600; }
+        .header-actions { display: flex; gap: 12px; align-items: center; }
+        .header-actions span { font-size: 0.875rem; color: var(--text-muted); }
+        .btn { padding: 8px 16px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.875rem; cursor: pointer; text-decoration: none; font-family: inherit; }
+        .btn:hover { background: var(--border); }
+        .main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+        .stat-card .label { font-size: 0.8125rem; color: var(--text-muted); margin-bottom: 4px; }
+        .stat-card .value { font-size: 1.5rem; font-weight: 700; }
+        .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(255,255,255,0.02); }
+        .status { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 0.8125rem; font-weight: 500; }
+        .status-ativa { background: rgba(34,197,94,0.2); color: var(--accent); }
+        .status-cancelada { background: rgba(239,68,68,0.2); color: var(--danger); }
+        .status-atrasada { background: rgba(234,179,8,0.2); color: var(--warn); }
+        .status-sem { background: rgba(139,139,154,0.2); color: var(--text-muted); }
+        .usage { font-family: 'JetBrains Mono', monospace; font-size: 0.9375rem; }
+        .usage-over { color: var(--danger); }
+        .loading { text-align: center; padding: 48px; color: var(--text-muted); }
+        .error-msg { background: rgba(239,68,68,0.15); color: var(--danger); padding: 16px; border-radius: 8px; margin-bottom: 16px; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>📊 Dashboard Admin — NF-Notas</h1>
+        <div class="header-actions">
+            <span id="user-name"></span>
+            <a href="/admin" class="btn" onclick="location.reload()">Atualizar</a>
+            <button class="btn" id="btn-logout">Sair</button>
+        </div>
+    </header>
+    <main class="main">
+        <div id="error-container"></div>
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="label">Total de clientes</div>
+                <div class="value" id="stat-total">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Assinaturas ativas</div>
+                <div class="value" id="stat-ativas">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Notas este mês</div>
+                <div class="value" id="stat-notas">-</div>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Cliente</th>
+                        <th>Site / Email</th>
+                        <th>Notas (mês)</th>
+                        <th>Limite</th>
+                        <th>Status pagamento</th>
+                        <th>Período</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody">
+                    <tr><td colspan="6" class="loading">Carregando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+    <script>
+        const tbody = document.getElementById('tbody');
+        const errContainer = document.getElementById('error-container');
+        const statTotal = document.getElementById('stat-total');
+        const statAtivas = document.getElementById('stat-ativas');
+        const statNotas = document.getElementById('stat-notas');
+        const userName = document.getElementById('user-name');
+        const btnLogout = document.getElementById('btn-logout');
+
+        async function loadDashboard() {
+            try {
+                const res = await fetch('/api/admin/dashboard', { credentials: 'include' });
+                if (res.status === 401) {
+                    window.location.href = '/admin/login';
+                    return;
+                }
+                const data = await res.json();
+                if (!data.sucesso) throw new Error(data.erro || 'Erro ao carregar');
+                render(data);
+            } catch (e) {
+                errContainer.innerHTML = '<div class="error-msg">' + (e.message || 'Erro ao carregar dashboard') + '</div>';
+                tbody.innerHTML = '<tr><td colspan="6" class="loading">Erro ao carregar dados.</td></tr>';
+            }
+        }
+
+        function statusClass(s) {
+            if (!s || s === 'sem_assinatura') return 'status-sem';
+            if (s === 'ativa') return 'status-ativa';
+            if (s === 'cancelada') return 'status-cancelada';
+            if (s === 'atrasada') return 'status-atrasada';
+            return 'status-sem';
+        }
+
+        function statusLabel(s) {
+            const map = { ativa: 'Ativa', cancelada: 'Cancelada', atrasada: 'Atrasada', sem_assinatura: 'Sem assinatura' };
+            return map[s] || s || 'Sem assinatura';
+        }
+
+        function formatDate(d) {
+            if (!d) return '-';
+            const dt = new Date(d);
+            return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+
+        function render(data) {
+            const clientes = data.clientes || [];
+            statTotal.textContent = data.total_clientes || 0;
+            statAtivas.textContent = clientes.filter(c => c.status_assinatura === 'ativa').length;
+            statNotas.textContent = clientes.reduce((s, c) => s + (c.notas_mes_atual || 0), 0);
+
+            tbody.innerHTML = clientes.length === 0
+                ? '<tr><td colspan="6" class="loading">Nenhum cliente cadastrado.</td></tr>'
+                : clientes.map(c => {
+                    const over = (c.notas_mes_atual || 0) >= (c.limite_mensal || 100);
+                    return `<tr>
+                        <td><strong>${escapeHtml(c.nome)}</strong></td>
+                        <td><span style="font-size:0.875rem">${escapeHtml(c.site_url)}</span><br><span style="color:var(--text-muted);font-size:0.8125rem">${escapeHtml(c.email)}</span></td>
+                        <td><span class="usage ${over ? 'usage-over' : ''}">${c.notas_mes_atual || 0}</span></td>
+                        <td><span class="usage">${c.limite_mensal || 100}</span></td>
+                        <td><span class="status ${statusClass(c.status_assinatura)}">${statusLabel(c.status_assinatura)}</span></td>
+                        <td>${formatDate(c.periodo_fim)}</td>
+                    </tr>`;
+                }).join('');
+        }
+
+        function escapeHtml(s) {
+            if (!s) return '';
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        btnLogout.addEventListener('click', async () => {
+            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+            window.location.href = '/admin/login';
+        });
+
+        fetch('/api/auth/status', { credentials: 'include' }).then(r => r.json()).then(d => {
+            if (!d.autenticado) {
+                window.location.href = '/admin/login';
+                return;
+            }
+            userName.textContent = d.usuario || 'Admin';
+            loadDashboard();
+        }).catch(() => { window.location.href = '/admin/login'; });
+    </script>
+</body>
+</html>

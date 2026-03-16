@@ -110,12 +110,20 @@ class NF_Notas_Api_Client {
 
         if ($code >= 400) {
             $erro = is_array($data) ? ($data['erro'] ?? $data['mensagem'] ?? 'Erro na requisição') : 'Erro na requisição';
-            return array(
+            $ret = array(
                 'sucesso' => false,
                 'erro' => $erro,
                 'codigo' => $code,
                 'dados' => $data
             );
+            // 402 = limite atingido - incluir upgrade_url para exibir link
+            if ($code === 402 && is_array($data)) {
+                $ret['mensagem'] = $data['mensagem'] ?? $erro;
+                $ret['upgrade_url'] = $data['upgrade_url'] ?? (rtrim($this->base_url, '/') . '/landing');
+                $ret['usado'] = $data['usado'] ?? null;
+                $ret['limite'] = $data['limite'] ?? null;
+            }
+            return $ret;
         }
 
         return is_array($data) ? $data : array('sucesso' => true, 'dados' => $data);

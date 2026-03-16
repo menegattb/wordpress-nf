@@ -68,6 +68,16 @@ class NF_Notas_Webhook {
             ), 500);
         }
 
+        // 402 = limite de notas atingido - armazenar para exibir aviso no admin
+        if ($code === 402 && is_array($data) && isset($data['erro']) && $data['erro'] === 'limite_atingido') {
+            set_transient('nf_notas_limite_atingido', array(
+                'mensagem' => $data['mensagem'] ?? 'Limite de notas atingido.',
+                'upgrade_url' => $data['upgrade_url'] ?? (rtrim($api_url, '/') . '/landing'),
+                'usado' => $data['usado'] ?? null,
+                'limite' => $data['limite'] ?? null
+            ), 3600);
+        }
+
         return new WP_REST_Response($data ?: array(), $code >= 200 && $code < 300 ? 200 : $code);
     }
 }

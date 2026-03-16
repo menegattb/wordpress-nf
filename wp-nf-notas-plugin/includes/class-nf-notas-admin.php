@@ -22,6 +22,39 @@ class NF_Notas_Admin {
     public function __construct() {
         add_action('admin_menu', array($this, 'add_menu'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_assets'));
+        add_action('admin_notices', array($this, 'maybe_show_limite_atingido_notice'));
+    }
+
+    /**
+     * Exibe aviso quando limite de notas foi atingido (402 do webhook)
+     */
+    public function maybe_show_limite_atingido_notice() {
+        $screen = get_current_screen();
+        if (!$screen || strpos($screen->id, 'nf-notas') === false) {
+            return;
+        }
+
+        $info = get_transient('nf_notas_limite_atingido');
+        if (!$info || !is_array($info)) {
+            return;
+        }
+
+        $mensagem = esc_html($info['mensagem'] ?? 'Limite de notas atingido.');
+        $upgrade_url = esc_url($info['upgrade_url'] ?? '');
+        $usado = isset($info['usado']) ? (int) $info['usado'] : null;
+        $limite = isset($info['limite']) ? (int) $info['limite'] : null;
+
+        $detalhe = '';
+        if ($usado !== null && $limite !== null) {
+            $detalhe = sprintf(' (%d/%d notas este mês)', $usado, $limite);
+        }
+
+        echo '<div class="notice notice-warning is-dismissible"><p><strong>NF Notas:</strong> ';
+        echo esc_html($mensagem) . esc_html($detalhe);
+        if ($upgrade_url) {
+            echo ' <a href="' . $upgrade_url . '" target="_blank" rel="noopener" class="button button-primary" style="margin-left: 8px;">Fazer upgrade</a>';
+        }
+        echo '</p></div>';
     }
 
     public function add_menu() {

@@ -13,8 +13,13 @@ if (isset($result['dados']) && is_array($result['dados'])) {
     <h1><?php esc_html_e('Notas Fiscais', 'nf-notas'); ?></h1>
 
     <?php if (isset($result['erro'])): ?>
-    <div class="notice notice-error">
-        <p><?php echo esc_html($result['erro']); ?></p>
+    <div class="notice notice-<?php echo (isset($result['erro']) && $result['erro'] === 'limite_atingido') ? 'warning' : 'error'; ?>">
+        <p>
+            <?php echo esc_html($result['mensagem'] ?? $result['erro']); ?>
+            <?php if (isset($result['erro']) && $result['erro'] === 'limite_atingido' && !empty($result['upgrade_url'])): ?>
+                <a href="<?php echo esc_url($result['upgrade_url']); ?>" target="_blank" rel="noopener" class="button button-primary" style="margin-left: 8px;"><?php esc_html_e('Fazer upgrade', 'nf-notas'); ?></a>
+            <?php endif; ?>
+        </p>
     </div>
     <?php elseif (empty($notas)): ?>
     <div class="content-section">

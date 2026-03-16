@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NF-Notas — Emissão de notas fiscais para WooCommerce</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: #12121a;
+            --surface-elevated: #1a1a24;
+            --text: #e8e8ed;
+            --text-muted: #8b8b9a;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --border: #2a2a36;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'DM Sans', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        .landing {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 48px 24px 80px;
+        }
+        .logo {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 48px;
+        }
+        h1 {
+            font-size: clamp(2rem, 5vw, 2.75rem);
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+        .subtitle {
+            font-size: 1.125rem;
+            color: var(--text-muted);
+            margin-bottom: 40px;
+        }
+        .features {
+            display: grid;
+            gap: 16px;
+            margin-bottom: 48px;
+        }
+        .feature {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 16px 20px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+        .feature-icon {
+            width: 24px;
+            height: 24px;
+            background: var(--accent);
+            border-radius: 6px;
+            flex-shrink: 0;
+        }
+        .feature strong { display: block; margin-bottom: 4px; }
+        .feature span { color: var(--text-muted); font-size: 0.9375rem; }
+        .pricing {
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 40px;
+        }
+        .pricing h2 {
+            font-size: 1.25rem;
+            margin-bottom: 8px;
+        }
+        .pricing .price {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+        .pricing .price-note {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--text-muted);
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 1rem;
+            font-family: inherit;
+        }
+        .form-group input::placeholder {
+            color: var(--text-muted);
+            opacity: 0.7;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .btn-assinar {
+            width: 100%;
+            padding: 16px 24px;
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            border-radius: 10px;
+            font-size: 1.0625rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 8px;
+        }
+        .btn-assinar:hover {
+            background: var(--accent-hover);
+        }
+        .btn-assinar:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .error-msg {
+            color: #ef4444;
+            font-size: 0.875rem;
+            margin-top: 8px;
+        }
+        .footer-note {
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 32px;
+        }
+    </style>
+</head>
+<body>
+    <div class="landing">
+        <div class="logo">NF-Notas</div>
+        <h1>Emissão de notas fiscais para sua loja WooCommerce</h1>
+        <p class="subtitle">NFSe e NFe integradas ao Focus NFe. Configure uma vez e emita automaticamente.</p>
+
+        <div class="features">
+            <div class="feature">
+                <div class="feature-icon"></div>
+                <div>
+                    <strong>100 notas por mês incluídas</strong>
+                    <span>NFSe de serviço e NFe de produto no mesmo plano.</span>
+                </div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon"></div>
+                <div>
+                    <strong>Integração Focus NFe</strong>
+                    <span>Use seu próprio token Focus. Custos da Focus ficam com você.</span>
+                </div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon"></div>
+                <div>
+                    <strong>Plugin WordPress</strong>
+                    <span>Instale o plugin, cole o token e configure. Pronto para emitir.</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="pricing">
+            <h2>Plano Básico</h2>
+            <div class="price">R$ 49/mês</div>
+            <div class="price-note">Por site WordPress conectado. Taxa por nota extra acima de 100.</div>
+
+            <form id="form-checkout">
+                <div class="form-group">
+                    <label for="email">E-mail *</label>
+                    <input type="email" id="email" name="email" placeholder="seu@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="nome">Nome ou razão social</label>
+                    <input type="text" id="nome" name="nome" placeholder="Sua loja ou empresa">
+                </div>
+                <div class="form-group">
+                    <label for="site_url">URL do site WordPress</label>
+                    <input type="url" id="site_url" name="site_url" placeholder="https://minhaloja.com.br">
+                </div>
+                <div id="error-container"></div>
+                <button type="submit" class="btn-assinar" id="btn-assinar">Assinar agora</button>
+            </form>
+        </div>
+
+        <p class="footer-note">Pagamento seguro via Stripe. Cancele quando quiser.</p>
+    </div>
+
+    <script>
+        const form = document.getElementById('form-checkout');
+        const btn = document.getElementById('btn-assinar');
+        const errorContainer = document.getElementById('error-container');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            const nome = document.getElementById('nome').value.trim();
+            const site_url = document.getElementById('site_url').value.trim();
+
+            errorContainer.innerHTML = '';
+            btn.disabled = true;
+            btn.textContent = 'Redirecionando...';
+
+            try {
+                const base = window.location.origin;
+                const res = await fetch(base + '/api/stripe/create-checkout-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customer_email: email,
+                        nome: nome || undefined,
+                        site_url: site_url || undefined,
+                        success_url: base + '/obrigado',
+                        cancel_url: base + '/landing'
+                    })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.erro || 'Erro ao criar checkout');
+                }
+
+                if (data.url) {
+                    window.location.href = data.url;
+                } else {
+                    throw new Error('URL de checkout não retornada');
+                }
+            } catch (err) {
+                errorContainer.innerHTML = '<p class="error-msg">' + (err.message || 'Erro ao processar. Tente novamente.') + '</p>';
+                btn.disabled = false;
+                btn.textContent = 'Assinar agora';
+            }
+        });
+    </script>
+</body>
+</html>

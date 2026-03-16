@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — NF-Notas</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #0a0a0f; --surface: #12121a; --text: #e8e8ed; --text-muted: #8b8b9a; --accent: #22c55e; --border: #2a2a36; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+        .login-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 40px; width: 100%; max-width: 380px; }
+        h1 { font-size: 1.5rem; margin-bottom: 8px; }
+        .subtitle { color: var(--text-muted); font-size: 0.9375rem; margin-bottom: 28px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 0.875rem; color: var(--text-muted); margin-bottom: 6px; }
+        .form-group input { width: 100%; padding: 12px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 1rem; }
+        .form-group input:focus { outline: none; border-color: var(--accent); }
+        .btn { width: 100%; padding: 14px; background: var(--accent); color: var(--bg); border: none; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .error { background: #7f1d1d; color: #fecaca; padding: 12px; border-radius: 8px; font-size: 0.875rem; margin-bottom: 16px; display: none; }
+        .error.show { display: block; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h1>Painel Admin</h1>
+        <p class="subtitle">NF-Notas — Faça login para acessar o dashboard</p>
+        <div id="error" class="error"></div>
+        <form id="form">
+            <div class="form-group">
+                <label for="username">Usuário</label>
+                <input type="text" id="username" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label for="password">Senha</label>
+                <input type="password" id="password" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn" id="btn">Entrar</button>
+        </form>
+    </div>
+    <script>
+        const form = document.getElementById('form');
+        const btn = document.getElementById('btn');
+        const err = document.getElementById('error');
+        function showErr(m) { err.textContent = m; err.classList.add('show'); }
+        function hideErr() { err.classList.remove('show'); }
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideErr();
+            btn.disabled = true;
+            btn.textContent = 'Entrando...';
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ username: document.getElementById('username').value.trim(), password: document.getElementById('password').value })
+                });
+                const data = await res.json();
+                if (data.sucesso) {
+                    window.location.href = '/admin';
+                } else {
+                    showErr(data.erro || 'Erro ao fazer login');
+                    btn.disabled = false;
+                    btn.textContent = 'Entrar';
+                }
+            } catch (x) {
+                showErr('Erro de conexão. Tente novamente.');
+                btn.disabled = false;
+                btn.textContent = 'Entrar';
+            }
+        });
+        fetch('/api/auth/status', { credentials: 'include' }).then(r => r.json()).then(d => {
+            if (d.autenticado) window.location.href = '/admin';
+        }).catch(() => {});
+    </script>
+</body>
+</html>

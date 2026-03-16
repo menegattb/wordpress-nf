@@ -17,6 +17,8 @@ const configRoutes = require('./src/routes/config');
 const backupRoutes = require('./src/routes/backups');
 const excelRoutes = require('./src/routes/excel');
 const tenantRoutes = require('./src/routes/tenants');
+const stripeRoutes = require('./src/routes/stripe');
+const adminRoutes = require('./src/routes/admin');
 
 // Importar middleware de autenticação
 const { requireAuth, checkAuth } = require('./src/middleware/auth');
@@ -43,6 +45,11 @@ app.use(cors({
   credentials: true
 }));
 app.use(cookieParser());
+
+// Stripe webhook PRECISA do body raw para verificar assinatura - antes de express.json
+const stripeController = require('./src/controllers/stripeController');
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), stripeController.handleWebhook);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -102,9 +109,10 @@ app.use((req, res, next) => {
 });
 
 // Rotas públicas (não requerem autenticação)
-// app.use('/api/auth', authRoutes); // LOGIN DESABILITADO
+app.use('/api/auth', authRoutes);
 app.use('/api/webhook', webhookRateLimiter, webhookRoutes); // Webhooks públicos
 app.use('/api/tenants', tenantRateLimiter, tenantRoutes); // Registrar/renovar token (ADMIN_SECRET ou token)
+app.use('/api/stripe', tenantRateLimiter, stripeRoutes); // Checkout Stripe
 
 // Rotas com tenant (optionalTenantAuth: injeta req.tenant_id quando token presente)
 app.use('/api/nfse', apiRateLimiter, optionalTenantAuth, nfseRoutes);
@@ -113,6 +121,9 @@ app.use('/api/woocommerce', apiRateLimiter, optionalTenantAuth, woocommerceRoute
 app.use('/api/config', apiRateLimiter, optionalTenantAuth, configRoutes);
 app.use('/api/backups', apiRateLimiter, optionalTenantAuth, backupRoutes);
 app.use('/api/excel', apiRateLimiter, optionalTenantAuth, excelRoutes);
+
+// Rotas admin (requerem login)
+app.use('/api/admin', requireAuth, adminRoutes);
 
 // Função auxiliar para ler ambiente do .env
 function lerAmbienteDoEnv() {
@@ -204,6 +215,34 @@ app.post('/api/migrate', async (req, res) => { // requireAuth comentado
 // Rota raiz - servir index.html do front-end (protegida) - LOGIN DESABILITADO
 app.get('/', (req, res) => { // requireAuth comentado
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Landing e obrigado (páginas estáticas)
+app.get('/landing', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'landing.html'));
+});
+app.get('/obrigado', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'obrigado.html'));
+});
+
+// Admin: login e dashboard (requer autenticação para dashboard)
+app.get('/admin/login', (req, res) => {
+  if (req.session && req.session.authenticated) {
+    return res.redirect('/admin');
+  }
+  res.sendFile(path.join(__dirname, 'public', 'admin', 'login.html'));
+});
+app.get('/admin', (req, res) => {
+  if (!req.session || !req.session.authenticated) {
+    return res.redirect('/admin/login');
+  }
+  res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
+});
+app.get('/admin/', (req, res) => {
+  if (!req.session || !req.session.authenticated) {
+    return res.redirect('/admin/login');
+  }
+  res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
 });
 
 // Middleware de erro

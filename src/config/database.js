@@ -278,6 +278,60 @@ async function migrate() {
       console.warn('Aviso na migration 004:', e.message);
     }
 
+    // Migration 005: Assinaturas e uso mensal (SaaS)
+    console.log('Executando migration 005 (subscriptions)...');
+    try {
+      await sql.query('ALTER TABLE tenants ADD COLUMN IF NOT EXISTS email TEXT');
+      await sql.query('ALTER TABLE tenants ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT');
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS subscriptions (
+          id SERIAL PRIMARY KEY,
+          tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          stripe_customer_id TEXT,
+          stripe_subscription_id TEXT UNIQUE,
+          plano TEXT NOT NULL DEFAULT 'basico',
+          status TEXT NOT NULL DEFAULT 'ativa',
+          notas_incluidas INTEGER NOT NULL DEFAULT 100,
+          periodo_inicio TIMESTAMPTZ NOT NULL,
+          periodo_fim TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS usage_monthly (
+          id SERIAL PRIMARY KEY,
+          tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          ano INTEGER NOT NULL,
+          mes INTEGER NOT NULL,
+          notas_emitidas INTEGER NOT NULL DEFAULT 0,
+          notas_extras_cobradas INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(tenant_id, ano, mes)
+        )
+      `;
+
+      const subIndices = [
+        'CREATE INDEX IF NOT EXISTS idx_subscriptions_tenant ON subscriptions(tenant_id)',
+        'CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe ON subscriptions(stripe_subscription_id)',
+        'CREATE INDEX IF NOT EXISTS idx_usage_monthly_tenant ON usage_monthly(tenant_id)',
+        'CREATE INDEX IF NOT EXISTS idx_usage_monthly_periodo ON usage_monthly(tenant_id, ano, mes)'
+      ];
+      for (const idx of subIndices) {
+        try {
+          await sql.query(idx);
+        } catch (e) {
+          // Ignorar se já existir
+        }
+      }
+      console.log('✓ Migration 005 (subscriptions) executada');
+    } catch (e) {
+      console.warn('Aviso na migration 005:', e.message);
+    }
+
     console.log('✓ Todas as migrations executadas com sucesso');
   } catch (error) {
     console.error('Erro ao executar migrations:', error.message);
@@ -1546,16 +1600,101 @@ async function salvarTenant(dados) {
   }
 
   try {
-    const { token_hash, nome, site_url } = dados;
+    const { token_hash, nome, site_url, email, stripe_customer_id } = dados;
     const result = await sql`
-      INSERT INTO tenants (token_hash, nome, site_url)
-      VALUES (${token_hash}, ${nome || ''}, ${site_url || ''})
-      RETURNING id, nome, site_url, created_at
+      INSERT INTO tenants (token_hash, nome, site_url, email, stripe_customer_id)
+      VALUES (${token_hash}, ${nome || ''}, ${site_url || ''}, ${email || null}, ${stripe_customer_id || null})
+      RETURNING id, nome, site_url, email, created_at
     `;
     return result.rows[0];
   } catch (error) {
     console.error('Erro ao salvar tenant:', error.message);
     throw error;
+  }
+}
+
+/**
+ * Busca assinatura ativa de um tenant
+ */
+async function buscarAssinaturaAtiva(tenantId) {
+  if (!hasDatabase || !sql) {
+    return null;
+  }
+  try {
+    const result = await sql`
+      SELECT * FROM subscriptions
+      WHERE tenant_id = ${tenantId} AND status = 'ativa' AND periodo_fim > NOW()
+      ORDER BY periodo_fim DESC
+      LIMIT 1
+    `;
+    return result.rows.length > 0 ? result.rows[0] : null;
+  } catch (error) {
+    console.error('Erro ao buscar assinatura:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Cria ou atualiza assinatura
+ */
+async function salvarSubscription(dados) {
+  if (!hasDatabase || !sql) {
+    return null;
+  }
+  try {
+    const result = await sql`
+      INSERT INTO subscriptions (tenant_id, stripe_customer_id, stripe_subscription_id, plano, status, notas_incluidas, periodo_inicio, periodo_fim)
+      VALUES (${dados.tenant_id}, ${dados.stripe_customer_id || null}, ${dados.stripe_subscription_id || null}, ${dados.plano || 'basico'}, ${dados.status || 'ativa'}, ${dados.notas_incluidas || 100}, ${dados.periodo_inicio}, ${dados.periodo_fim})
+      RETURNING *
+    `;
+    return result.rows[0];
+  } catch (error) {
+    console.error('Erro ao salvar subscription:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Obtém ou cria registro de uso mensal
+ */
+async function getOrCreateUsageMonthly(tenantId, ano, mes) {
+  if (!hasDatabase || !sql) {
+    return { notas_emitidas: 0, notas_extras_cobradas: 0 };
+  }
+  try {
+    const result = await sql`
+      INSERT INTO usage_monthly (tenant_id, ano, mes, notas_emitidas, notas_extras_cobradas)
+      VALUES (${tenantId}, ${ano}, ${mes}, 0, 0)
+      ON CONFLICT (tenant_id, ano, mes)
+      DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+      RETURNING *
+    `;
+    return result.rows[0];
+  } catch (error) {
+    console.error('Erro ao getOrCreateUsageMonthly:', error.message);
+    return { notas_emitidas: 0, notas_extras_cobradas: 0 };
+  }
+}
+
+/**
+ * Incrementa contador de notas emitidas no mês
+ */
+async function incrementarNotasEmitidas(tenantId) {
+  if (!hasDatabase || !sql) {
+    return;
+  }
+  const now = new Date();
+  const ano = now.getFullYear();
+  const mes = now.getMonth() + 1;
+  try {
+    await sql`
+      INSERT INTO usage_monthly (tenant_id, ano, mes, notas_emitidas, notas_extras_cobradas)
+      VALUES (${tenantId}, ${ano}, ${mes}, 1, 0)
+      ON CONFLICT (tenant_id, ano, mes)
+      DO UPDATE SET notas_emitidas = usage_monthly.notas_emitidas + 1, updated_at = CURRENT_TIMESTAMP
+    `;
+  } catch (error) {
+    console.error('Erro ao incrementar notas:', error.message);
   }
 }
 
@@ -1598,6 +1737,49 @@ async function salvarConfiguracaoTenant(tenantId, chave, valor) {
   } catch (error) {
     console.error('Erro ao salvar config tenant:', error.message);
     return false;
+  }
+}
+
+/**
+ * Lista todos os tenants com uso mensal e status de assinatura (para dashboard admin)
+ */
+async function listarTenantsComUso() {
+  if (!hasDatabase || !sql) {
+    return [];
+  }
+  const now = new Date();
+  const ano = now.getFullYear();
+  const mes = now.getMonth() + 1;
+
+  try {
+    const result = await query(
+      `SELECT 
+        t.id,
+        t.nome,
+        t.site_url,
+        t.email,
+        t.created_at,
+        COALESCE(u.notas_emitidas, 0) AS notas_mes_atual,
+        s.status AS status_assinatura,
+        s.plano,
+        s.periodo_inicio,
+        s.periodo_fim,
+        s.notas_incluidas
+      FROM tenants t
+      LEFT JOIN usage_monthly u ON u.tenant_id = t.id AND u.ano = $1 AND u.mes = $2
+      LEFT JOIN (
+        SELECT DISTINCT ON (tenant_id) tenant_id, status, plano, periodo_inicio, periodo_fim, notas_incluidas
+        FROM subscriptions
+        ORDER BY tenant_id, periodo_fim DESC
+      ) s ON s.tenant_id = t.id
+      WHERE t.ativo = true
+      ORDER BY t.nome ASC`,
+      [ano, mes]
+    );
+    return result.rows || [];
+  } catch (error) {
+    console.error('Erro ao listar tenants com uso:', error.message);
+    return [];
   }
 }
 
@@ -1654,9 +1836,14 @@ module.exports = {
   carregarConfiguracoesFocus,
   buscarTenantPorTokenHash,
   salvarTenant,
+  buscarAssinaturaAtiva,
+  salvarSubscription,
+  getOrCreateUsageMonthly,
+  incrementarNotasEmitidas,
   buscarConfiguracaoTenant,
   salvarConfiguracaoTenant,
   listarConfiguracoesTenant,
+  listarTenantsComUso,
   listarNFe,
   atualizarNFe,
   salvarLog,

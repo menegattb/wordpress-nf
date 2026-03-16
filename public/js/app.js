@@ -34,6 +34,19 @@ function parseDateSafe(str) {
     return isNaN(d.getTime()) ? null : d;
 }
 
+/**
+ * Formata mensagem de erro quando limite de notas é atingido (402)
+ * Retorna mensagem para exibir e URL de upgrade se disponível
+ */
+function formatarErroLimite(resultado) {
+    if (resultado && resultado.erro === 'limite_atingido') {
+        const msg = resultado.mensagem || 'Limite de notas atingido. Faça upgrade para continuar.';
+        const url = resultado.upgrade_url || '';
+        return { mensagem: msg, upgrade_url: url };
+    }
+    return null;
+}
+
 let estadoAtual = {
     secaoAtiva: 'meus-dados',
     paginaAtual: 1,
@@ -4666,10 +4679,14 @@ async function emitirNFTeste(tipoNF) {
             console.log(msg);
             alert(msg);
         } else {
-            const erroMsg = resultado.mensagem || resultado.erro || 'Erro desconhecido';
-            const msg = `✗ Erro: ${erroMsg}`;
+            const limiteInfo = formatarErroLimite(resultado);
+            const erroMsg = limiteInfo ? limiteInfo.mensagem : (resultado.mensagem || resultado.erro || 'Erro desconhecido');
+            const msg = `✗ ${erroMsg}${limiteInfo && limiteInfo.upgrade_url ? '\n\nClique OK para abrir a página de upgrade.' : ''}`;
             console.error(msg);
             alert(msg);
+            if (limiteInfo && limiteInfo.upgrade_url) {
+                window.open(limiteInfo.upgrade_url, '_blank');
+            }
         }
     } catch (error) {
         const msg = `✗ Erro ao emitir ${tipoNF === 'produto' ? 'NFe' : 'NFSe'}: ${error.message}`;
@@ -4999,13 +5016,15 @@ async function emitirNFSePedido(pedidoId) {
                 }
             }
         } else {
-            const erroMsg = resultadoEmissao.erro || 'Erro desconhecido';
+            const limiteInfo = formatarErroLimite(resultadoEmissao);
+            const erroMsg = limiteInfo ? (limiteInfo.mensagem + (limiteInfo.upgrade_url ? ' Faça upgrade em: ' + limiteInfo.upgrade_url : '')) : (resultadoEmissao.erro || 'Erro desconhecido');
             console.error('[DEBUG] Erro na emissão (resultadoEmissao):', erroMsg);
             if (tipoNF === 'servico') {
                 adicionarLogMesServico(mes, 'ERROR', `✗ Erro ao emitir ${tipoNFLabel}: ${erroMsg}`, {
                     pedido_id: pedidoId,
                     tipo: tipoNF,
-                    erro: erroMsg
+                    erro: erroMsg,
+                    upgrade_url: limiteInfo ? limiteInfo.upgrade_url : undefined
                 });
                 await carregarLogsMesServico(mes);
 
@@ -7232,7 +7251,12 @@ async function emitirNotaExcel(pedidoId) {
             }
             await carregarPedidosExcel();
         } else {
-            mostrarFeedbackExcel('error', `Erro ao emitir: ${res.erro}`);
+            const limiteInfo = formatarErroLimite(res);
+            const msg = limiteInfo ? (limiteInfo.mensagem + (limiteInfo.upgrade_url ? ' Acesse a página de upgrade para continuar.' : '')) : res.erro;
+            mostrarFeedbackExcel('error', `Erro ao emitir: ${msg}`);
+            if (limiteInfo && limiteInfo.upgrade_url) {
+                mostrarFeedbackExcel('info', 'Abra ' + limiteInfo.upgrade_url + ' para fazer upgrade.');
+            }
             // Restaurar botão original em caso de erro
             if (row && originalButtonHtml) {
                 row.cells[7].innerHTML = originalButtonHtml;

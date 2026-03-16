@@ -3,6 +3,7 @@ const { mapearWooCommerceParaPedido } = require('../utils/mapeador');
 const { salvarPedido, buscarPedidoPorPedidoId, atualizarPedido, salvarNFSe, atualizarNFSe, buscarNFSePorReferencia, salvarNFe, atualizarNFe, buscarNFePorReferencia } = require('../config/database');
 const { emitirNFe } = require('../services/focusNFe');
 const { getConfigForTenant } = require('../services/tenantService');
+const { verificarLimite, registrarEmissao } = require('../services/usageService');
 const config = require('../../config');
 
 /**
@@ -176,6 +177,25 @@ async function processarWebhook(req, res) {
       const configFiscal = cfg.fiscal || config.fiscal;
       const configFocus = tenantId && cfg.focusNFe ? { token: cfg.focusNFe.token, ambiente: cfg.focusNFe.ambiente } : null;
 
+      // Verificar limite de notas (tenant com assinatura)
+      const limiteCheck = await verificarLimite(tenantId);
+      if (!limiteCheck.pode) {
+        logger.webhook('Limite de notas atingido - emissão bloqueada', {
+          pedido_id: dadosPedido.pedido_id,
+          tenant_id: tenantId,
+          usado: limiteCheck.usado,
+          limite: limiteCheck.limite
+        });
+        return res.status(402).json({
+          sucesso: false,
+          erro: 'limite_atingido',
+          mensagem: limiteCheck.mensagem,
+          usado: limiteCheck.usado,
+          limite: limiteCheck.limite,
+          upgrade_url: (process.env.APP_URL || '').replace(/\/$/, '') + '/landing'
+        });
+      }
+
       // Emitir NFe automaticamente para produtos (Livro Faíscas)
       logger.webhook('Iniciando emissão automática de NFe (Produto)', {
         pedido_id: dadosPedido.pedido_id,
@@ -188,6 +208,7 @@ async function processarWebhook(req, res) {
         const resultado = await emitirNFe(dadosPedido, cfg.emitente, configFiscal, configFocus);
         
         if (resultado.sucesso) {
+          await registrarEmissao(tenantId);
           logger.webhook('NFe emitida com sucesso automaticamente', {
             pedido_id: dadosPedido.pedido_id,
             referencia: resultado.referencia,

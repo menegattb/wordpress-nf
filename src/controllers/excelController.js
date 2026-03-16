@@ -4,6 +4,7 @@ const nfseController = require('./nfseController'); // Reutilizar lógica de emi
 const logger = require('../services/logger');
 const { parseEndereco } = require('../utils/parseEndereco');
 const { getConfigForTenant } = require('../services/tenantService');
+const { verificarLimite, registrarEmissao } = require('../services/usageService');
 
 // Função auxiliar para mapear pedido da planilha para o formato esperado pelo emitirNFSe
 function mapSheetToEmission(sheetRow) {
@@ -317,6 +318,19 @@ const excelController = {
                 throw errMap;
             }
 
+            // 2.5 Verificar limite de notas
+            const limiteCheck = await verificarLimite(tenantId);
+            if (!limiteCheck.pode) {
+                return res.status(402).json({
+                    sucesso: false,
+                    erro: 'limite_atingido',
+                    mensagem: limiteCheck.mensagem,
+                    usado: limiteCheck.usado,
+                    limite: limiteCheck.limite,
+                    upgrade_url: (process.env.APP_URL || '').replace(/\/$/, '') + '/landing'
+                });
+            }
+
             // 4. Tentar emitir — se falhar por ref já usada, gerar nova ref e tentar de novo
             let resultado;
             try {
@@ -351,6 +365,11 @@ const excelController = {
                     nova_referencia: dadosPedido.referencia
                 });
                 resultado = await focusNFe.emitirNFSe(dadosPedido, configEmitente, configFiscal, 'servico', configFocus);
+            }
+
+            // 4.5 Registrar emissão após sucesso
+            if (resultado && resultado.sucesso) {
+                await registrarEmissao(tenantId);
             }
 
             // 5. Atualizar planilha com resultado
