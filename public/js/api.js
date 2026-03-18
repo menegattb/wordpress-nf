@@ -2,14 +2,26 @@
 
 const API_BASE_URL = '';
 
+function getAdminTenantId() {
+    const match = window.location.pathname.match(/\/admin\/cliente\/(\d+)/);
+    return match ? match[1] : null;
+}
+
 /**
  * Função genérica para fazer requisições
  */
 async function apiRequest(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
+    const tenantId = getAdminTenantId();
+    const extraHeaders = {};
+    if (tenantId) {
+        extraHeaders['X-Admin-Tenant'] = tenantId;
+    }
     const config = {
+        credentials: 'include',
         headers: {
             'Content-Type': 'application/json',
+            ...extraHeaders,
             ...options.headers
         },
         ...options

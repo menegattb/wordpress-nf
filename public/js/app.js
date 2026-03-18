@@ -117,11 +117,27 @@ async function logout() {
  * Inicialização da aplicação
  */
 document.addEventListener('DOMContentLoaded', async () => {
-    // Verificar autenticação primeiro - LOGIN DESABILITADO
-    // const autenticado = await verificarAutenticacao();
-    // if (!autenticado) {
-    //     return; // Redirecionamento já foi feito
-    // }
+    // Se estiver em /admin/cliente/:id, mostrar banner de contexto
+    const adminTenantId = typeof getAdminTenantId === 'function' ? getAdminTenantId() : null;
+    if (adminTenantId) {
+        const banner = document.createElement('div');
+        banner.style.cssText = 'background:#1e3a5f;color:#93c5fd;padding:10px 24px;font-size:0.9375rem;display:flex;align-items:center;justify-content:space-between;font-family:inherit;';
+        banner.innerHTML = '<span id="admin-banner-text">Visualizando cliente #' + adminTenantId + '</span><a href="/admin" style="color:#93c5fd;font-weight:600;text-decoration:none;padding:4px 12px;border:1px solid #93c5fd;border-radius:6px;">Voltar ao admin</a>';
+        document.body.insertBefore(banner, document.body.firstChild);
+        // Buscar nome do cliente
+        fetch('/api/admin/tenant/' + adminTenantId + '/config', { credentials: 'include' })
+            .then(r => r.json())
+            .then(() => {
+                fetch('/api/admin/dashboard', { credentials: 'include' })
+                    .then(r => r.json())
+                    .then(d => {
+                        if (d.sucesso) {
+                            const c = (d.clientes || []).find(x => x.id === parseInt(adminTenantId));
+                            if (c) document.getElementById('admin-banner-text').textContent = 'Visualizando: ' + c.nome;
+                        }
+                    }).catch(() => {});
+            }).catch(() => {});
+    }
 
     // Verificar se Components está disponível
     if (!window.Components) {

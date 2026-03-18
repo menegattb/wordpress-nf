@@ -23,6 +23,7 @@ const adminRoutes = require('./src/routes/admin');
 // Importar middleware de autenticação
 const { requireAuth, checkAuth } = require('./src/middleware/auth');
 const { optionalTenantAuth, requireTenantAuth } = require('./src/middleware/tenantAuth');
+const { adminTenantImpersonate } = require('./src/middleware/adminTenant');
 const { apiRateLimiter, webhookRateLimiter, tenantRateLimiter } = require('./src/middleware/rateLimit');
 
 const app = express();
@@ -78,8 +79,8 @@ app.use(cookieSession({
   path: '/'
 }));
 
-// Middleware para verificar autenticação (não bloqueia, apenas adiciona info) - LOGIN DESABILITADO
-// app.use(checkAuth);
+// Admin pode visualizar dados de um tenant via header X-Admin-Tenant (impersonação)
+app.use(adminTenantImpersonate);
 
 // Servir arquivos estáticos da pasta public (exceto login.html - LOGIN DESABILITADO)
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -158,21 +159,20 @@ app.get('/health', async (req, res) => {
   let tabelas = [];
 
   try {
-    const { sql } = require('@vercel/postgres');
-    const result = await sql`SELECT NOW() as time, current_database() as db`;
+    const { query: dbQuery } = require('./src/config/database');
+    const result = await dbQuery('SELECT NOW() as time, current_database() as db');
     dbStatus = 'conectado';
     dbInfo = {
       database: result.rows[0]?.db,
       time: result.rows[0]?.time
     };
 
-    // Listar tabelas existentes
-    const tabelasResult = await sql`
+    const tabelasResult = await dbQuery(`
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public'
       ORDER BY table_name
-    `;
+    `);
     tabelas = tabelasResult.rows.map(r => r.table_name);
   } catch (err) {
     dbStatus = 'erro: ' + err.message;
@@ -253,6 +253,14 @@ app.get('/admin/', (req, res) => {
     return res.redirect('/admin/login');
   }
   res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
+});
+
+// Admin: visao do cliente (serve o mesmo index.html, JS detecta tenant na URL)
+app.get('/admin/cliente/:id', (req, res) => {
+  if (!req.session || !req.session.authenticated) {
+    return res.redirect('/admin/login');
+  }
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Middleware de erro

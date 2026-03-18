@@ -7,14 +7,14 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     <style>
-        :root { --bg: #0a0a0f; --surface: #12121a; --surface-elevated: #1a1a24; --text: #e8e8ed; --text-muted: #8b8b9a; --accent: #22c55e; --border: #2a2a36; --warn: #eab308; --danger: #ef4444; }
+        :root { --bg: #0a0a0f; --surface: #12121a; --surface-elevated: #1a1a24; --text: #e8e8ed; --text-muted: #8b8b9a; --accent: #22c55e; --border: #2a2a36; --warn: #eab308; --danger: #ef4444; --blue: #3b82f6; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
         .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
         .header h1 { font-size: 1.25rem; font-weight: 600; }
         .header-actions { display: flex; gap: 12px; align-items: center; }
         .header-actions span { font-size: 0.875rem; color: var(--text-muted); }
-        .btn { padding: 8px 16px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.875rem; cursor: pointer; text-decoration: none; font-family: inherit; }
+        .btn { padding: 8px 16px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.875rem; cursor: pointer; text-decoration: none; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; }
         .btn:hover { background: var(--border); }
         .main { max-width: 1200px; margin: 0 auto; padding: 24px; }
         .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
@@ -38,19 +38,34 @@
         .error-msg { background: rgba(239,68,68,0.15); color: var(--danger); padding: 16px; border-radius: 8px; margin-bottom: 16px; }
         .btn-primary { background: var(--accent); color: var(--bg); border: none; }
         .btn-primary:hover { opacity: 0.9; }
+        .btn-blue { background: var(--blue); color: #fff; border: none; font-size: 0.8125rem; padding: 6px 12px; }
+        .btn-blue:hover { opacity: 0.9; }
+        .btn-sm { font-size: 0.8125rem; padding: 6px 12px; }
         .form-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
         .form-card h2 { font-size: 1rem; margin-bottom: 16px; }
         .form-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-        .form-row input { flex: 1; min-width: 200px; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.9375rem; }
+        .form-row input { flex: 1; min-width: 200px; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.9375rem; font-family: inherit; }
         .form-row input:focus { outline: none; border-color: var(--accent); }
         .token-result { background: var(--bg); border: 1px solid var(--accent); border-radius: 8px; padding: 16px; margin-top: 16px; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; word-break: break-all; }
         .token-result .label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
         .instructions { font-size: 0.8125rem; color: var(--text-muted); margin-top: 12px; line-height: 1.5; }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 100; }
+        .modal-overlay.show { display: flex; }
+        .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; width: 100%; max-width: 520px; }
+        .modal h3 { font-size: 1.125rem; margin-bottom: 20px; }
+        .modal .form-group { margin-bottom: 14px; }
+        .modal .form-group label { display: block; font-size: 0.8125rem; color: var(--text-muted); margin-bottom: 6px; }
+        .modal .form-group input { width: 100%; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.9375rem; font-family: inherit; }
+        .modal .form-group input:focus { outline: none; border-color: var(--accent); }
+        .modal .form-group input[readonly] { color: var(--text-muted); cursor: default; }
+        .modal-actions { display: flex; gap: 12px; margin-top: 20px; }
+        .success-msg { background: rgba(34,197,94,0.15); color: var(--accent); padding: 10px; border-radius: 8px; font-size: 0.875rem; margin-top: 12px; display: none; }
+        .td-actions { white-space: nowrap; }
     </style>
 </head>
 <body>
     <header class="header">
-        <h1>📊 Dashboard Admin — NF-Notas</h1>
+        <h1>Dashboard Admin — NF-Notas</h1>
         <div class="header-actions">
             <span id="user-name"></span>
             <a href="/admin" class="btn" onclick="location.reload()">Atualizar</a>
@@ -68,22 +83,16 @@
                 <button class="btn btn-primary" id="btn-criar">Criar cliente</button>
             </div>
             <div id="token-result"></div>
-            <p class="instructions" id="instrucoes" style="display:none;">Envie ao cliente: plugin (ZIP) + token acima + URL da API (<span id="api-url"></span>). O cliente instala o plugin, cola o token em NF Notas &gt; Token API, e configura WooCommerce.</p>
+            <p class="instructions" id="instrucoes" style="display:none;">
+                Envie ao cliente: token acima + URL do webhook (<span id="webhook-url-display" style="font-family:'JetBrains Mono',monospace"></span>).
+                O cliente configura o webhook no WooCommerce apontando para essa URL.
+            </p>
         </div>
 
         <div class="stats" id="stats">
-            <div class="stat-card">
-                <div class="label">Total de clientes</div>
-                <div class="value" id="stat-total">-</div>
-            </div>
-            <div class="stat-card">
-                <div class="label">Assinaturas ativas</div>
-                <div class="value" id="stat-ativas">-</div>
-            </div>
-            <div class="stat-card">
-                <div class="label">Notas este mês</div>
-                <div class="value" id="stat-notas">-</div>
-            </div>
+            <div class="stat-card"><div class="label">Total de clientes</div><div class="value" id="stat-total">-</div></div>
+            <div class="stat-card"><div class="label">Assinaturas ativas</div><div class="value" id="stat-ativas">-</div></div>
+            <div class="stat-card"><div class="label">Notas este mes</div><div class="value" id="stat-notas">-</div></div>
         </div>
         <div class="table-wrap">
             <table>
@@ -91,10 +100,10 @@
                     <tr>
                         <th>Cliente</th>
                         <th>Site / Email</th>
-                        <th>Notas (mês)</th>
+                        <th>Notas (mes)</th>
                         <th>Limite</th>
-                        <th>Status pagamento</th>
-                        <th>Período</th>
+                        <th>Status</th>
+                        <th>Acoes</th>
                     </tr>
                 </thead>
                 <tbody id="tbody">
@@ -103,6 +112,39 @@
             </table>
         </div>
     </main>
+
+    <!-- Modal Config WooCommerce -->
+    <div class="modal-overlay" id="modal-config">
+        <div class="modal">
+            <h3 id="modal-title">Configurar WooCommerce</h3>
+            <div class="form-group">
+                <label>URL do webhook (envie ao cliente)</label>
+                <input type="text" id="cfg-webhook-url" readonly />
+            </div>
+            <div class="form-group">
+                <label>WooCommerce URL</label>
+                <input type="text" id="cfg-woo-url" placeholder="https://loja.com" />
+            </div>
+            <div class="form-group">
+                <label>WooCommerce API URL</label>
+                <input type="text" id="cfg-woo-api-url" placeholder="https://loja.com/wp-json/wc/v3" />
+            </div>
+            <div class="form-group">
+                <label>Consumer Key</label>
+                <input type="text" id="cfg-woo-key" placeholder="ck_..." />
+            </div>
+            <div class="form-group">
+                <label>Consumer Secret</label>
+                <input type="text" id="cfg-woo-secret" placeholder="cs_..." />
+            </div>
+            <div class="success-msg" id="cfg-success">Configuracao salva!</div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" id="cfg-save">Salvar</button>
+                <button class="btn" id="cfg-close">Fechar</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const tbody = document.getElementById('tbody');
         const errContainer = document.getElementById('error-container');
@@ -112,39 +154,39 @@
         const userName = document.getElementById('user-name');
         const btnLogout = document.getElementById('btn-logout');
 
+        let clientesData = [];
+
         async function loadDashboard() {
             try {
                 const res = await fetch('/api/admin/dashboard', { credentials: 'include' });
-                if (res.status === 401) {
-                    window.location.href = '/admin/login';
-                    return;
-                }
+                if (res.status === 401) { window.location.href = '/admin/login'; return; }
                 const data = await res.json();
                 if (!data.sucesso) throw new Error(data.erro || 'Erro ao carregar');
+                clientesData = data.clientes || [];
                 render(data);
             } catch (e) {
-                errContainer.innerHTML = '<div class="error-msg">' + (e.message || 'Erro ao carregar dashboard') + '</div>';
+                errContainer.innerHTML = '<div class="error-msg">' + esc(e.message || 'Erro') + '</div>';
                 tbody.innerHTML = '<tr><td colspan="6" class="loading">Erro ao carregar dados.</td></tr>';
             }
         }
 
         function statusClass(s) {
             if (!s || s === 'sem_assinatura') return 'status-sem';
-            if (s === 'ativa') return 'status-ativa';
-            if (s === 'cancelada') return 'status-cancelada';
-            if (s === 'atrasada') return 'status-atrasada';
-            return 'status-sem';
+            return 'status-' + s;
         }
-
         function statusLabel(s) {
             const map = { ativa: 'Ativa', cancelada: 'Cancelada', atrasada: 'Atrasada', sem_assinatura: 'Sem assinatura' };
             return map[s] || s || 'Sem assinatura';
         }
-
         function formatDate(d) {
             if (!d) return '-';
-            const dt = new Date(d);
-            return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+        function esc(s) {
+            if (!s) return '';
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
         }
 
         function render(data) {
@@ -158,38 +200,82 @@
                 : clientes.map(c => {
                     const over = (c.notas_mes_atual || 0) >= (c.limite_mensal || 100);
                     return `<tr>
-                        <td><strong>${escapeHtml(c.nome)}</strong></td>
-                        <td><span style="font-size:0.875rem">${escapeHtml(c.site_url)}</span><br><span style="color:var(--text-muted);font-size:0.8125rem">${escapeHtml(c.email)}</span></td>
+                        <td><strong>${esc(c.nome)}</strong></td>
+                        <td><span style="font-size:0.875rem">${esc(c.site_url)}</span><br><span style="color:var(--text-muted);font-size:0.8125rem">${esc(c.email)}</span></td>
                         <td><span class="usage ${over ? 'usage-over' : ''}">${c.notas_mes_atual || 0}</span></td>
                         <td><span class="usage">${c.limite_mensal || 100}</span></td>
                         <td><span class="status ${statusClass(c.status_assinatura)}">${statusLabel(c.status_assinatura)}</span></td>
-                        <td>${formatDate(c.periodo_fim)}</td>
+                        <td class="td-actions">
+                            <a href="/admin/cliente/${c.id}" class="btn btn-blue btn-sm">Entrar</a>
+                            <button class="btn btn-sm" onclick="openConfig(${c.id})">Config</button>
+                        </td>
                     </tr>`;
                 }).join('');
         }
 
-        function escapeHtml(s) {
-            if (!s) return '';
-            const d = document.createElement('div');
-            d.textContent = s;
-            return d.innerHTML;
+        // -- Config Modal --
+        let currentConfigId = null;
+        const modal = document.getElementById('modal-config');
+        const cfgSuccess = document.getElementById('cfg-success');
+
+        async function openConfig(tenantId) {
+            currentConfigId = tenantId;
+            cfgSuccess.style.display = 'none';
+            const c = clientesData.find(x => x.id === tenantId);
+            document.getElementById('modal-title').textContent = 'Config WooCommerce — ' + (c?.nome || '#' + tenantId);
+            document.getElementById('cfg-webhook-url').value = c?.webhook_url || '(sem webhook_id)';
+
+            try {
+                const res = await fetch('/api/admin/tenant/' + tenantId + '/config', { credentials: 'include' });
+                const data = await res.json();
+                if (data.sucesso) {
+                    document.getElementById('cfg-woo-url').value = data.config.woocommerce_url || '';
+                    document.getElementById('cfg-woo-api-url').value = data.config.woocommerce_api_url || '';
+                    document.getElementById('cfg-woo-key').value = data.config.woocommerce_consumer_key || '';
+                    document.getElementById('cfg-woo-secret').value = data.config.woocommerce_consumer_secret || '';
+                }
+            } catch (e) { /* ignore */ }
+            modal.classList.add('show');
         }
 
-        btnLogout.addEventListener('click', async () => {
-            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-            window.location.href = '/admin/login';
-        });
+        document.getElementById('cfg-close').onclick = () => modal.classList.remove('show');
+        modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('show'); };
 
+        document.getElementById('cfg-save').onclick = async () => {
+            cfgSuccess.style.display = 'none';
+            const body = {
+                woocommerce_url: document.getElementById('cfg-woo-url').value.trim(),
+                woocommerce_api_url: document.getElementById('cfg-woo-api-url').value.trim(),
+                woocommerce_consumer_key: document.getElementById('cfg-woo-key').value.trim(),
+                woocommerce_consumer_secret: document.getElementById('cfg-woo-secret').value.trim()
+            };
+            try {
+                const res = await fetch('/api/admin/tenant/' + currentConfigId + '/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (data.sucesso) {
+                    cfgSuccess.style.display = 'block';
+                    setTimeout(() => { cfgSuccess.style.display = 'none'; }, 3000);
+                } else {
+                    alert(data.erro || 'Erro ao salvar');
+                }
+            } catch (e) {
+                alert('Erro de conexao');
+            }
+        };
+
+        // -- Criar cliente --
         document.getElementById('btn-criar').addEventListener('click', async () => {
             const nome = document.getElementById('novo-nome').value.trim();
             const tokenResult = document.getElementById('token-result');
             const instrucoes = document.getElementById('instrucoes');
             tokenResult.innerHTML = '';
             instrucoes.style.display = 'none';
-            if (!nome) {
-                tokenResult.innerHTML = '<span style="color:var(--danger)">Informe o nome do cliente.</span>';
-                return;
-            }
+            if (!nome) { tokenResult.innerHTML = '<span style="color:var(--danger)">Informe o nome.</span>'; return; }
             try {
                 const res = await fetch('/api/admin/criar-cliente', {
                     method: 'POST',
@@ -198,28 +284,36 @@
                     body: JSON.stringify({ nome, site_url: document.getElementById('novo-site').value.trim() || undefined })
                 });
                 const data = await res.json();
-                if (!data.sucesso) throw new Error(data.erro || data.mensagem || 'Erro');
+                if (!data.sucesso) throw new Error(data.erro || 'Erro');
                 const d = data.dados;
                 window._ultimoToken = d.token;
-                tokenResult.innerHTML = '<div class="label">Token (copie e envie ao cliente):</div><div style="margin-top:8px;background:var(--bg);padding:12px;border-radius:8px;font-family:JetBrains Mono,monospace;font-size:0.875rem;word-break:break-all">' + escapeHtml(d.token) + '</div><button class="btn" style="margin-top:8px" id="btn-copy-token">Copiar token</button>';
+                tokenResult.innerHTML = `
+                    <div class="label">Token (copie e envie ao cliente):</div>
+                    <div style="margin-top:8px;background:var(--bg);padding:12px;border-radius:8px;font-family:JetBrains Mono,monospace;font-size:0.875rem;word-break:break-all">${esc(d.token)}</div>
+                    <button class="btn" style="margin-top:8px" id="btn-copy-token">Copiar token</button>
+                `;
                 document.getElementById('btn-copy-token').onclick = function() {
                     navigator.clipboard.writeText(window._ultimoToken || '').then(() => { this.textContent = 'Copiado!'; });
                 };
-                document.getElementById('api-url').textContent = d.api_url || window.location.origin;
+                document.getElementById('webhook-url-display').textContent = d.webhook_url || '';
                 instrucoes.style.display = 'block';
                 document.getElementById('novo-nome').value = '';
                 document.getElementById('novo-site').value = '';
                 loadDashboard();
             } catch (e) {
-                tokenResult.innerHTML = '<span style="color:var(--danger)">' + escapeHtml(e.message || 'Erro ao criar cliente') + '</span>';
+                tokenResult.innerHTML = '<span style="color:var(--danger)">' + esc(e.message) + '</span>';
             }
         });
 
+        // -- Logout --
+        btnLogout.addEventListener('click', async () => {
+            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+            window.location.href = '/admin/login';
+        });
+
+        // -- Init --
         fetch('/api/auth/status', { credentials: 'include' }).then(r => r.json()).then(d => {
-            if (!d.autenticado) {
-                window.location.href = '/admin/login';
-                return;
-            }
+            if (!d.autenticado) { window.location.href = '/admin/login'; return; }
             userName.textContent = d.usuario || 'Admin';
             loadDashboard();
         }).catch(() => { window.location.href = '/admin/login'; });

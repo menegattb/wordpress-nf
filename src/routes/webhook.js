@@ -3,6 +3,24 @@ const router = express.Router();
 const webhookController = require('../controllers/webhookController');
 const webhookFocusController = require('../controllers/webhookFocusController');
 const { optionalTenantAuth } = require('../middleware/tenantAuth');
+const { buscarTenantPorWebhookId } = require('../config/database');
+
+/**
+ * POST /api/webhook/woocommerce/:webhookId
+ * Recebe webhook do WooCommerce identificado por webhook_id na URL
+ */
+router.post('/woocommerce/:webhookId', async (req, res, next) => {
+  try {
+    const tenant = await buscarTenantPorWebhookId(req.params.webhookId);
+    if (tenant) {
+      req.tenant_id = tenant.id;
+      req.tenant = tenant;
+    }
+    next();
+  } catch (e) {
+    next();
+  }
+}, webhookController.processarWebhook);
 
 /**
  * POST /api/webhook/woocommerce

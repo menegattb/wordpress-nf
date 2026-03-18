@@ -64,19 +64,39 @@ function saveStorageToFile() {
   }
 }
 
+// Criar template tag sql compatível com @vercel/postgres usando pg Pool
+function createSqlTag(pool) {
+  const tag = function(strings, ...values) {
+    const text = strings.reduce((acc, str, i) => acc + str + (i < values.length ? `$${i + 1}` : ''), '');
+    return pool.query(text, values);
+  };
+  tag.query = (text, params) => pool.query(text, params || []);
+  return tag;
+}
+
 // Tentar conectar ao banco
 try {
-  if (process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL) {
-    sql = require('@vercel/postgres').sql;
+  const connString = process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL;
+  if (connString) {
+    const { Pool } = require('pg');
+    const finalConnString = connString.includes('sslmode=require') && !connString.includes('uselibpqcompat')
+      ? connString + '&uselibpqcompat=true'
+      : connString;
+    const pool = new Pool({
+      connectionString: finalConnString,
+      ssl: { rejectUnauthorized: false },
+      max: 10,
+      idleTimeoutMillis: 30000
+    });
+    sql = createSqlTag(pool);
     hasDatabase = true;
-    console.log('✓ Banco de dados Vercel Postgres configurado');
+    console.log('✓ Banco de dados Postgres configurado');
   } else {
     console.log('⚠ Banco de dados não configurado - usando armazenamento em memória');
-    // Carregar dados do arquivo se não houver banco
     loadStorageFromFile();
   }
 } catch (error) {
-  console.log('⚠ Erro ao carregar @vercel/postgres - usando armazenamento em memória');
+  console.log('⚠ Erro ao carregar pg - usando armazenamento em memória:', error.message);
   hasDatabase = false;
   // Carregar dados do arquivo se não houver banco
   loadStorageFromFile();
@@ -330,6 +350,15 @@ async function migrate() {
       console.log('✓ Migration 005 (subscriptions) executada');
     } catch (e) {
       console.warn('Aviso na migration 005:', e.message);
+    }
+
+    // Migration 006: webhook_id para tenants
+    console.log('Executando migration 006 (webhook_id)...');
+    try {
+      await sql.query('ALTER TABLE tenants ADD COLUMN IF NOT EXISTS webhook_id TEXT UNIQUE');
+      console.log('✓ Migration 006 (webhook_id) executada');
+    } catch (e) {
+      console.warn('Aviso na migration 006:', e.message);
     }
 
     console.log('✓ Todas as migrations executadas com sucesso');
@@ -1600,11 +1629,11 @@ async function salvarTenant(dados) {
   }
 
   try {
-    const { token_hash, nome, site_url, email, stripe_customer_id } = dados;
+    const { token_hash, nome, site_url, email, stripe_customer_id, webhook_id } = dados;
     const result = await sql`
-      INSERT INTO tenants (token_hash, nome, site_url, email, stripe_customer_id)
-      VALUES (${token_hash}, ${nome || ''}, ${site_url || ''}, ${email || null}, ${stripe_customer_id || null})
-      RETURNING id, nome, site_url, email, created_at
+      INSERT INTO tenants (token_hash, nome, site_url, email, stripe_customer_id, webhook_id)
+      VALUES (${token_hash}, ${nome || ''}, ${site_url || ''}, ${email || null}, ${stripe_customer_id || null}, ${webhook_id || null})
+      RETURNING id, nome, site_url, email, webhook_id, created_at
     `;
     return result.rows[0];
   } catch (error) {
@@ -1741,6 +1770,27 @@ async function salvarConfiguracaoTenant(tenantId, chave, valor) {
 }
 
 /**
+ * Busca tenant pelo webhook_id (usado na URL do webhook WooCommerce)
+ */
+async function buscarTenantPorWebhookId(webhookId) {
+  if (!hasDatabase || !sql) {
+    return null;
+  }
+
+  try {
+    const result = await sql`
+      SELECT id, nome, site_url, webhook_id, ativo
+      FROM tenants
+      WHERE webhook_id = ${webhookId} AND ativo = true
+    `;
+    return result.rows.length > 0 ? result.rows[0] : null;
+  } catch (error) {
+    console.error('Erro ao buscar tenant por webhook_id:', error.message);
+    return null;
+  }
+}
+
+/**
  * Lista todos os tenants com uso mensal e status de assinatura (para dashboard admin)
  */
 async function listarTenantsComUso() {
@@ -1753,11 +1803,12 @@ async function listarTenantsComUso() {
 
   try {
     const result = await query(
-      `SELECT 
+      `      SELECT 
         t.id,
         t.nome,
         t.site_url,
         t.email,
+        t.webhook_id,
         t.created_at,
         COALESCE(u.notas_emitidas, 0) AS notas_mes_atual,
         s.status AS status_assinatura,
@@ -1835,6 +1886,7 @@ module.exports = {
   buscarConfiguracao,
   carregarConfiguracoesFocus,
   buscarTenantPorTokenHash,
+  buscarTenantPorWebhookId,
   salvarTenant,
   buscarAssinaturaAtiva,
   salvarSubscription,

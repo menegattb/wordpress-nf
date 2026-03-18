@@ -6,6 +6,9 @@
 const config = require('../../config');
 const { listarConfiguracoesTenant } = require('../config/database');
 
+const cache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
 /**
  * Converte chaves planas do tenant_config em objeto de configuração
  * compatível com config.js (focusNFe, emitente, fiscal, woocommerce)
@@ -67,27 +70,40 @@ function buildConfigFromFlat(flat) {
 }
 
 /**
- * Obtém configuração completa para um tenant
- * Prioridade: tenant_config > config.js
- *
- * @param {number} tenantId - ID do tenant
- * @returns {Promise<Object>} Config { focusNFe, emitente, fiscal, woocommerce }
+ * Obtém configuração completa para um tenant (com cache de 5 min)
  */
 async function getConfigForTenant(tenantId) {
   if (!tenantId) {
     return config;
   }
 
+  const cached = cache.get(tenantId);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) {
+    return cached.config;
+  }
+
   const flat = await listarConfiguracoesTenant(tenantId);
 
   if (Object.keys(flat).length === 0) {
+    cache.set(tenantId, { config, ts: Date.now() });
     return config;
   }
 
-  return buildConfigFromFlat(flat);
+  const tenantConfig = buildConfigFromFlat(flat);
+  cache.set(tenantId, { config: tenantConfig, ts: Date.now() });
+  return tenantConfig;
+}
+
+function invalidateCache(tenantId) {
+  if (tenantId) {
+    cache.delete(tenantId);
+  } else {
+    cache.clear();
+  }
 }
 
 module.exports = {
   getConfigForTenant,
-  buildConfigFromFlat
+  buildConfigFromFlat,
+  invalidateCache
 };
