@@ -13,9 +13,22 @@ class GoogleSheetsService {
         if (this.initialized) return;
 
         try {
-            const credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS;
+            // Tentar carregar credenciais do banco de dados primeiro
+            let credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS;
+            let sheetsId = this.spreadsheetId || process.env.GOOGLE_SHEETS_ID;
+
+            try {
+                const { buscarConfiguracao } = require('../config/database');
+                const dbId = await buscarConfiguracao('GOOGLE_SHEETS_ID');
+                const dbCred = await buscarConfiguracao('GOOGLE_SHEETS_CREDENTIALS');
+                if (dbId) sheetsId = dbId;
+                if (dbCred) credentialsJson = dbCred;
+            } catch (e) { /* db not available, use env */ }
+
+            this.spreadsheetId = sheetsId;
+
             if (!credentialsJson || !this.spreadsheetId) {
-                logger.warn('Credenciais do Google Sheets não configuradas no .env');
+                logger.warn('Credenciais do Google Sheets não configuradas');
                 return;
             }
 

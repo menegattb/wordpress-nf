@@ -250,6 +250,7 @@ const PedidosAPI = {
      */
     async listarLogs(filtros = {}) {
         const params = new URLSearchParams();
+        if (filtros.referencia) params.append('referencia', filtros.referencia);
         if (filtros.pedido_ids) {
             if (Array.isArray(filtros.pedido_ids)) {
                 filtros.pedido_ids.forEach(id => params.append('pedido_ids', id));
@@ -418,6 +419,47 @@ const ConfigAPI = {
      */
     async getFocus() {
         return await apiRequest('/api/config/focus');
+    },
+
+    async getCategoriasProduto() {
+        return await apiRequest('/api/config/categorias-produto');
+    },
+
+    async salvarCategoriasProduto(categorias) {
+        return await apiRequest('/api/config/categorias-produto', {
+            method: 'POST',
+            body: { categorias }
+        });
+    },
+
+    async getCategoriasWoo() {
+        return await apiRequest('/api/woocommerce/categorias');
+    },
+
+    async getAutoEmitir() {
+        return await apiRequest('/api/config/auto-emitir');
+    },
+
+    async setAutoEmitir(ativo) {
+        return await apiRequest('/api/config/auto-emitir', {
+            method: 'POST',
+            body: { ativo }
+        });
+    },
+
+    async getGoogleSheets() {
+        return await apiRequest('/api/config/google-sheets');
+    },
+
+    async salvarGoogleSheets(sheetsId, credentialsJson) {
+        return await apiRequest('/api/config/google-sheets', {
+            method: 'POST',
+            body: { sheets_id: sheetsId, credentials_json: credentialsJson }
+        });
+    },
+
+    async testarGoogleSheets() {
+        return await apiRequest('/api/config/google-sheets/testar', { method: 'POST' });
     },
 
     /**

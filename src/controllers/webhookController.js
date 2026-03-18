@@ -1,49 +1,77 @@
 const logger = require('../services/logger');
 const { mapearWooCommerceParaPedido } = require('../utils/mapeador');
-const { salvarPedido, buscarPedidoPorPedidoId, atualizarPedido, salvarNFSe, atualizarNFSe, buscarNFSePorReferencia, salvarNFe, atualizarNFe, buscarNFePorReferencia } = require('../config/database');
+const { salvarPedido, buscarPedidoPorPedidoId, atualizarPedido, salvarNFSe, atualizarNFSe, buscarNFSePorReferencia, salvarNFe, atualizarNFe, buscarNFePorReferencia, buscarConfiguracaoTenant, buscarConfiguracao } = require('../config/database');
 const { emitirNFe } = require('../services/focusNFe');
 const { getConfigForTenant } = require('../services/tenantService');
 const { verificarLimite, registrarEmissao } = require('../services/usageService');
 const config = require('../../config');
 
+async function isAutoEmitirAtivo(tenantId) {
+  let valor = null;
+  if (tenantId) {
+    valor = await buscarConfiguracaoTenant(tenantId, 'AUTO_EMITIR');
+  }
+  if (valor === null) {
+    valor = await buscarConfiguracao('AUTO_EMITIR');
+  }
+  return valor === 'true' || valor === '1';
+}
+
 /**
- * Verifica se o pedido contém produtos da categoria "Livro Faíscas"
- * Se sim, deve emitir NFe (produto), caso contrário NFSe (serviço)
+ * Verifica se o pedido contém produtos cujas categorias estão configuradas como produto.
+ * Carrega CATEGORIAS_PRODUTO do banco; fallback para ["Livro Faíscas"].
+ * Se sim, emitir NFe (produto). Caso contrário, NFSe (serviço).
  */
-function verificarTipoNota(pedidoWC) {
-  const categoriasLivro = ['livro faíscas', 'livro faiscas', 'livros faíscas', 'livros faiscas'];
-  
+async function verificarTipoNota(pedidoWC, tenantId) {
+  let categoriasConfig = [];
+  try {
+    let valor = null;
+    if (tenantId) {
+      valor = await buscarConfiguracaoTenant(tenantId, 'CATEGORIAS_PRODUTO');
+    }
+    if (!valor) {
+      valor = await buscarConfiguracao('CATEGORIAS_PRODUTO');
+    }
+    if (valor) {
+      categoriasConfig = JSON.parse(valor);
+    }
+  } catch (e) { /* fallback */ }
+
+  if (!categoriasConfig || categoriasConfig.length === 0) {
+    categoriasConfig = ['Livro Faíscas'];
+  }
+
+  const normalize = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const catsLower = categoriasConfig.map(normalize);
+
   if (!pedidoWC.line_items || !Array.isArray(pedidoWC.line_items)) {
-    return 'servico'; // Padrão: serviço
+    return 'servico';
   }
   
   for (const item of pedidoWC.line_items) {
-    // Verificar categorias do item
     if (item.categories && Array.isArray(item.categories)) {
       for (const cat of item.categories) {
-        const nomeCategoria = (typeof cat === 'string' ? cat : cat.name || '').toLowerCase();
-        if (categoriasLivro.some(c => nomeCategoria.includes(c))) {
-          return 'produto'; // É livro, emitir NFe
+        const nome = normalize(typeof cat === 'string' ? cat : cat.name);
+        if (catsLower.some(c => nome.includes(c) || c.includes(nome))) {
+          return 'produto';
         }
       }
     }
-    // Verificar categoria direta
     if (item.category) {
-      const nomeCategoria = (typeof item.category === 'string' ? item.category : item.category.name || '').toLowerCase();
-      if (categoriasLivro.some(c => nomeCategoria.includes(c))) {
-        return 'produto'; // É livro, emitir NFe
+      const nome = normalize(typeof item.category === 'string' ? item.category : item.category.name);
+      if (catsLower.some(c => nome.includes(c) || c.includes(nome))) {
+        return 'produto';
       }
     }
-    // Verificar nome do produto como fallback
     if (item.name) {
-      const nomeProduto = item.name.toLowerCase();
-      if (categoriasLivro.some(c => nomeProduto.includes(c))) {
-        return 'produto'; // É livro, emitir NFe
+      const nome = normalize(item.name);
+      if (catsLower.some(c => nome.includes(c))) {
+        return 'produto';
       }
     }
   }
   
-  return 'servico'; // Padrão: serviço
+  return 'servico';
 }
 
 /**
@@ -169,7 +197,25 @@ async function processarWebhook(req, res) {
     
     // Determinar tipo de nota baseado na categoria do produto
     // Livro Faíscas = NFe (produto), resto = NFSe (serviço)
-    const tipoNota = verificarTipoNota(pedidoWC);
+    const tipoNota = await verificarTipoNota(pedidoWC, tenantId);
+
+    // Verificar se emissao automatica esta ativa
+    const autoEmitir = await isAutoEmitirAtivo(tenantId);
+
+    if (!autoEmitir) {
+      logger.webhook('Emissao automatica desativada - pedido salvo como pendente', {
+        pedido_id: dadosPedido.pedido_id,
+        tipo_nota: tipoNota,
+        tenant_id: tenantId
+      });
+      await atualizarPedido(dadosPedido.pedido_id_db, { status: 'pendente' });
+      return res.status(200).json({
+        mensagem: 'Pedido recebido e salvo - emissao automatica desativada',
+        pedido_id: dadosPedido.pedido_id,
+        status: 'pendente',
+        tipo_nota: tipoNota
+      });
+    }
     
     if (tipoNota === 'produto') {
       // Obter config do tenant quando disponível

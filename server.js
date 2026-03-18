@@ -101,18 +101,7 @@ app.get('/login', (req, res) => {
   res.redirect('/');
 });
 
-// Middleware de logging (sem console.log, apenas salva nos arquivos)
 app.use((req, res, next) => {
-  // Log apenas nos arquivos, não no console
-  logger.info(`${req.method} ${req.path}`, {
-    service: 'server',
-    action: 'request',
-    method: req.method,
-    path: req.path,
-    ip: req.ip,
-    query: req.query,
-    body: req.method === 'POST' ? req.body : undefined
-  });
   next();
 });
 

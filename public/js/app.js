@@ -1289,60 +1289,49 @@ let pollingNotasInterval = null;
 const POLLING_DELAY = 30000; // 30 segundos
 
 /**
- * Verifica se o pedido contém produtos "Livro Faíscas"
+ * Verifica se o pedido contém itens de categorias configuradas como produto.
+ * Usa window._categoriasProdutoCache (carregado do banco) ou fallback para "Livro Faíscas".
  */
-function pedidoContemLivroFaiscas(pedido) {
-    const categoriasLivro = ['livro faíscas', 'livro faiscas', 'livros faíscas', 'livros faiscas'];
+function isPedidoDeProduto(pedido, categoriasProduto) {
+    const cats = categoriasProduto || window._categoriasProdutoCache || [];
+    const catsLower = cats.map(c => c.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
 
-    // Extrair dados do pedido (pode estar em dados_pedido)
+    // Fallback se nenhuma categoria configurada
+    if (catsLower.length === 0) {
+        catsLower.push('livro faiscas', 'livro faíscas');
+    }
+
     const dadosPedido = typeof pedido.dados_pedido === 'string'
         ? JSON.parse(pedido.dados_pedido)
         : pedido.dados_pedido || pedido;
 
-    if (!dadosPedido.line_items && !pedido.line_items) {
-        return false;
-    }
-
     const lineItems = dadosPedido.line_items || pedido.line_items || [];
+    if (lineItems.length === 0) return false;
 
     for (const item of lineItems) {
-        // Verificar categorias do item
         if (item.categories && Array.isArray(item.categories)) {
             for (const cat of item.categories) {
-                const nomeCategoria = (typeof cat === 'string' ? cat : cat.name || '').toLowerCase();
-                if (categoriasLivro.some(c => nomeCategoria.includes(c))) {
-                    return true;
-                }
+                const nome = (typeof cat === 'string' ? cat : cat.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (catsLower.some(c => nome.includes(c) || c.includes(nome))) return true;
             }
         }
-        // Verificar categoria direta
         if (item.category) {
-            const nomeCategoria = (typeof item.category === 'string' ? item.category : item.category.name || '').toLowerCase();
-            if (categoriasLivro.some(c => nomeCategoria.includes(c))) {
-                return true;
-            }
+            const nome = (typeof item.category === 'string' ? item.category : item.category.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            if (catsLower.some(c => nome.includes(c) || c.includes(nome))) return true;
         }
-        // Verificar nome do produto como fallback
         if (item.name) {
-            const nomeProduto = item.name.toLowerCase();
-            if (categoriasLivro.some(c => nomeProduto.includes(c))) {
-                return true;
-            }
+            const nome = item.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            if (catsLower.some(c => nome.includes(c))) return true;
         }
     }
 
-    // Verificar também usando extrairCategoriasPedido do Components
     if (window.Components && typeof window.Components.extrairCategoriasPedido === 'function') {
         const categorias = window.Components.extrairCategoriasPedido(pedido);
-        const temLivroFaiscas = categorias.some(cat => {
+        const match = categorias.some(cat => {
             const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-            return (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                catLower === 'livro faiscas' ||
-                catLower.includes('livro faiscas');
+            return catsLower.some(c => catLower.includes(c) || c.includes(catLower));
         });
-        if (temLivroFaiscas) {
-            return true;
-        }
+        if (match) return true;
     }
 
     return false;
@@ -1356,7 +1345,7 @@ async function carregarPedidos() {
     contentArea.innerHTML = `
         <div class="content-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                <h2 class="section-title" style="margin: 0;">Pedidos Woo Produtos</h2>
+                <h2 class="section-title" style="margin: 0;">Woo Produtos</h2>
                 <div id="status-woocommerce" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
                     <span style="color: #666; font-size: 12px;">⏳ Carregando...</span>
                 </div>
@@ -1369,7 +1358,9 @@ async function carregarPedidos() {
     `;
 
     try {
-        // 1. CARREGAR DO BANCO LOCAL (instantâneo)
+        // Carregar categorias de produto antes de filtrar
+        await carregarCategoriasProdutoCache();
+
         atualizarStatusConexao('Carregando do banco...', 'info');
 
         let todosPedidos = [];
@@ -1378,13 +1369,9 @@ async function carregarPedidos() {
         if (resultadoBanco.sucesso && resultadoBanco.dados && resultadoBanco.dados.length > 0) {
             todosPedidos = resultadoBanco.dados;
 
-            // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
             todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
 
-            // Filtrar apenas pedidos com "Livro Faíscas" (produtos)
-            todosPedidos = todosPedidos.filter(pedido => {
-                return pedidoContemLivroFaiscas(pedido);
-            });
+            todosPedidos = todosPedidos.filter(pedido => isPedidoDeProduto(pedido));
 
             // Ordenar por data
             todosPedidos.sort((a, b) => {
@@ -1422,7 +1409,7 @@ async function carregarPedidos() {
         contentArea.innerHTML = `
             <div class="content-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h2 class="section-title" style="margin: 0;">Pedidos Woo Produtos</h2>
+                    <h2 class="section-title" style="margin: 0;">Woo Produtos</h2>
                     <div id="status-woocommerce" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
                         <span style="color: #dc3545; font-size: 12px;">✗ Erro: ${error.message}</span>
                     </div>
@@ -1462,7 +1449,8 @@ async function carregarPedidosServico(mostrarLoading = true) {
     }
 
     try {
-        // 1. CARREGAR DO BANCO LOCAL (instantâneo)
+        await carregarCategoriasProdutoCache();
+
         if (mostrarLoading) atualizarStatusConexaoServico('Carregando do banco...', 'info');
 
         let todosPedidos = [];
@@ -1471,14 +1459,9 @@ async function carregarPedidosServico(mostrarLoading = true) {
         if (resultadoBanco.sucesso && resultadoBanco.dados && resultadoBanco.dados.length > 0) {
             todosPedidos = resultadoBanco.dados;
 
-            // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
-            // Isso garante que pedidoContemLivroFaiscas tenha acesso aos dados convertidos
             todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
 
-            // Filtrar apenas pedidos de serviço (excluir Livro Faíscas) DEPOIS da conversão
-            todosPedidos = todosPedidos.filter(pedido => {
-                return !pedidoContemLivroFaiscas(pedido);
-            });
+            todosPedidos = todosPedidos.filter(pedido => !isPedidoDeProduto(pedido));
 
             // Ordenar por data
             todosPedidos.sort((a, b) => {
@@ -1585,19 +1568,16 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
         pedidos = [];
     }
 
-    // Extrair todas as categorias únicas de TODOS os pedidos (para o filtro mostrar todas as opções)
-    // EXCLUIR "Livro Faíscas" das categorias disponíveis
+    // Extrair categorias de serviço (excluindo as de produto)
+    const catsProduto = (window._categoriasProdutoCache || []).map(c => c.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
     const todasCategorias = new Set();
     pedidos.forEach(pedido => {
         const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
         if (categorias.length > 0) {
             categorias.forEach(cat => {
-                // Excluir categorias relacionadas a "Livro Faíscas"
                 const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                const isLivroFaiscas = (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                    catLower === 'livro faiscas' ||
-                    catLower.includes('livro faiscas');
-                if (!isLivroFaiscas) {
+                const isProduto = catsProduto.some(c => catLower.includes(c) || c.includes(catLower));
+                if (!isProduto) {
                     todasCategorias.add(cat);
                 }
             });
@@ -2411,9 +2391,9 @@ async function sincronizarEmBackgroundServico() {
                 // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
                 todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
 
-                // Filtrar apenas pedidos de serviço (excluir Livro Faíscas) DEPOIS da conversão
+                // Filtrar apenas pedidos de serviço (excluir categorias de produto)
                 todosPedidos = todosPedidos.filter(pedido => {
-                    return !pedidoContemLivroFaiscas(pedido);
+                    return !isPedidoDeProduto(pedido);
                 });
 
                 todosPedidos.sort((a, b) => {
@@ -2454,9 +2434,9 @@ async function importarPrimeiraVezServico(meses) {
             // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
             todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
 
-            // Filtrar apenas pedidos de serviço (excluir Livro Faíscas) DEPOIS da conversão
+            // Filtrar apenas pedidos de serviço (excluir categorias de produto)
             todosPedidos = todosPedidos.filter(pedido => {
-                return !pedidoContemLivroFaiscas(pedido);
+                return !isPedidoDeProduto(pedido);
             });
 
             todosPedidos.sort((a, b) => {
@@ -2509,9 +2489,9 @@ function iniciarPollingPedidosServico() {
                 // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
                 let todosPedidos = resultado.dados.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
 
-                // Filtrar apenas pedidos de serviço (excluir Livro Faíscas) DEPOIS da conversão
+                // Filtrar apenas pedidos de serviço (excluir categorias de produto)
                 let pedidosServico = todosPedidos.filter(pedido => {
-                    return !pedidoContemLivroFaiscas(pedido);
+                    return !isPedidoDeProduto(pedido);
                 });
 
                 const novosTotal = pedidosServico.length;
@@ -2565,9 +2545,9 @@ async function sincronizarEmBackground() {
                 // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
                 todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
 
-                // Filtrar apenas pedidos com "Livro Faíscas" (produtos)
+                // Filtrar apenas pedidos de produto
                 todosPedidos = todosPedidos.filter(pedido => {
-                    return pedidoContemLivroFaiscas(pedido);
+                    return isPedidoDeProduto(pedido);
                 });
 
                 todosPedidos.sort((a, b) => {
@@ -2615,9 +2595,9 @@ async function importarPrimeiraVez(meses) {
             // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
             todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
 
-            // Filtrar apenas pedidos com "Livro Faíscas" (produtos)
+            // Filtrar apenas pedidos de produto
             todosPedidos = todosPedidos.filter(pedido => {
-                return pedidoContemLivroFaiscas(pedido);
+                return isPedidoDeProduto(pedido);
             });
 
             todosPedidos.sort((a, b) => {
@@ -2774,55 +2754,12 @@ function iniciarPollingNotas() {
 
     pollingNotasInterval = setInterval(async () => {
         try {
-            // Verificar se ainda estamos na seção de notas enviadas
             if (estadoAtual.secaoAtiva !== 'notas-enviadas') {
                 clearInterval(pollingNotasInterval);
                 pollingNotasInterval = null;
                 return;
             }
-
-            // Buscar notas atualizadas do banco (sem alterar página atual)
-            const limite = 50;
-            const offset = (estadoAtual.paginaNotas - 1) * limite;
-            const filtros = {
-                limite: limite,
-                offset: offset,
-                ...estadoAtual.filtrosNotas
-            };
-
-            const resultado = await API.NFSe.listar(filtros);
-
-            if (resultado.sucesso) {
-                const notas = resultado.dados || [];
-                const total = resultado.total || 0;
-                const notasAnteriores = estadoAtual.dados.notasEnviadas || [];
-
-                // Verificar se há novas notas (comparar por referência)
-                const referenciasAnteriores = new Set(notasAnteriores.map(n => n.referencia));
-                const novasNotas = notas.filter(n => !referenciasAnteriores.has(n.referencia));
-
-                if (novasNotas.length > 0) {
-                    console.log(`🔔 ${novasNotas.length} nova(s) nota(s) detectada(s)`);
-
-                    // Atualizar dados
-                    estadoAtual.dados.notasEnviadas = notas;
-                    const tabelaArea = document.getElementById('tabela-notas-enviadas');
-                    if (tabelaArea) {
-                        tabelaArea.innerHTML = await window.Components.renderizarTabelaNotasEnviadas(notas);
-                    }
-
-                    // Atualizar paginação se necessário
-                    const totalPaginas = Math.ceil(total / limite) || 1;
-                    const paginacaoArea = document.getElementById('paginacao-notas-enviadas');
-                    if (paginacaoArea) {
-                        paginacaoArea.innerHTML = window.Components.renderizarPaginacao(
-                            estadoAtual.paginaNotas,
-                            totalPaginas,
-                            'mudarPaginaNotasEnviadas'
-                        );
-                    }
-                }
-            }
+            await buscarNotasEnviadas();
         } catch (err) {
             console.warn('Erro no polling de notas:', err);
         }
@@ -2863,9 +2800,9 @@ async function forcarAtualizacaoWooCommerce() {
                 // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
                 todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
 
-                // Filtrar apenas pedidos com "Livro Faíscas" (produtos)
+                // Filtrar apenas pedidos de produto
                 todosPedidos = todosPedidos.filter(pedido => {
-                    return pedidoContemLivroFaiscas(pedido);
+                    return isPedidoDeProduto(pedido);
                 });
 
                 todosPedidos.sort((a, b) => {
@@ -2940,23 +2877,11 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
         pedidos = [];
     }
 
-    // Extrair todas as categorias únicas de TODOS os pedidos (para o filtro mostrar todas as opções)
-    // Para produtos, mostrar apenas categorias relacionadas a "Livro Faíscas"
+    // Extrair todas as categorias únicas dos pedidos filtrados como produto
     const todasCategorias = new Set();
     pedidos.forEach(pedido => {
         const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
-        if (categorias.length > 0) {
-            categorias.forEach(cat => {
-                // Incluir apenas categorias relacionadas a "Livro Faíscas"
-                const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                const isLivroFaiscas = (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                    catLower === 'livro faiscas' ||
-                    catLower.includes('livro faiscas');
-                if (isLivroFaiscas) {
-                    todasCategorias.add(cat);
-                }
-            });
-        }
+        categorias.forEach(cat => todasCategorias.add(cat));
     });
     const categoriasOrdenadas = Array.from(todasCategorias).sort();
 
@@ -3000,7 +2925,7 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
     const html = `
         <div class="content-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                <h2 class="section-title" style="margin: 0;">Pedidos Woo Produtos</h2>
+                <h2 class="section-title" style="margin: 0;">Woo Produtos</h2>
                 <div style="display: flex; gap: 12px; align-items: center;">
                     <button 
                         type="button" 
@@ -3013,6 +2938,33 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
                 <div id="status-woocommerce" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
                         <span style="color: #28a745; font-size: 12px;">✓ ${pedidosFiltrados.length} pedidos ${filtroStatus || filtroCategoria ? 'filtrados' : 'carregados'}</span>
                     </div>
+                </div>
+            </div>
+
+            <!-- Toggle Emissão Automática -->
+            <div id="auto-emitir-container" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; border: 2px solid #dee2e6; background: #f8f9fa;">
+                <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                    <label class="toggle-switch" style="position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0;">
+                        <input type="checkbox" id="toggle-auto-emitir" onchange="toggleAutoEmitir(this.checked)" style="opacity: 0; width: 0; height: 0;">
+                        <span class="toggle-slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .3s; border-radius: 26px;"></span>
+                    </label>
+                    <div>
+                        <span id="auto-emitir-label" style="font-weight: 600; font-size: 14px;">Emissão automática</span>
+                        <span id="auto-emitir-status" style="font-size: 12px; margin-left: 8px; padding: 2px 8px; border-radius: 4px; font-weight: 600;">⏳ carregando...</span>
+                    </div>
+                </div>
+                <span style="font-size: 12px; color: #666; max-width: 340px;">Quando ativado, notas são emitidas ao receber pedidos via webhook. Você ainda pode emitir manualmente.</span>
+            </div>
+
+            <!-- Categorias de Produto -->
+            <div id="categorias-produto-container" style="padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #dee2e6; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-weight: 600; font-size: 14px;">Categorias de Produto (NFe)</span>
+                    <span id="cat-produto-status" style="font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #e2e3e5; color: #383d41;">carregando...</span>
+                </div>
+                <p style="font-size: 12px; color: #666; margin: 0 0 10px;">Selecione quais categorias do WooCommerce são de <strong>produto</strong>. Pedidos com essas categorias aparecem aqui e geram NFe.</p>
+                <div id="cat-produto-checkboxes" style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    <span style="color: #888; font-size: 13px;">Carregando categorias do WooCommerce...</span>
                 </div>
             </div>
             
@@ -3203,6 +3155,9 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
     `;
 
     contentArea.innerHTML = html;
+
+    carregarEstadoAutoEmitir();
+    carregarSeletorCategorias();
 }
 
 /**
@@ -4375,51 +4330,30 @@ async function emitirNFProdutoMes(mes) {
                 const [ano, mesNum] = mes.split('-');
                 const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) &&
                     (dataPedido.getMonth() + 1) === parseInt(mesNum);
-
-                // Filtrar apenas pedidos com categoria "Livro Faíscas" (produtos)
-                const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
-                const temLivroFaiscas = categorias.some(cat => {
-                    const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    return (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                        catLower === 'livro faiscas' ||
-                        catLower.includes('livro faiscas');
-                });
-
-                return pertenceAoMes && temLivroFaiscas;
+                return pertenceAoMes && isPedidoDeProduto(pedido);
             });
 
             if (pedidosMes.length === 0) {
-                adicionarLogMes(mes, 'erro', 'Nenhum pedido de PRODUTO (Livro Faíscas) encontrado para este mês.');
+                adicionarLogMes(mes, 'erro', 'Nenhum pedido de PRODUTO encontrado para este mês.');
                 return;
             }
 
             pedidoIds = pedidosMes.map(p => String(p.id || p.number));
             adicionarLogMes(mes, 'info', `Nenhum pedido selecionado. Processando ${pedidoIds.length} pedido(s) de PRODUTO do mês.`);
         } else {
-            // Filtrar apenas os pedidos selecionados que pertencem ao mês E são produtos
             const pedidosMes = estadoAtual.dados.todosPedidos.filter(pedido => {
                 const dataPedido = (parseDateSafe(pedido.date_created) || new Date(0));
                 const [ano, mesNum] = mes.split('-');
                 const pertenceAoMes = dataPedido.getFullYear() === parseInt(ano) &&
                     (dataPedido.getMonth() + 1) === parseInt(mesNum);
                 const estaSelecionado = pedidoIds.includes(String(pedido.id || pedido.number));
-
-                // Verificar se é produto
-                const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
-                const temLivroFaiscas = categorias.some(cat => {
-                    const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    return (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                        catLower === 'livro faiscas' ||
-                        catLower.includes('livro faiscas');
-                });
-
-                return pertenceAoMes && estaSelecionado && temLivroFaiscas;
+                return pertenceAoMes && estaSelecionado && isPedidoDeProduto(pedido);
             });
 
             pedidoIds = pedidosMes.map(p => String(p.id || p.number));
 
             if (pedidoIds.length === 0) {
-                adicionarLogMes(mes, 'erro', 'Nenhum pedido selecionado é de PRODUTO (Livro Faíscas) ou pertence a este mês.');
+                adicionarLogMes(mes, 'erro', 'Nenhum pedido selecionado é de PRODUTO ou pertence a este mês.');
                 return;
             }
 
@@ -4670,7 +4604,7 @@ function finalizarProgressoEmissao(sucesso, mensagem) {
 async function emitirNFTeste(tipoNF) {
     // Se for 'auto', perguntar qual tipo
     if (tipoNF === 'auto') {
-        const opcao = prompt('Qual tipo de nota de TESTE deseja emitir?\n\n1 = NFSe (Serviço)\n2 = NFe (Produto - Livro Faíscas)\n\nDigite 1 ou 2:');
+        const opcao = prompt('Qual tipo de nota de TESTE deseja emitir?\n\n1 = NFSe (Serviço)\n2 = NFe (Produto)\n\nDigite 1 ou 2:');
         if (opcao === '1') {
             tipoNF = 'servico';
         } else if (opcao === '2') {
@@ -4875,17 +4809,7 @@ async function emitirNFSePedido(pedidoId) {
         const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
         console.log('[DEBUG] Categorias do pedido:', categorias);
 
-        // Verificar se tem categoria "Livro Faíscas" (produto)
-        // Busca flexível: "livro" + "faíscas" ou "faiscas" (com ou sem acento)
-        const temLivroFaiscas = categorias.some(cat => {
-            const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // Remove acentos
-            return (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                catLower === 'livro faiscas' ||
-                catLower.includes('livro faiscas');
-        });
-
-        // Determinar tipo de NF
-        const tipoNF = temLivroFaiscas ? 'produto' : 'servico';
+        const tipoNF = isPedidoDeProduto(pedido) ? 'produto' : 'servico';
         const tipoNFLabel = tipoNF === 'produto' ? 'NFe (Produto)' : 'NFSe (Serviço)';
         console.log('[DEBUG] Tipo de NF determinado:', tipoNF, tipoNFLabel);
 
@@ -5065,15 +4989,7 @@ async function emitirNFSePedido(pedidoId) {
                 const dataPedido = (parseDateSafe(pedidoWC.pedido.date_created || pedidoWC.pedido.created_at) || new Date());
                 const mes = `${dataPedido.getFullYear()}-${String(dataPedido.getMonth() + 1).padStart(2, '0')}`;
 
-                // Determinar tipo de NF baseado nas categorias
-                const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedidoWC.pedido) : [];
-                const temLivroFaiscas = categorias.some(cat => {
-                    const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    return (catLower.includes('livro') && catLower.includes('faiscas')) ||
-                        catLower === 'livro faiscas' ||
-                        catLower.includes('livro faiscas');
-                });
-                const tipoNF = temLivroFaiscas ? 'produto' : 'servico';
+                const tipoNF = isPedidoDeProduto(pedidoWC.pedido) ? 'produto' : 'servico';
 
                 // Garantir que os logs estão visíveis apenas para serviço
                 if (tipoNF === 'servico') {
@@ -5222,112 +5138,158 @@ function fecharModalProgresso() {
  * Carrega seção de Notas Enviadas
  */
 async function carregarNotasEnviadas() {
-    try {
-        const contentArea = document.getElementById('content-area');
-        if (!contentArea) {
-            console.error('content-area não encontrado');
-            return;
-        }
+    const contentArea = document.getElementById('content-area');
+    if (!contentArea) return;
 
-        // Verificar se Components está disponível
-        if (!window.Components || !window.Components.renderizarFiltrosNotasEnviadas) {
-            console.error('Components não está disponível ou renderizarFiltrosNotasEnviadas não existe');
-            contentArea.innerHTML = '<div class="content-section"><p>Erro: Componentes não carregados</p></div>';
-            return;
-        }
+    if (!estadoAtual.filtrosNotas) estadoAtual.filtrosNotas = {};
+    if (!estadoAtual.paginaNotas) estadoAtual.paginaNotas = 1;
 
-        const html = `
-            <div class="content-section">
-                <h2 class="section-title">Notas Enviadas</h2>
-                ${window.Components.renderizarFiltrosNotasEnviadas()}
-            </div>
-            <div class="content-section">
-                <div id="tabela-notas-enviadas">
-                    ${window.Components.renderizarLoading()}
-                </div>
-                <div id="paginacao-notas-enviadas"></div>
+    contentArea.innerHTML = `
+        <div class="content-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 class="section-title" style="margin: 0;">Notas Enviadas</h2>
+                <button type="button" class="btn btn-primary" onclick="atualizarStatusNotas()" style="padding: 8px 16px; font-size: 14px;">
+                    🔄 Atualizar Status
+                </button>
             </div>
 
-        `;
-
-        contentArea.innerHTML = html;
-
-        // Inicializar estado
-        if (!estadoAtual.filtrosNotas) {
-            estadoAtual.filtrosNotas = {};
-        }
-        if (!estadoAtual.paginaNotas) {
-            estadoAtual.paginaNotas = 1;
-        }
-
-        // Carregar dados iniciais
-        await buscarNotasEnviadas();
-
-        // Iniciar polling para atualizar notas automaticamente
-        iniciarPollingNotas();
-    } catch (error) {
-        console.error('Erro ao carregar notas enviadas:', error);
-        const contentArea = document.getElementById('content-area');
-        if (contentArea) {
-            contentArea.innerHTML = `
-                <div class="content-section">
-                    <h2 class="section-title">Notas Enviadas</h2>
-                    <div class="alert alert-danger">
-                        <h3>Erro ao carregar notas</h3>
-                        <p>${error.message}</p>
-                        <button onclick="carregarNotasEnviadas()" class="btn btn-primary" style="margin-top: 10px;">Tentar Novamente</button>
-                    </div>
+            <div style="background: var(--color-gray-light); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+                <div>
+                    <label style="font-size: 12px; font-weight: 600; color: #555; display: block; margin-bottom: 4px;">Data Início</label>
+                    <input type="date" id="filtro-data-inicio" style="padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
                 </div>
-            `;
-        }
-    }
+                <div>
+                    <label style="font-size: 12px; font-weight: 600; color: #555; display: block; margin-bottom: 4px;">Data Fim</label>
+                    <input type="date" id="filtro-data-fim" style="padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: 600; color: #555; display: block; margin-bottom: 4px;">Status</label>
+                    <select id="filtro-status" style="padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                        <option value="">Todos</option>
+                        <option value="autorizado">Autorizado</option>
+                        <option value="processando_autorizacao">Processando</option>
+                        <option value="erro_autorizacao">Erro</option>
+                        <option value="cancelado">Cancelado</option>
+                    </select>
+                </div>
+                <button type="button" class="btn btn-primary" onclick="filtrarNotasEnviadas()" style="padding: 6px 16px; font-size: 13px;">Filtrar</button>
+                <button type="button" class="btn btn-secondary" onclick="limparFiltrosNotasEnviadas()" style="padding: 6px 16px; font-size: 13px;">Limpar</button>
+            </div>
+
+            <div id="tabela-notas-enviadas" style="min-height: 100px;">
+                <div style="text-align: center; padding: 40px; color: #888;">Carregando...</div>
+            </div>
+            <div id="paginacao-notas-enviadas" style="margin-top: 12px;"></div>
+        </div>
+    `;
+
+    await buscarNotasEnviadas();
 }
 
-
-/**
- * Busca notas enviadas com filtros
- */
 async function buscarNotasEnviadas() {
-    const tabelaArea = document.getElementById('tabela-notas-enviadas');
-    const paginacaoArea = document.getElementById('paginacao-notas-enviadas');
+    const area = document.getElementById('tabela-notas-enviadas');
+    if (!area) return;
 
-    if (!tabelaArea) return;
-
-    tabelaArea.innerHTML = window.Components.renderizarLoading();
+    area.innerHTML = '<div style="text-align: center; padding: 30px; color: #888;">Carregando notas...</div>';
 
     const limite = 50;
     const offset = (estadoAtual.paginaNotas - 1) * limite;
 
-    const filtros = {
-        limite: limite,
-        offset: offset,
-        ...estadoAtual.filtrosNotas
-    };
+    const filtros = { limite, offset, ...estadoAtual.filtrosNotas };
 
     try {
-        const resultado = await API.NFSe.listar(filtros);
+        const res = await API.NFSe.listar(filtros);
 
-        if (resultado.sucesso) {
-            const notas = resultado.dados || [];
-            const total = resultado.total || 0;
-
-            estadoAtual.dados.notasEnviadas = notas;
-            tabelaArea.innerHTML = await window.Components.renderizarTabelaNotasEnviadas(notas);
-
-
-            // Calcular paginação
-            const totalPaginas = Math.ceil(total / limite) || 1;
-            paginacaoArea.innerHTML = window.Components.renderizarPaginacao(
-                estadoAtual.paginaNotas,
-                totalPaginas,
-                'mudarPaginaNotasEnviadas'
-            );
-        } else {
-            tabelaArea.innerHTML = `<div class="empty-state"><p>Erro ao carregar notas: ${resultado.erro || 'Erro desconhecido'}</p></div>`;
+        if (!res.sucesso) {
+            area.innerHTML = `<div style="text-align: center; padding: 30px; color: #dc3545;">Erro: ${res.erro || 'Falha ao carregar'}</div>`;
+            return;
         }
+
+        const notas = res.dados || [];
+        const total = res.total || 0;
+        estadoAtual.dados.notasEnviadas = notas;
+
+        if (notas.length === 0) {
+            area.innerHTML = `
+                <div style="text-align: center; padding: 50px; color: #888;">
+                    <div style="font-size: 48px; margin-bottom: 12px;">📄</div>
+                    <h3 style="margin: 0 0 8px; color: #555;">Nenhuma nota encontrada</h3>
+                    <p style="margin: 0; font-size: 14px;">As notas emitidas aparecerão aqui.</p>
+                </div>`;
+            return;
+        }
+
+        const rows = notas.map(nota => {
+            const data = nota.created_at ? new Date(nota.created_at).toLocaleDateString('pt-BR') : '-';
+            const ref = nota.referencia || '-';
+            const tipo = (nota.tipo_nota || 'nfse').toUpperCase();
+            const tipoCor = tipo === 'NFE' ? '#1976d2' : '#2e7d32';
+
+            let dc = nota.dados_completos;
+            if (typeof dc === 'string') { try { dc = JSON.parse(dc); } catch(e) { dc = {}; } }
+            dc = dc || {};
+
+            let cliente = '-';
+            if (tipo === 'NFE') {
+                cliente = dc.destinatario?.nome_destinatario || dc.destinatario?.razao_social || '-';
+            } else {
+                cliente = dc.tomador?.razao_social || dc.tomador?.nome || '-';
+            }
+
+            let valor = 0;
+            if (tipo === 'NFE') {
+                valor = dc.valor_total || nota.valor_total || 0;
+            } else {
+                valor = dc.servico?.valor_servicos || dc.valor_total || nota.valor_total || 0;
+            }
+            valor = parseFloat(valor) || 0;
+            const valorFmt = valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+            const st = nota.status_focus || 'pendente';
+            let stLabel, stCor, stBg;
+            if (st === 'autorizado') { stLabel = 'Autorizado'; stCor = '#155724'; stBg = '#d4edda'; }
+            else if (st.includes('processando')) { stLabel = 'Processando'; stCor = '#856404'; stBg = '#fff3cd'; }
+            else if (st.includes('erro')) { stLabel = 'Erro'; stCor = '#721c24'; stBg = '#f8d7da'; }
+            else if (st === 'cancelado') { stLabel = 'Cancelado'; stCor = '#383d41'; stBg = '#e2e3e5'; }
+            else { stLabel = st; stCor = '#666'; stBg = '#f0f0f0'; }
+
+            return `<tr>
+                <td>${data}</td>
+                <td><span style="background: ${tipoCor}; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${tipo}</span></td>
+                <td style="font-family: monospace; font-size: 13px;">${ref}</td>
+                <td>${cliente}</td>
+                <td style="font-weight: 600;">${valorFmt}</td>
+                <td><span style="background: ${stBg}; color: ${stCor}; padding: 2px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">${stLabel}</span></td>
+                <td><button class="btn btn-sm btn-secondary" onclick="verLogsNota('${ref}')" style="padding: 4px 10px; font-size: 12px;">Logs</button></td>
+            </tr>`;
+        }).join('');
+
+        area.innerHTML = `
+            <div style="overflow-x: auto;">
+                <table class="table">
+                    <thead><tr>
+                        <th>Data</th><th>Tipo</th><th>Referência</th><th>Cliente</th><th>Valor</th><th>Status</th><th></th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+
+        // Paginacao simples
+        const totalPag = Math.ceil(total / limite) || 1;
+        const pagArea = document.getElementById('paginacao-notas-enviadas');
+        if (pagArea && totalPag > 1) {
+            let pagHtml = '<div style="display: flex; gap: 4px; justify-content: center;">';
+            for (let i = 1; i <= totalPag; i++) {
+                const ativo = i === estadoAtual.paginaNotas;
+                pagHtml += `<button onclick="mudarPaginaNotasEnviadas(${i})" style="padding: 6px 12px; border: 1px solid ${ativo ? '#e65100' : '#ddd'}; background: ${ativo ? '#e65100' : '#fff'}; color: ${ativo ? '#fff' : '#333'}; border-radius: 4px; cursor: pointer; font-size: 13px;">${i}</button>`;
+            }
+            pagHtml += '</div>';
+            pagArea.innerHTML = pagHtml;
+        }
+
     } catch (error) {
-        console.error('Erro ao buscar notas enviadas:', error);
-        tabelaArea.innerHTML = `<div class="empty-state"><p>Erro ao carregar notas: ${error.message}</p></div>`;
+        console.error('Erro ao buscar notas:', error);
+        area.innerHTML = `<div style="text-align: center; padding: 30px; color: #dc3545;">Erro: ${error.message}</div>`;
     }
 }
 
@@ -5984,33 +5946,30 @@ async function confirmarCancelarNota(referencia, tipoNota, ambiente = null) {
  * Filtra notas enviadas
  */
 function filtrarNotasEnviadas() {
-    const form = document.getElementById('form-filtros-notas');
-    if (!form) return;
-
-    const formData = new FormData(form);
     estadoAtual.filtrosNotas = {};
 
-    for (const [key, value] of formData.entries()) {
-        if (value && value.trim() !== '') {
-            estadoAtual.filtrosNotas[key] = value.trim();
-        }
-    }
+    const di = document.getElementById('filtro-data-inicio');
+    const df = document.getElementById('filtro-data-fim');
+    const st = document.getElementById('filtro-status');
+
+    if (di && di.value) estadoAtual.filtrosNotas.data_inicio = di.value;
+    if (df && df.value) estadoAtual.filtrosNotas.data_fim = df.value;
+    if (st && st.value) estadoAtual.filtrosNotas.status_focus = st.value;
 
     estadoAtual.paginaNotas = 1;
     buscarNotasEnviadas();
 }
 
-/**
- * Limpa filtros de notas enviadas
- */
 function limparFiltrosNotasEnviadas() {
     estadoAtual.filtrosNotas = {};
     estadoAtual.paginaNotas = 1;
 
-    const form = document.getElementById('form-filtros-notas');
-    if (form) {
-        form.reset();
-    }
+    const di = document.getElementById('filtro-data-inicio');
+    const df = document.getElementById('filtro-data-fim');
+    const st = document.getElementById('filtro-status');
+    if (di) di.value = '';
+    if (df) df.value = '';
+    if (st) st.value = '';
 
     buscarNotasEnviadas();
 }
@@ -6023,147 +5982,71 @@ function mudarPaginaNotasEnviadas(pagina) {
     buscarNotasEnviadas();
 }
 
-/**
- * Ver logs de uma nota específica
- */
 async function verLogsNota(referencia) {
     try {
         const resultado = await API.Pedidos.listarLogs({ referencia, limite: 100 });
-
-        const logs = Array.isArray(resultado) ? resultado : (resultado.dados || []);
-
-        // Ordenar logs por data (mais antigo primeiro)
+        const logs = resultado.dados || (Array.isArray(resultado) ? resultado : []);
         logs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
-        // Criar modal similar ao de detalhes do pedido
         const overlay = document.createElement('div');
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: 10000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        `;
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            background: white;
-            border-radius: 8px;
-            max-width: 800px;
-            width: 100%;
-            max-height: 90vh;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        `;
-
-        // Header
-        const header = document.createElement('div');
-        header.style.cssText = `
-            padding: 20px;
-            border-bottom: 1px solid #dee2e6;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        `;
-
-        const titulo = document.createElement('h3');
-        titulo.textContent = `Logs da Nota: ${referencia}`;
-        titulo.style.cssText = 'margin: 0; font-size: 18px; font-weight: 600;';
-
-        const btnFechar = document.createElement('button');
-        btnFechar.textContent = '✕';
-        btnFechar.style.cssText = `
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: #666;
-            padding: 0;
-            width: 30px;
-            height: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        `;
-        btnFechar.onclick = () => overlay.remove();
-
-        header.appendChild(titulo);
-        header.appendChild(btnFechar);
-
-        // Body
-        const body = document.createElement('div');
-        body.style.cssText = `
-            padding: 20px;
-            overflow-y: auto;
-            flex: 1;
-        `;
-
+        let bodyHtml = '';
         if (logs.length === 0) {
-            body.innerHTML = '<p style="color: #888; text-align: center;">Nenhum log encontrado para esta nota.</p>';
+            bodyHtml = '<p style="color:#888;text-align:center;padding:30px;">Nenhum log encontrado para <strong>' + referencia + '</strong></p>';
         } else {
-            const logsHtml = logs.map(log => {
+            bodyHtml = logs.map(log => {
                 const data = new Date(log.created_at).toLocaleString('pt-BR');
                 const level = (log.level || 'INFO').toUpperCase();
-                const message = log.message || '';
-                const service = log.service || '';
-                const action = log.action || '';
+                const msg = log.message || '';
+                const svc = log.service ? `[${log.service}]` : '';
+                const act = log.action ? `[${log.action}]` : '';
 
-                let cor = '#666';
+                let cor = '#17a2b8';
                 if (level === 'ERROR') cor = '#dc3545';
-                else if (level === 'WARN') cor = '#ffc107';
-                else if (level === 'INFO') cor = '#17a2b8';
+                else if (level === 'WARN') cor = '#e65100';
 
-                let dadosHtml = '';
+                let detalhes = '';
                 if (log.data) {
                     try {
-                        const dados = typeof log.data === 'string' ? JSON.parse(log.data) : log.data;
-                        dadosHtml = `<pre style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px; overflow-x: auto; margin-top: 8px;">${JSON.stringify(dados, null, 2)}</pre>`;
-                    } catch (e) {
-                        dadosHtml = `<div style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px; margin-top: 8px;">${log.data}</div>`;
-                    }
+                        const d = typeof log.data === 'string' ? JSON.parse(log.data) : log.data;
+                        const keys = Object.keys(d).filter(k => !['service','action'].includes(k));
+                        if (keys.length > 0) {
+                            const obj = {};
+                            keys.forEach(k => obj[k] = d[k]);
+                            detalhes = '<pre style="background:#f5f5f5;padding:8px;border-radius:4px;font-size:11px;overflow-x:auto;margin:6px 0 0;max-height:150px;overflow-y:auto;">' + JSON.stringify(obj, null, 2) + '</pre>';
+                        }
+                    } catch(e) {}
                 }
 
-                return `
-                    <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #eee;">
-                        <div style="display: flex; gap: 12px; margin-bottom: 4px;">
-                            <span style="color: #888; font-size: 12px;">[${data}]</span>
-                            <span style="color: ${cor}; font-weight: 600; font-size: 12px;">[${level}]</span>
-                            ${service ? `<span style="color: #17a2b8; font-size: 12px;">[${service}]</span>` : ''}
-                            ${action ? `<span style="color: #6c757d; font-size: 12px;">[${action}]</span>` : ''}
-                        </div>
-                        <div style="color: #333; margin-top: 4px;">${message}</div>
-                        ${dadosHtml}
+                return `<div style="padding:8px 0;border-bottom:1px solid #f0f0f0;">
+                    <div style="display:flex;gap:8px;align-items:center;font-size:12px;">
+                        <span style="color:#999;">${data}</span>
+                        <span style="color:${cor};font-weight:700;">${level}</span>
+                        <span style="color:#888;">${svc} ${act}</span>
                     </div>
-                `;
+                    <div style="color:#333;font-size:13px;margin-top:2px;">${msg}</div>
+                    ${detalhes}
+                </div>`;
             }).join('');
-
-            body.innerHTML = logsHtml;
         }
 
-        // Montar modal
-        modal.appendChild(header);
-        modal.appendChild(body);
-        overlay.appendChild(modal);
-
-        // Fechar ao clicar fora
-        overlay.onclick = (e) => {
-            if (e.target === overlay) {
-                overlay.remove();
-            }
-        };
+        overlay.innerHTML = `
+            <div style="background:#fff;border-radius:8px;max-width:700px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 4px 20px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+                <div style="padding:16px 20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">
+                    <h3 style="margin:0;font-size:16px;">Logs: <span style="font-family:monospace;color:#e65100;">${referencia}</span></h3>
+                    <span style="font-size:12px;color:#888;">${logs.length} registro(s)</span>
+                </div>
+                <div style="padding:12px 20px;overflow-y:auto;flex:1;">${bodyHtml}</div>
+                <div style="padding:12px 20px;border-top:1px solid #eee;text-align:right;">
+                    <button onclick="this.closest('[style*=fixed]').remove()" class="btn btn-secondary" style="padding:6px 16px;font-size:13px;">Fechar</button>
+                </div>
+            </div>`;
 
         document.body.appendChild(overlay);
-
     } catch (error) {
-        console.error('Erro ao carregar logs da nota:', error);
-        alert(`Erro ao carregar logs: ${error.message}`);
+        alert('Erro ao carregar logs: ' + error.message);
     }
 }
 
@@ -6682,7 +6565,165 @@ window.toggleTodasCategorias = toggleTodasCategorias;
 window.carregarLogsMes = carregarLogsMes;
 window.fecharModalProgresso = fecharModalProgresso;
 window.limparReferencia = limparReferencia;
+window.toggleAutoEmitir = toggleAutoEmitir;
+window.carregarEstadoAutoEmitir = carregarEstadoAutoEmitir;
+window.salvarCategoriasProduto = salvarCategoriasProduto;
+window.carregarSeletorCategorias = carregarSeletorCategorias;
+window.carregarCategoriasServicoInfo = carregarCategoriasServicoInfo;
 
+async function carregarEstadoAutoEmitir() {
+    try {
+        const res = await API.Config.getAutoEmitir();
+        const ativo = res.auto_emitir === true;
+        atualizarUIAutoEmitir(ativo);
+    } catch (e) {
+        atualizarUIAutoEmitir(false);
+    }
+}
+
+async function toggleAutoEmitir(ativo) {
+    const container = document.getElementById('auto-emitir-container');
+    const statusEl = document.getElementById('auto-emitir-status');
+    if (statusEl) {
+        statusEl.textContent = '⏳ salvando...';
+        statusEl.style.background = '#fff3cd';
+        statusEl.style.color = '#856404';
+    }
+
+    const msgExtra = ativo
+        ? 'Notas serão emitidas automaticamente ao receber pedidos via webhook. Deseja ativar?'
+        : 'A emissão automática será desativada. Pedidos continuarão sendo salvos. Deseja desativar?';
+
+    if (!confirm(msgExtra)) {
+        const toggle = document.getElementById('toggle-auto-emitir');
+        if (toggle) toggle.checked = !ativo;
+        await carregarEstadoAutoEmitir();
+        return;
+    }
+
+    try {
+        await API.Config.setAutoEmitir(ativo);
+        atualizarUIAutoEmitir(ativo);
+    } catch (e) {
+        alert('Erro ao salvar configuração: ' + e.message);
+        const toggle = document.getElementById('toggle-auto-emitir');
+        if (toggle) toggle.checked = !ativo;
+        await carregarEstadoAutoEmitir();
+    }
+}
+
+function atualizarUIAutoEmitir(ativo) {
+    const toggle = document.getElementById('toggle-auto-emitir');
+    const statusEl = document.getElementById('auto-emitir-status');
+    const container = document.getElementById('auto-emitir-container');
+
+    if (toggle) toggle.checked = ativo;
+
+    if (statusEl) {
+        if (ativo) {
+            statusEl.textContent = 'ATIVADO';
+            statusEl.style.background = '#d4edda';
+            statusEl.style.color = '#155724';
+        } else {
+            statusEl.textContent = 'DESATIVADO';
+            statusEl.style.background = '#f8d7da';
+            statusEl.style.color = '#721c24';
+        }
+    }
+
+    if (container) {
+        container.style.borderColor = ativo ? '#28a745' : '#dc3545';
+        container.style.background = ativo ? '#f0fff0' : '#fff5f5';
+    }
+}
+
+
+// Cache global de categorias de produto para uso em filtragem
+window._categoriasProdutoCache = null;
+
+async function carregarCategoriasProdutoCache() {
+    if (window._categoriasProdutoCache) return window._categoriasProdutoCache;
+    try {
+        const res = await API.Config.getCategoriasProduto();
+        window._categoriasProdutoCache = (res.sucesso && res.categorias) ? res.categorias : [];
+    } catch (e) {
+        window._categoriasProdutoCache = [];
+    }
+    return window._categoriasProdutoCache;
+}
+
+async function carregarSeletorCategorias() {
+    const container = document.getElementById('cat-produto-checkboxes');
+    const statusEl = document.getElementById('cat-produto-status');
+    if (!container) return;
+
+    try {
+        const [catRes, savedRes] = await Promise.all([
+            API.Config.getCategoriasWoo(),
+            API.Config.getCategoriasProduto()
+        ]);
+
+        const todasCats = (catRes.sucesso && catRes.categorias) ? catRes.categorias : [];
+        const salvas = (savedRes.sucesso && savedRes.categorias) ? savedRes.categorias : [];
+        window._categoriasProdutoCache = salvas;
+
+        if (todasCats.length === 0) {
+            container.innerHTML = '<span style="color:#888;font-size:13px;">Nenhuma categoria encontrada. Verifique a conexão WooCommerce.</span>';
+            if (statusEl) { statusEl.textContent = 'sem categorias'; statusEl.style.background = '#fff3cd'; statusEl.style.color = '#856404'; }
+            return;
+        }
+
+        container.innerHTML = todasCats.map(cat => {
+            const checked = salvas.includes(cat.name) ? 'checked' : '';
+            return `<label style="display:flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;${checked ? 'border-color:#28a745;background:#f0fff0;' : ''}">
+                <input type="checkbox" class="cat-produto-check" value="${cat.name}" ${checked} onchange="salvarCategoriasProduto()" style="width:15px;height:15px;cursor:pointer;">
+                ${cat.name} <span style="color:#aaa;font-size:11px;">(${cat.count})</span>
+            </label>`;
+        }).join('');
+
+        if (statusEl) {
+            if (salvas.length > 0) {
+                statusEl.textContent = salvas.length + ' selecionada(s)';
+                statusEl.style.background = '#d4edda';
+                statusEl.style.color = '#155724';
+            } else {
+                statusEl.textContent = 'nenhuma selecionada';
+                statusEl.style.background = '#f8d7da';
+                statusEl.style.color = '#721c24';
+            }
+        }
+    } catch (e) {
+        container.innerHTML = '<span style="color:#dc3545;font-size:13px;">Erro ao carregar categorias: ' + e.message + '</span>';
+    }
+}
+
+async function salvarCategoriasProduto() {
+    const checks = document.querySelectorAll('.cat-produto-check:checked');
+    const categorias = Array.from(checks).map(c => c.value);
+
+    try {
+        await API.Config.salvarCategoriasProduto(categorias);
+        window._categoriasProdutoCache = categorias;
+
+        const statusEl = document.getElementById('cat-produto-status');
+        if (statusEl) {
+            statusEl.textContent = categorias.length + ' selecionada(s) - salvo!';
+            statusEl.style.background = '#d4edda';
+            statusEl.style.color = '#155724';
+        }
+
+        // Re-style labels
+        document.querySelectorAll('.cat-produto-check').forEach(cb => {
+            const label = cb.closest('label');
+            if (label) {
+                label.style.borderColor = cb.checked ? '#28a745' : '#ddd';
+                label.style.background = cb.checked ? '#f0fff0' : '#fff';
+            }
+        });
+    } catch (e) {
+        alert('Erro ao salvar: ' + e.message);
+    }
+}
 
 /**
  * Limpa o campo de referência
@@ -6769,24 +6810,91 @@ window.cancelarPorReferencia = cancelarPorReferencia;
  */
 async function carregarPedidosExcel() {
     const contentArea = document.getElementById('content-area');
-    const meses = gerarListaMeses(); // Reutiliza função global do app.js
+    const meses = gerarListaMeses();
 
     contentArea.innerHTML = `
         <div class="content-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                <h2 class="section-title" style="margin: 0;">Pedidos Woo Excel (Google Sheets)</h2>
-                <div style="display: flex; gap: 12px; align-items: center;">
-                    <a href="https://docs.google.com/spreadsheets" target="_blank" class="btn btn-secondary" style="padding: 8px 16px; font-size: 14px; text-decoration: none;">
-                        Abrir Planilha ↗
-                    </a>
-                    <button 
-                        type="button" 
-                        class="btn btn-primary" 
-                        onclick="sincronizarExcel()"
-                        id="btn-sincronizar-excel"
-                        style="padding: 8px 16px; font-size: 14px;">
-                        🔄 Sincronizar (Geral)
-                    </button>
+                <h2 class="section-title" style="margin: 0;">Woo Serviços</h2>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <div id="status-servicos-excel" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
+                        <span style="color: #666; font-size: 12px;">Carregando...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Categorias de Serviço -->
+            <div id="categorias-servico-container" style="padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #dee2e6; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-weight: 600; font-size: 14px;">Categorias de Serviço (NFSe)</span>
+                    <span id="cat-servico-info" style="font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #e2e3e5; color: #383d41;">carregando...</span>
+                </div>
+                <p style="font-size: 12px; color: #666; margin: 0 0 8px;">Pedidos cujas categorias <strong>não</strong> são de produto aparecem aqui como serviço e geram NFSe.</p>
+                <div id="cat-servico-list" style="display: flex; flex-wrap: wrap; gap: 6px;">
+                    <span style="color: #888; font-size: 13px;">Carregando...</span>
+                </div>
+            </div>
+
+            <!-- Importar do Google Sheets (collapsible) -->
+            <div style="margin-bottom: 16px;">
+                <button type="button" onclick="toggleConfigGSheets()" style="background: none; border: 1px solid #dee2e6; border-radius: 8px; padding: 10px 16px; cursor: pointer; width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: #333;">
+                    <span><strong>Importar do Google Sheets</strong> <span id="gsheets-config-status" style="font-size: 12px; margin-left: 8px; padding: 2px 8px; border-radius: 4px;">⏳</span></span>
+                    <span id="gsheets-config-arrow">▶</span>
+                </button>
+                <div id="gsheets-config-panel" style="display: none; border: 1px solid #dee2e6; border-top: none; border-radius: 0 0 8px 8px; padding: 20px; background: #fafafa;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; box-sizing: border-box;">
+                        <div style="min-width: 0;">
+                            <h4 style="margin: 0 0 12px 0; color: #333;">Credenciais</h4>
+                            <div style="margin-bottom: 12px;">
+                                <label style="font-weight: 600; font-size: 13px; color: #555; display: block; margin-bottom: 4px;">ID da Planilha</label>
+                                <input type="text" id="gsheets-id" placeholder="Ex: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; font-family: monospace; box-sizing: border-box;">
+                                <small style="color: #888; font-size: 11px;">Encontre na URL: docs.google.com/spreadsheets/d/<strong>{ID}</strong>/edit</small>
+                            </div>
+                            <div style="margin-bottom: 12px;">
+                                <label style="font-weight: 600; font-size: 13px; color: #555; display: block; margin-bottom: 4px;">JSON da Service Account</label>
+                                <textarea id="gsheets-credentials" rows="6" placeholder='Cole aqui o conteúdo do arquivo .json da Service Account do Google Cloud...' style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; font-family: monospace; resize: vertical; box-sizing: border-box;"></textarea>
+                                <small style="color: #888; font-size: 11px;">Baixado do Google Cloud Console > APIs > Credenciais > Service Account > Chaves</small>
+                            </div>
+                            <div style="margin-bottom: 8px;" id="gsheets-client-email-info"></div>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-primary" onclick="salvarConfigGSheets()" style="padding: 8px 16px; font-size: 13px;">Salvar</button>
+                                <button type="button" class="btn btn-secondary" onclick="testarConfigGSheets()" style="padding: 8px 16px; font-size: 13px;">Testar Conexão</button>
+                                <button type="button" class="btn btn-secondary" onclick="sincronizarExcel()" id="btn-sincronizar-excel" style="padding: 8px 16px; font-size: 13px;">Sincronizar Planilha</button>
+                                <a id="link-abrir-planilha" href="https://docs.google.com/spreadsheets" target="_blank" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px; text-decoration: none;">Abrir Planilha</a>
+                            </div>
+                            <div id="gsheets-feedback" style="margin-top: 8px; display: none; padding: 8px 12px; border-radius: 6px; font-size: 13px;"></div>
+                        </div>
+                        <div style="min-width: 0;">
+                            <h4 style="margin: 0 0 12px 0; color: #333;">Modelo da Planilha</h4>
+                            <p style="font-size: 12px; color: #666; margin-bottom: 8px;">Aba <strong>"Pedidos"</strong> com colunas:</p>
+                            <div style="overflow-x: auto; border: 1px solid #ddd; border-radius: 6px; font-size: 11px;">
+                                <table style="width: 100%; border-collapse: collapse;">
+                                    <thead><tr style="background: #e8f5e9;">
+                                        <th style="padding: 4px 8px; border: 1px solid #ddd;">A</th><th style="padding: 4px 8px; border: 1px solid #ddd;">B</th><th style="padding: 4px 8px; border: 1px solid #ddd;">C</th><th style="padding: 4px 8px; border: 1px solid #ddd;">D</th><th style="padding: 4px 8px; border: 1px solid #ddd;">E</th><th style="padding: 4px 8px; border: 1px solid #ddd;">F</th><th style="padding: 4px 8px; border: 1px solid #ddd;">G</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        <tr style="background: #f1f8e9; font-weight: 600;">
+                                            <td style="padding: 4px 8px; border: 1px solid #ddd;">ID Pedido</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Data</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Cliente</td><td style="padding: 4px 8px; border: 1px solid #ddd;">CPF/CNPJ</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Email</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Serviço</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Valor</td>
+                                        </tr>
+                                        <tr style="color: #999;">
+                                            <td style="padding: 4px 8px; border: 1px solid #ddd;">6454</td><td style="padding: 4px 8px; border: 1px solid #ddd;">2026-03-15</td><td style="padding: 4px 8px; border: 1px solid #ddd;">João Silva</td><td style="padding: 4px 8px; border: 1px solid #ddd;">123.456.789-00</td><td style="padding: 4px 8px; border: 1px solid #ddd;">joao@email.com</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Atendimento</td><td style="padding: 4px 8px; border: 1px solid #ddd;">150.00</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p style="font-size: 11px; color: #888; margin-top: 6px;">+ colunas H-M: Status Woo, Status Nota, N Nota, Link PDF, Msg Erro, JSON Pedido</p>
+                            <div style="margin-top: 12px; padding: 10px; background: #fff3e0; border-radius: 6px; border: 1px solid #ffe0b2;">
+                                <p style="font-size: 12px; color: #e65100; margin: 0 0 6px 0; font-weight: 600;">Como configurar</p>
+                                <ol style="font-size: 11px; color: #666; margin: 0; padding-left: 16px; line-height: 1.7;">
+                                    <li>No <a href="https://console.cloud.google.com" target="_blank" style="color: #1976d2;">Google Cloud Console</a>, crie um projeto</li>
+                                    <li>Ative a <strong>Google Sheets API</strong></li>
+                                    <li>Crie uma <strong>Service Account</strong> e baixe o JSON</li>
+                                    <li>Compartilhe a planilha com o email da Service Account (Editor)</li>
+                                    <li>Cole o ID da planilha e o JSON aqui</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -6794,8 +6902,7 @@ async function carregarPedidosExcel() {
 
             <div class="accordion" id="accordion-meses-excel">
                 ${meses.map((mes, index) => {
-        const [anoM, mesM] = mes.value.split('-'); // 2025-11
-        // Usar label do mês para interface (Novembro, Dezembro...)
+        const [anoM, mesM] = mes.value.split('-');
         const mesNome = mes.label.split(' ')[0];
 
         return `
@@ -6806,44 +6913,19 @@ async function carregarPedidosExcel() {
                             <span class="accordion-icon">▼</span>
                         </div>
                         <div class="accordion-content ${index === 0 ? 'active' : ''}" id="content-excel-${mes.value}">
-                             <div style="padding: 10px 0; display: flex; justify-content: flex-end;">
-                                <button 
-                                    class="btn-sm" 
-                                    style="background-color: #fff; border: 1px solid #e0e0e0; color: #333; display: flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
-                                    onclick="importarNubankMes('${mesNome}', '${anoM}')">
-                                    <span style="font-size: 14px;">🏦</span> Importar Nubank
-                                </button>
-                                <button 
-                                    class="btn-sm" 
-                                    style="background-color: #fff; border: 1px solid #e0e0e0; color: #666; display: flex; align-items: center; gap: 6px; margin-left: 8px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
-                                    onclick="removerNubankMes('${mesNome}', '${anoM}')">
-                                    <span style="font-size: 14px;">🗑️</span> Retirar
-                                </button>
-                                <button 
-                                    class="btn-sm" 
-                                    style="background-color: #fff; border: 1px solid #e0e0e0; color: #333; display: flex; align-items: center; gap: 6px; margin-left: 8px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
-                                    onclick="ordenarPedidosPorDataLocal('${mes.value}')">
-                                    <span style="font-size: 14px;">📅</span> Ordenar por Data
-                                </button>
-                                <button 
-                                    class="btn-sm" 
-                                    style="background-color: #fff; border: 1px solid #e0e0e0; color: #e65100; display: flex; align-items: center; gap: 6px; margin-left: 8px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
-                                    onclick="atualizarStatusGeral('${mes.value}')">
-                                    <span style="font-size: 14px;">↻</span> Atualizar Status (Geral)
-                                </button>
-                                <button 
-                                    id="btn-gerar-todas-${mes.value}"
-                                    class="btn-sm" 
-                                    style="background-color: #e65100; border: 1px solid #e65100; color: #fff; display: flex; align-items: center; gap: 6px; margin-left: 8px; cursor: pointer; border-radius: 4px; padding: 4px 10px; font-weight: 600;"
-                                    onclick="gerarTodasNotasMes('${mes.value}')">
-                                    Gerar Todas Notas
-                                </button>
-                                <button 
-                                    style="background-color: #1976d2; border: 1px solid #1976d2; color: #fff; display: flex; align-items: center; gap: 4px; margin-left: 4px; cursor: pointer; border-radius: 4px; padding: 4px 10px; font-weight: 600; font-size: 12px;"
-                                    onclick="verificarTodosProcessando()"
-                                    title="Verificar status de todas notas em Processando...">
-                                    ↻ Atualizar Status
-                                </button>
+                             <div style="padding: 10px 0; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px;">
+                                <button class="btn-sm" style="background-color: #fff; border: 1px solid #e0e0e0; color: #333; display: flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
+                                    onclick="importarNubankMes('${mesNome}', '${anoM}')">Importar Nubank</button>
+                                <button class="btn-sm" style="background-color: #fff; border: 1px solid #e0e0e0; color: #666; display: flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
+                                    onclick="removerNubankMes('${mesNome}', '${anoM}')">Retirar</button>
+                                <button class="btn-sm" style="background-color: #fff; border: 1px solid #e0e0e0; color: #333; display: flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
+                                    onclick="ordenarPedidosPorDataLocal('${mes.value}')">Ordenar por Data</button>
+                                <button class="btn-sm" style="background-color: #fff; border: 1px solid #e0e0e0; color: #e65100; display: flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
+                                    onclick="atualizarStatusGeral('${mes.value}')">Atualizar Status</button>
+                                <button id="btn-gerar-todas-${mes.value}" class="btn-sm" style="background-color: #e65100; border: 1px solid #e65100; color: #fff; display: flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 10px; font-weight: 600;"
+                                    onclick="gerarTodasNotasMes('${mes.value}')">Gerar Todas Notas</button>
+                                <button style="background-color: #1976d2; border: 1px solid #1976d2; color: #fff; display: flex; align-items: center; gap: 4px; cursor: pointer; border-radius: 4px; padding: 4px 10px; font-weight: 600; font-size: 12px;"
+                                    onclick="verificarTodosProcessando()" title="Verificar notas em Processando...">Atualizar Status</button>
                              </div>
                             <div class="table-container">
                                 <table class="table">
@@ -6871,41 +6953,80 @@ async function carregarPedidosExcel() {
         </div>
     `;
 
+    carregarConfigGSheets();
+    carregarCategoriasServicoInfo();
+
     try {
-        // Capturar meses abertos atualmente para preservar estado
         const activeMonths = [];
         document.querySelectorAll('.accordion-content.active').forEach(el => {
             const id = el.id.replace('content-excel-', '');
             activeMonths.push(id);
         });
 
-        // Buscar todos os pedidos da planilha
         const resultado = await API.Excel.listar();
 
         if (resultado.sucesso) {
             window.pedidosExcelCache = resultado.dados || [];
             distribuirPedidosExcelPorMes(window.pedidosExcelCache);
 
-            // Restaurar meses abertos
             activeMonths.forEach(mesId => {
                 toggleMesExcel(mesId);
             });
-            // Se nenhum estava aberto, abre o primeiro por padrão (comportamento original)
-            if (activeMonths.length === 0 && window.pedidosExcelCache.length > 0) {
-                // A função original já abre o primeiro no template string, então ok.
-            }
+
+            const statusEl = document.getElementById('status-servicos-excel');
+            if (statusEl) statusEl.innerHTML = '<span style="color: #28a745; font-size: 12px;">' + (window.pedidosExcelCache.length) + ' pedidos carregados</span>';
         } else {
             document.querySelectorAll('[id^="lista-excel-"]').forEach(el => {
-                el.innerHTML = `
-                    <tr><td colspan="7" style="text-align: center; padding: 20px; color: red;">
-                        Erro ao carregar: ${resultado.erro}. <br>
-                        Verifique se configurou as credenciais do Google Sheets.
-                    </td></tr>`;
+                el.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #888;">Nenhum dado do Google Sheets. Configure acima para importar.</td></tr>';
             });
+            const statusEl = document.getElementById('status-servicos-excel');
+            if (statusEl) statusEl.innerHTML = '<span style="color: #888; font-size: 12px;">Sem dados</span>';
         }
     } catch (error) {
         console.error(error);
-        mostrarFeedbackExcel('error', `Erro de conexão: ${error.message}`);
+        mostrarFeedbackExcel('error', 'Erro de conexão: ' + error.message);
+    }
+}
+
+async function carregarCategoriasServicoInfo() {
+    const container = document.getElementById('cat-servico-list');
+    const infoEl = document.getElementById('cat-servico-info');
+    if (!container) return;
+
+    try {
+        const [catRes, savedRes] = await Promise.all([
+            API.Config.getCategoriasWoo(),
+            API.Config.getCategoriasProduto()
+        ]);
+
+        const todasCats = (catRes.sucesso && catRes.categorias) ? catRes.categorias : [];
+        const produtoCats = (savedRes.sucesso && savedRes.categorias) ? savedRes.categorias : [];
+
+        const servicoCats = todasCats.filter(cat => !produtoCats.includes(cat.name));
+
+        if (servicoCats.length === 0 && todasCats.length === 0) {
+            container.innerHTML = '<span style="color:#888;font-size:13px;">Nenhuma categoria encontrada. Verifique a conexão WooCommerce.</span>';
+            if (infoEl) { infoEl.textContent = 'sem categorias'; infoEl.style.background = '#fff3cd'; infoEl.style.color = '#856404'; }
+            return;
+        }
+
+        if (servicoCats.length === 0) {
+            container.innerHTML = '<span style="color:#888;font-size:13px;">Todas as categorias estão marcadas como produto. Configure na tela Woo Produtos.</span>';
+            if (infoEl) { infoEl.textContent = 'nenhuma categoria de serviço'; infoEl.style.background = '#fff3cd'; infoEl.style.color = '#856404'; }
+            return;
+        }
+
+        container.innerHTML = servicoCats.map(cat =>
+            '<span style="display:inline-block;padding:4px 10px;border:1px solid #1976d2;border-radius:6px;background:#e3f2fd;font-size:13px;color:#1565c0;">' + cat.name + ' <span style="color:#90caf9;font-size:11px;">(' + cat.count + ')</span></span>'
+        ).join('');
+
+        if (infoEl) {
+            infoEl.textContent = servicoCats.length + ' categoria(s) de serviço';
+            infoEl.style.background = '#d4edda';
+            infoEl.style.color = '#155724';
+        }
+    } catch (e) {
+        container.innerHTML = '<span style="color:#dc3545;font-size:13px;">Erro ao carregar categorias</span>';
     }
 }
 
@@ -7507,6 +7628,101 @@ window.cancelarNotaExcel = cancelarNotaExcel;
 window.alterarStatusManual = alterarStatusManual;
 window.toggleMesExcel = toggleMesExcel;
 window.gerarTodasNotasMes = gerarTodasNotasMes;
+window.toggleConfigGSheets = toggleConfigGSheets;
+window.salvarConfigGSheets = salvarConfigGSheets;
+window.testarConfigGSheets = testarConfigGSheets;
+
+function toggleConfigGSheets() {
+    const panel = document.getElementById('gsheets-config-panel');
+    const arrow = document.getElementById('gsheets-config-arrow');
+    if (!panel) return;
+    const open = panel.style.display !== 'none';
+    panel.style.display = open ? 'none' : 'block';
+    if (arrow) arrow.textContent = open ? '▶' : '▼';
+    if (!open) carregarConfigGSheets();
+}
+
+async function carregarConfigGSheets() {
+    try {
+        const res = await API.Config.getGoogleSheets();
+        if (res.sucesso && res.dados) {
+            const idInput = document.getElementById('gsheets-id');
+            if (idInput && res.dados.sheets_id) idInput.value = res.dados.sheets_id;
+
+            const statusEl = document.getElementById('gsheets-config-status');
+            if (statusEl) {
+                if (res.dados.tem_credentials && res.dados.sheets_id) {
+                    statusEl.textContent = '✓ Configurado';
+                    statusEl.style.background = '#d4edda';
+                    statusEl.style.color = '#155724';
+                } else {
+                    statusEl.textContent = '✗ Não configurado';
+                    statusEl.style.background = '#f8d7da';
+                    statusEl.style.color = '#721c24';
+                }
+            }
+
+            const emailInfo = document.getElementById('gsheets-client-email-info');
+            if (emailInfo && res.dados.client_email) {
+                emailInfo.innerHTML = '<small style="color: #1976d2;">Service Account: <strong>' + res.dados.client_email + '</strong></small>';
+            }
+
+            // Update "Abrir Planilha" link
+            const link = document.getElementById('link-abrir-planilha');
+            if (link && res.dados.sheets_id) {
+                link.href = 'https://docs.google.com/spreadsheets/d/' + res.dados.sheets_id + '/edit';
+            }
+        }
+    } catch (e) {
+        console.error('Erro ao carregar config GSheets:', e);
+    }
+}
+
+async function salvarConfigGSheets() {
+    const sheetsId = document.getElementById('gsheets-id')?.value?.trim();
+    const credentials = document.getElementById('gsheets-credentials')?.value?.trim();
+    const fb = document.getElementById('gsheets-feedback');
+
+    if (!sheetsId) {
+        if (fb) { fb.style.display = 'block'; fb.style.background = '#f8d7da'; fb.style.color = '#721c24'; fb.textContent = 'Informe o ID da planilha'; }
+        return;
+    }
+
+    if (fb) { fb.style.display = 'block'; fb.style.background = '#fff3cd'; fb.style.color = '#856404'; fb.textContent = 'Salvando...'; }
+
+    try {
+        const body = { sheets_id: sheetsId };
+        if (credentials) body.credentials_json = credentials;
+        const res = await API.Config.salvarGoogleSheets(body.sheets_id, body.credentials_json);
+        if (res.sucesso) {
+            if (fb) { fb.style.background = '#d4edda'; fb.style.color = '#155724'; fb.textContent = 'Configuração salva com sucesso!'; }
+            await carregarConfigGSheets();
+            // Clear credentials textarea (security)
+            const credEl = document.getElementById('gsheets-credentials');
+            if (credEl) credEl.value = '';
+        } else {
+            if (fb) { fb.style.background = '#f8d7da'; fb.style.color = '#721c24'; fb.textContent = 'Erro: ' + (res.erro || 'Falha ao salvar'); }
+        }
+    } catch (e) {
+        if (fb) { fb.style.background = '#f8d7da'; fb.style.color = '#721c24'; fb.textContent = 'Erro: ' + e.message; }
+    }
+}
+
+async function testarConfigGSheets() {
+    const fb = document.getElementById('gsheets-feedback');
+    if (fb) { fb.style.display = 'block'; fb.style.background = '#fff3cd'; fb.style.color = '#856404'; fb.textContent = 'Testando conexão...'; }
+
+    try {
+        const res = await API.Config.testarGoogleSheets();
+        if (res.sucesso) {
+            if (fb) { fb.style.background = '#d4edda'; fb.style.color = '#155724'; fb.textContent = '✓ ' + (res.mensagem || 'Conexão OK!'); }
+        } else {
+            if (fb) { fb.style.background = '#f8d7da'; fb.style.color = '#721c24'; fb.textContent = '✗ ' + (res.erro || 'Falha na conexão'); }
+        }
+    } catch (e) {
+        if (fb) { fb.style.background = '#f8d7da'; fb.style.color = '#721c24'; fb.textContent = '✗ Erro: ' + e.message; }
+    }
+}
 
 
 /**

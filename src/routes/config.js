@@ -486,6 +486,248 @@ FOCUS_NFE_CNPJ=
 });
 
 /**
+ * GET /api/config/auto-emitir
+ * Retorna se emissao automatica esta ativa (por tenant ou global)
+ */
+router.get('/auto-emitir', async (req, res) => {
+  try {
+    let valor = null;
+    if (req.tenant_id) {
+      valor = await buscarConfiguracaoTenant(req.tenant_id, 'AUTO_EMITIR');
+    }
+    if (valor === null) {
+      valor = await buscarConfiguracao('AUTO_EMITIR');
+    }
+    res.json({ sucesso: true, auto_emitir: valor === 'true' || valor === '1' });
+  } catch (error) {
+    res.json({ sucesso: true, auto_emitir: false });
+  }
+});
+
+/**
+ * POST /api/config/auto-emitir
+ * Ativa/desativa emissao automatica
+ * Body: { ativo: true/false }
+ */
+router.post('/auto-emitir', async (req, res) => {
+  try {
+    const { ativo } = req.body;
+    const valor = ativo ? 'true' : 'false';
+
+    if (req.tenant_id) {
+      await salvarConfiguracaoTenant(req.tenant_id, 'AUTO_EMITIR', valor);
+    } else {
+      await salvarConfiguracao('AUTO_EMITIR', valor);
+    }
+
+    // Invalidar cache do tenant
+    try {
+      const { invalidateCache } = require('../services/tenantService');
+      if (invalidateCache) invalidateCache(req.tenant_id);
+    } catch (e) { /* ok */ }
+
+    logger.info('Emissao automatica ' + (ativo ? 'ativada' : 'desativada'), {
+      tenant_id: req.tenant_id || 'global'
+    });
+
+    res.json({ sucesso: true, auto_emitir: ativo === true });
+  } catch (error) {
+    logger.error('Erro ao salvar auto-emitir', { error: error.message });
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+});
+
+/**
+ * GET /api/config/categorias-produto
+ * Retorna lista de categorias que sao de produto (NFe)
+ */
+router.get('/categorias-produto', async (req, res) => {
+  try {
+    let valor = null;
+    if (req.tenant_id) {
+      valor = await buscarConfiguracaoTenant(req.tenant_id, 'CATEGORIAS_PRODUTO');
+    }
+    if (valor === null) {
+      valor = await buscarConfiguracao('CATEGORIAS_PRODUTO');
+    }
+    let categorias = [];
+    if (valor) {
+      try { categorias = JSON.parse(valor); } catch (e) { categorias = []; }
+    }
+    res.json({ sucesso: true, categorias });
+  } catch (error) {
+    res.json({ sucesso: true, categorias: [] });
+  }
+});
+
+/**
+ * POST /api/config/categorias-produto
+ * Salva lista de categorias de produto
+ * Body: { categorias: ["Cat1", "Cat2"] }
+ */
+router.post('/categorias-produto', async (req, res) => {
+  try {
+    const { categorias } = req.body;
+    if (!Array.isArray(categorias)) {
+      return res.status(400).json({ sucesso: false, erro: 'categorias deve ser um array' });
+    }
+    const valor = JSON.stringify(categorias);
+
+    if (req.tenant_id) {
+      await salvarConfiguracaoTenant(req.tenant_id, 'CATEGORIAS_PRODUTO', valor);
+    } else {
+      await salvarConfiguracao('CATEGORIAS_PRODUTO', valor);
+    }
+
+    try {
+      const { invalidateCache } = require('../services/tenantService');
+      if (invalidateCache) invalidateCache(req.tenant_id);
+    } catch (e) { /* ok */ }
+
+    logger.info('Categorias de produto salvas', { tenant_id: req.tenant_id || 'global', categorias });
+    res.json({ sucesso: true, categorias });
+  } catch (error) {
+    logger.error('Erro ao salvar categorias de produto', { error: error.message });
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+});
+
+/**
+ * GET /api/config/google-sheets
+ * Retorna configuracao do Google Sheets (por tenant ou global)
+ */
+router.get('/google-sheets', async (req, res) => {
+  try {
+    let sheetsId = null;
+    let credentials = null;
+
+    if (req.tenant_id) {
+      sheetsId = await buscarConfiguracaoTenant(req.tenant_id, 'GOOGLE_SHEETS_ID');
+      credentials = await buscarConfiguracaoTenant(req.tenant_id, 'GOOGLE_SHEETS_CREDENTIALS');
+    }
+    if (sheetsId === null) {
+      sheetsId = await buscarConfiguracao('GOOGLE_SHEETS_ID');
+    }
+    if (credentials === null) {
+      credentials = await buscarConfiguracao('GOOGLE_SHEETS_CREDENTIALS');
+    }
+
+    // Fallback para .env
+    if (!sheetsId) sheetsId = process.env.GOOGLE_SHEETS_ID || '';
+    if (!credentials) credentials = process.env.GOOGLE_SHEETS_CREDENTIALS || '';
+
+    let credentialsParsed = null;
+    if (credentials) {
+      try {
+        credentialsParsed = JSON.parse(credentials);
+      } catch (e) { /* raw string */ }
+    }
+
+    res.json({
+      sucesso: true,
+      dados: {
+        sheets_id: sheetsId,
+        tem_credentials: !!credentials && credentials.length > 2,
+        client_email: credentialsParsed?.client_email || ''
+      }
+    });
+  } catch (error) {
+    logger.error('Erro ao buscar config Google Sheets', { error: error.message });
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+});
+
+/**
+ * POST /api/config/google-sheets
+ * Salva configuracao do Google Sheets
+ * Body: { sheets_id, credentials_json }
+ */
+router.post('/google-sheets', async (req, res) => {
+  try {
+    const { sheets_id, credentials_json } = req.body;
+
+    if (credentials_json) {
+      try {
+        JSON.parse(credentials_json);
+      } catch (e) {
+        return res.status(400).json({ sucesso: false, erro: 'JSON de credenciais inválido' });
+      }
+    }
+
+    if (req.tenant_id) {
+      if (sheets_id !== undefined) await salvarConfiguracaoTenant(req.tenant_id, 'GOOGLE_SHEETS_ID', sheets_id);
+      if (credentials_json !== undefined) await salvarConfiguracaoTenant(req.tenant_id, 'GOOGLE_SHEETS_CREDENTIALS', credentials_json);
+    } else {
+      if (sheets_id !== undefined) await salvarConfiguracao('GOOGLE_SHEETS_ID', sheets_id);
+      if (credentials_json !== undefined) await salvarConfiguracao('GOOGLE_SHEETS_CREDENTIALS', credentials_json);
+    }
+
+    try {
+      const { invalidateCache } = require('../services/tenantService');
+      if (invalidateCache) invalidateCache(req.tenant_id);
+    } catch (e) { /* ok */ }
+
+    // Reinicializar o serviço Google Sheets
+    try {
+      const googleSheets = require('../services/googleSheets');
+      googleSheets.initialized = false;
+      if (sheets_id) googleSheets.spreadsheetId = sheets_id;
+    } catch (e) { /* ok */ }
+
+    logger.info('Config Google Sheets salva', { tenant_id: req.tenant_id || 'global' });
+    res.json({ sucesso: true });
+  } catch (error) {
+    logger.error('Erro ao salvar config Google Sheets', { error: error.message });
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+});
+
+/**
+ * POST /api/config/google-sheets/testar
+ * Testa conexao com Google Sheets
+ */
+router.post('/google-sheets/testar', async (req, res) => {
+  try {
+    const googleSheets = require('../services/googleSheets');
+    googleSheets.initialized = false;
+
+    let sheetsId = null;
+    let credentials = null;
+
+    if (req.tenant_id) {
+      sheetsId = await buscarConfiguracaoTenant(req.tenant_id, 'GOOGLE_SHEETS_ID');
+      credentials = await buscarConfiguracaoTenant(req.tenant_id, 'GOOGLE_SHEETS_CREDENTIALS');
+    }
+    if (!sheetsId) sheetsId = await buscarConfiguracao('GOOGLE_SHEETS_ID') || process.env.GOOGLE_SHEETS_ID;
+    if (!credentials) credentials = await buscarConfiguracao('GOOGLE_SHEETS_CREDENTIALS') || process.env.GOOGLE_SHEETS_CREDENTIALS;
+
+    if (!sheetsId || !credentials) {
+      return res.json({ sucesso: false, erro: 'ID da planilha ou credenciais não configurados' });
+    }
+
+    // Temporarily override env for testing
+    const oldId = process.env.GOOGLE_SHEETS_ID;
+    const oldCred = process.env.GOOGLE_SHEETS_CREDENTIALS;
+    process.env.GOOGLE_SHEETS_ID = sheetsId;
+    process.env.GOOGLE_SHEETS_CREDENTIALS = credentials;
+
+    try {
+      await googleSheets.init();
+      process.env.GOOGLE_SHEETS_ID = oldId;
+      process.env.GOOGLE_SHEETS_CREDENTIALS = oldCred;
+      res.json({ sucesso: true, mensagem: 'Conexão com Google Sheets bem-sucedida!' });
+    } catch (initError) {
+      process.env.GOOGLE_SHEETS_ID = oldId;
+      process.env.GOOGLE_SHEETS_CREDENTIALS = oldCred;
+      res.json({ sucesso: false, erro: initError.message });
+    }
+  } catch (error) {
+    logger.error('Erro ao testar Google Sheets', { error: error.message });
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+});
+
+/**
  * GET /api/config/logs
  * Retorna logs do servidor
  */

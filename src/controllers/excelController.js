@@ -191,19 +191,30 @@ const excelController = {
                         continue;
                     }
 
-                    // Filtro: categorias que não geram nota
-                    const categoriasProibidas = [
-                        'livro faíscas', 'livro faiscas', 'livros faíscas', 'livros faiscas',
-                        'presencial sem nota'
-                    ];
+                    // Filtro: excluir categorias de produto (NFe) e outras proibidas
+                    const normalize = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    let categoriasExcluir = ['presencial sem nota'];
+                    try {
+                        const { buscarConfiguracao } = require('../config/database');
+                        const catProdVal = await buscarConfiguracao('CATEGORIAS_PRODUTO');
+                        if (catProdVal) {
+                            const parsed = JSON.parse(catProdVal);
+                            categoriasExcluir = categoriasExcluir.concat(parsed);
+                        } else {
+                            categoriasExcluir.push('Livro Faíscas');
+                        }
+                    } catch (e) {
+                        categoriasExcluir.push('Livro Faíscas');
+                    }
+                    const catsExcluirLower = categoriasExcluir.map(normalize);
                     const temCategoriaProibida = (p.line_items || []).some(item => {
-                        const nomeItem = (item.name || '').toLowerCase();
-                        if (categoriasProibidas.some(cat => nomeItem.includes(cat))) return true;
+                        const nomeItem = normalize(item.name);
+                        if (catsExcluirLower.some(cat => nomeItem.includes(cat))) return true;
 
                         if (item.categories && Array.isArray(item.categories)) {
                             return item.categories.some(cat => {
-                                const nomeCat = (cat.name || cat || '').toLowerCase();
-                                return categoriasProibidas.some(proibida => nomeCat.includes(proibida));
+                                const nomeCat = normalize(cat.name || cat);
+                                return catsExcluirLower.some(proibida => nomeCat.includes(proibida) || proibida.includes(nomeCat));
                             });
                         }
                         return false;

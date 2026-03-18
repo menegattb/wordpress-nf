@@ -394,50 +394,40 @@ async function listarTodasNotas(req, res) {
  */
 async function listarLogsPedidos(req, res) {
   try {
-    const { pedido_ids, mes, limite = 100 } = req.query;
+    const { pedido_ids, mes, limite = 100, referencia } = req.query;
     
     let filtros = {
       limite: parseInt(limite),
       offset: 0
     };
+
+    if (referencia) {
+      const logs = await listarLogs({ ...filtros, referencia });
+      return res.json({ sucesso: true, dados: logs });
+    }
     
-    // Se pedido_ids for fornecido, filtrar por eles
     if (pedido_ids) {
       const ids = Array.isArray(pedido_ids) ? pedido_ids : pedido_ids.split(',');
-      // Buscar logs para cada pedido_id
       const todosLogs = [];
       for (const pedidoId of ids) {
-        const logs = await listarLogs({
-          ...filtros,
-          pedido_id: pedidoId.trim()
-        });
+        const logs = await listarLogs({ ...filtros, pedido_id: pedidoId.trim() });
         todosLogs.push(...logs);
       }
-      
-      // Ordenar por data (mais recente primeiro)
       todosLogs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      
-      return res.json(todosLogs.slice(0, parseInt(limite)));
+      return res.json({ sucesso: true, dados: todosLogs.slice(0, parseInt(limite)) });
     }
     
-    // Se mes for fornecido (formato YYYY-MM), filtrar por data diretamente no banco
     if (mes) {
       const logs = await listarLogs({ ...filtros, mes, limite: parseInt(limite) });
-      return res.json(logs);
+      return res.json({ sucesso: true, dados: logs });
     }
     
-    // Sem filtros, retornar logs recentes
     const logs = await listarLogs(filtros);
-    res.json(logs);
+    res.json({ sucesso: true, dados: logs });
     
   } catch (error) {
-    logger.error('Erro ao listar logs de pedidos', {
-      error: error.message
-    });
-    
-    res.status(500).json({
-      erro: error.message
-    });
+    logger.error('Erro ao listar logs de pedidos', { error: error.message });
+    res.status(500).json({ sucesso: false, erro: error.message });
   }
 }
 

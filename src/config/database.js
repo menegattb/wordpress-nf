@@ -1035,7 +1035,7 @@ async function salvarLog(log) {
  * Lista logs
  */
 async function listarLogs(filtros = {}) {
-  const { limite = 100, offset = 0, level, pedido_id, service, mes } = filtros;
+  const { limite = 100, offset = 0, level, pedido_id, service, referencia, mes } = filtros;
 
   if (hasDatabase) {
     let whereClause = [];
@@ -1060,7 +1060,12 @@ async function listarLogs(filtros = {}) {
       paramCount++;
     }
 
-    // Filtrar por mês diretamente no SQL se fornecido (formato YYYY-MM)
+    if (referencia) {
+      whereClause.push(`(referencia = $${paramCount} OR message ILIKE $${paramCount + 1} OR data::text ILIKE $${paramCount + 1})`);
+      params.push(referencia, `%${referencia}%`);
+      paramCount += 2;
+    }
+
     if (mes) {
       const [ano, mesNum] = mes.split('-');
       const dataInicio = new Date(Date.UTC(parseInt(ano), parseInt(mesNum) - 1, 1, 0, 0, 0, 0));
@@ -1081,22 +1086,20 @@ async function listarLogs(filtros = {}) {
 
     return result.rows;
   } else {
-    // Armazenamento em memória
     let logs = [...memoryStorage.logs];
 
-    if (level) {
-      logs = logs.filter(l => l.level === level);
+    if (level) logs = logs.filter(l => l.level === level);
+    if (pedido_id) logs = logs.filter(l => l.pedido_id === pedido_id);
+    if (service) logs = logs.filter(l => l.service === service);
+
+    if (referencia) {
+      logs = logs.filter(l =>
+        l.referencia === referencia ||
+        (l.message && l.message.includes(referencia)) ||
+        (l.data && JSON.stringify(l.data).includes(referencia))
+      );
     }
 
-    if (pedido_id) {
-      logs = logs.filter(l => l.pedido_id === pedido_id);
-    }
-
-    if (service) {
-      logs = logs.filter(l => l.service === service);
-    }
-
-    // Filtrar por mês se fornecido
     if (mes) {
       const [ano, mesNum] = mes.split('-');
       const dataInicio = new Date(Date.UTC(parseInt(ano), parseInt(mesNum) - 1, 1, 0, 0, 0, 0));
@@ -1109,7 +1112,6 @@ async function listarLogs(filtros = {}) {
     }
 
     logs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
     return logs.slice(offset, offset + limite);
   }
 }
