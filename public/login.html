@@ -211,7 +211,7 @@
                             
                             if (status.autenticado) {
                                 // Redirecionar para a página principal
-                                window.location.replace('/');
+                                window.location.replace('/admin');
                             } else {
                                 console.error('Sessão não encontrada após login:', status);
                                 showError('Erro ao verificar autenticação. A sessão não foi salva. Tente novamente.');
@@ -220,7 +220,7 @@
                         } catch (error) {
                             console.error('Erro ao verificar status:', error);
                             // Tentar redirecionar mesmo com erro
-                            window.location.replace('/');
+                                window.location.replace('/admin');
                         }
                     }, 200);
                 } else {
@@ -243,7 +243,7 @@
                 const data = await response.json();
                 
                 if (data.autenticado) {
-                    window.location.href = '/';
+                    window.location.href = '/admin';
                 }
             } catch (error) {
                 console.error('Erro ao verificar autenticação:', error);
