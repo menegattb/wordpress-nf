@@ -1444,7 +1444,7 @@ async function carregarPedidosServico(mostrarLoading = true) {
         contentArea.innerHTML = `
             <div class="content-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h2 class="section-title" style="margin: 0;">Pedidos Woo Serviço</h2>
+                    <h2 class="section-title" style="margin: 0;">Woo Serviços</h2>
                     <div id="status-woocommerce-servico" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
                         <span style="color: #666; font-size: 12px;">⏳ Carregando...</span>
                     </div>
@@ -1514,7 +1514,7 @@ async function carregarPedidosServico(mostrarLoading = true) {
             contentArea.innerHTML = `
                 <div class="content-section">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                        <h2 class="section-title" style="margin: 0;">Pedidos Woo Serviço</h2>
+                        <h2 class="section-title" style="margin: 0;">Woo Serviços</h2>
                         <div id="status-woocommerce-servico" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
                             <span style="color: #dc3545; font-size: 12px;">✗ Erro: ${error.message}</span>
                         </div>
@@ -1639,8 +1639,8 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
     const html = `
         <div class="content-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                <h2 class="section-title" style="margin: 0;">Pedidos Woo Serviço</h2>
-                <div style="display: flex; gap: 12px; align-items: center;">
+                <h2 class="section-title" style="margin: 0;">Woo Serviços</h2>
+                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
                     <button 
                         type="button" 
                         class="btn btn-primary" 
@@ -1649,8 +1649,79 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                         style="padding: 8px 16px; font-size: 14px;">
                         Recarregar do WooCommerce
                     </button>
+                    <button 
+                        type="button" 
+                        class="btn btn-secondary" 
+                        onclick="sincronizarExcel()"
+                        id="btn-sincronizar-excel"
+                        style="padding: 8px 16px; font-size: 14px;">
+                        🔄 Sincronizar (Geral)
+                    </button>
                 <div id="status-woocommerce-servico" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
                         <span style="color: #28a745; font-size: 12px;">✓ ${pedidosFiltrados.length} pedidos ${filtroStatus || filtroCategoria ? 'filtrados' : 'carregados'}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Categorias de Serviço -->
+            <div id="categorias-servico-container" style="padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #dee2e6; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-weight: 600; font-size: 14px;">Categorias de Serviço (NFSe)</span>
+                    <span id="cat-servico-info" style="font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #e2e3e5; color: #383d41;">carregando...</span>
+                </div>
+                <p style="font-size: 12px; color: #666; margin: 0 0 8px;">
+                    Pedidos cujas categorias <strong>não</strong> são de produto aparecem aqui como serviço e geram NFSe.
+                </p>
+                <div id="cat-servico-list" style="display: flex; flex-wrap: wrap; gap: 6px;">
+                    <span style="color: #888; font-size: 13px;">Carregando...</span>
+                </div>
+            </div>
+
+            <!-- Importar do Google Sheets (collapsible) -->
+            <div style="margin-bottom: 16px;">
+                <button type="button" onclick="toggleConfigGSheets()" style="background: none; border: 1px solid #dee2e6; border-radius: 8px; padding: 10px 16px; cursor: pointer; width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: #333;">
+                    <span><strong>Importar do Google Sheets</strong> <span id="gsheets-config-status" style="font-size: 12px; margin-left: 8px; padding: 2px 8px; border-radius: 4px;">⏳</span></span>
+                    <span id="gsheets-config-arrow">▶</span>
+                </button>
+                <div id="gsheets-config-panel" style="display: none; border: 1px solid #dee2e6; border-top: none; border-radius: 0 0 8px 8px; padding: 20px; background: #fafafa; box-sizing: border-box;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; box-sizing: border-box;">
+                        <div style="min-width: 0;">
+                            <h4 style="margin: 0 0 12px 0; color: #333;">Credenciais</h4>
+                            <div style="margin-bottom: 12px;">
+                                <label style="font-weight: 600; font-size: 13px; color: #555; display: block; margin-bottom: 4px;">ID da Planilha</label>
+                                <input type="text" id="gsheets-id" placeholder="Ex: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; font-family: monospace; box-sizing: border-box;">
+                                <small style="color: #888; font-size: 11px;">Encontre na URL: docs.google.com/spreadsheets/d/<strong>{ID}</strong>/edit</small>
+                            </div>
+                            <div style="margin-bottom: 12px;">
+                                <label style="font-weight: 600; font-size: 13px; color: #555; display: block; margin-bottom: 4px;">JSON da Service Account</label>
+                                <textarea id="gsheets-credentials" rows="6" placeholder='Cole aqui o conteúdo do arquivo .json da Service Account do Google Cloud...' style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; font-family: monospace; resize: vertical; box-sizing: border-box;"></textarea>
+                                <small style="color: #888; font-size: 11px;">Baixado do Google Cloud Console > APIs > Credenciais > Service Account > Chaves</small>
+                            </div>
+                            <div style="margin-bottom: 8px;" id="gsheets-client-email-info"></div>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-primary" onclick="salvarConfigGSheets()" style="padding: 8px 16px; font-size: 13px;">Salvar</button>
+                                <button type="button" class="btn btn-secondary" onclick="testarConfigGSheets()" style="padding: 8px 16px; font-size: 13px;">Testar Conexão</button>
+                                <a id="link-abrir-planilha" href="https://docs.google.com/spreadsheets" target="_blank" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px; text-decoration: none;">Abrir Planilha</a>
+                            </div>
+                            <div id="gsheets-feedback" style="margin-top: 8px; display: none; padding: 8px 12px; border-radius: 6px; font-size: 13px;"></div>
+                        </div>
+                        <div style="min-width: 0;">
+                            <h4 style="margin: 0 0 12px 0; color: #333;">Modelo da Planilha</h4>
+                            <p style="font-size: 12px; color: #666; margin-bottom: 8px;">Aba <strong>\"Pedidos\"</strong> com colunas:</p>
+                            <div style="overflow-x: auto; border: 1px solid #ddd; border-radius: 6px; font-size: 11px;">
+                                <table style="width: 100%; border-collapse: collapse;">
+                                    <thead><tr style="background: #e8f5e9;">
+                                        <th style="padding: 4px 8px; border: 1px solid #ddd;">A</th><th style="padding: 4px 8px; border: 1px solid #ddd;">B</th><th style="padding: 4px 8px; border: 1px solid #ddd;">C</th><th style="padding: 4px 8px; border: 1px solid #ddd;">D</th><th style="padding: 4px 8px; border: 1px solid #ddd;">E</th><th style="padding: 4px 8px; border: 1px solid #ddd;">F</th><th style="padding: 4px 8px; border: 1px solid #ddd;">G</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        <tr style="background: #f1f8e9; font-weight: 600;">
+                                            <td style="padding: 4px 8px; border: 1px solid #ddd;">ID Pedido</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Data</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Cliente</td><td style="padding: 4px 8px; border: 1px solid #ddd;">CPF/CNPJ</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Email</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Serviço</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Valor</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p style="font-size: 11px; color: #888; margin-top: 6px;">+ colunas H-M: Status Woo, Status Nota, Nº Nota, Link PDF, Msg Erro, JSON Pedido</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1671,67 +1742,6 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                     </select>
                 </div>
                 
-                <div style="display: flex; align-items: center; gap: 8px; position: relative;">
-                    <label style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">Categoria:</label>
-                    <div style="position: relative;">
-                        <button 
-                            type="button"
-                            id="btn-filtro-categoria-servico"
-                            onclick="toggleDropdownCategoriasServico()"
-                            style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; min-width: 200px; background: white; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
-                            <span id="texto-filtro-categoria-servico">${filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.length > 0 ? `${filtroCategoria.length} categoria(s) selecionada(s)` : 'Todas as categorias'}</span>
-                            <span style="margin-left: 8px;">▼</span>
-                        </button>
-                        <div 
-                            id="dropdown-categorias-servico"
-                            style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; max-height: 300px; overflow-y: auto; min-width: 250px; padding: 8px;">
-                            <div style="padding: 8px; border-bottom: 1px solid #eee;">
-                                <label style="display: flex; align-items: center; cursor: pointer; font-weight: 600;">
-                                    <input 
-                                        type="checkbox" 
-                                        class="checkbox-categoria-todas-servico"
-                                        onchange="toggleTodasCategoriasServico(this)"
-                                        style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
-                                        ${!filtroCategoria || filtroCategoria.length === 0 ? 'checked' : ''}>
-                                    <span>Todas as categorias</span>
-                                </label>
-                            </div>
-                            ${categoriasOrdenadas.map(cat => {
-        const catId = cat.toLowerCase().replace(/\s+/g, '-');
-        const isSelected = filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.includes(catId);
-        return `
-                                    <div style="padding: 8px; border-bottom: 1px solid #f0f0f0;">
-                                        <label style="display: flex; align-items: center; cursor: pointer;">
-                                            <input 
-                                                type="checkbox" 
-                                                class="checkbox-categoria-servico"
-                                                value="${catId}"
-                                                data-categoria="${cat}"
-                                                onchange="atualizarFiltroCategoriasServico()"
-                                                style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
-                                                ${isSelected ? 'checked' : ''}>
-                                            <span>${cat}</span>
-                                        </label>
-                                    </div>
-                                `;
-    }).join('')}
-                            <div style="padding: 8px; border-top: 1px solid #eee;">
-                                <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input 
-                                        type="checkbox" 
-                                        class="checkbox-categoria-servico"
-                                        value="sem-categoria"
-                                        data-categoria="Sem categoria"
-                                        onchange="atualizarFiltroCategoriasServico()"
-                                        style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
-                                        ${filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.includes('sem-categoria') ? 'checked' : ''}>
-                                    <span>Sem categoria</span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <label style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">
                         <input 
@@ -1744,7 +1754,7 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                     </label>
                 </div>
                 
-                ${(filtroStatus || (filtroCategoria && filtroCategoria.length > 0) || agruparPorCategoria) ? `
+                ${(filtroStatus || agruparPorCategoria) ? `
                     <button 
                         type="button"
                         class="btn btn-secondary"
@@ -1842,6 +1852,11 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
     `;
 
     contentArea.innerHTML = html;
+    
+    setTimeout(() => {
+        if (typeof carregarCategoriasServicoInfo === 'function') carregarCategoriasServicoInfo();
+        if (typeof carregarConfigGSheets === 'function') carregarConfigGSheets();
+    }, 0);
 
     // Carregar logs automaticamente para todos os meses após renderizar
     setTimeout(() => {
@@ -6699,6 +6714,11 @@ window.cancelarPorReferencia = cancelarPorReferencia;
  * Carrega a seção de Pedidos Excel com layout de Accordion por Mês
  */
 async function carregarPedidosExcel() {
+    // Woo Serviços (pedidos de servico) deve usar a mesma logica organizada da aba de produtos:
+    // - lista pedidos de servico do WooCommerce/DB
+    // - emissoes chamam a API correta da Focus (NFSe para servico)
+    // - Google Sheets fica como painel secundario de import/config
+    return await carregarPedidosServico();
     const contentArea = document.getElementById('content-area');
     const meses = gerarListaMeses();
 

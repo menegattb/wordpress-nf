@@ -40,6 +40,8 @@
         .btn-primary:hover { opacity: 0.9; }
         .btn-blue { background: var(--blue); color: #fff; border: none; font-size: 0.8125rem; padding: 6px 12px; }
         .btn-blue:hover { opacity: 0.9; }
+        .btn-danger { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.7); color: var(--danger); }
+        .btn-danger:hover { opacity: 0.9; }
         .btn-sm { font-size: 0.8125rem; padding: 6px 12px; }
         .form-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
         .form-card h2 { font-size: 1rem; margin-bottom: 16px; }
@@ -91,7 +93,7 @@
 
         <div class="stats" id="stats">
             <div class="stat-card"><div class="label">Total de clientes</div><div class="value" id="stat-total">-</div></div>
-            <div class="stat-card"><div class="label">Assinaturas ativas</div><div class="value" id="stat-ativas">-</div></div>
+            <div class="stat-card"><div class="label">Assinaturas ativas (modo produção)</div><div class="value" id="stat-ativas">-</div></div>
             <div class="stat-card"><div class="label">Notas este mes</div><div class="value" id="stat-notas">-</div></div>
         </div>
         <div class="table-wrap">
@@ -145,6 +147,25 @@
         </div>
     </div>
 
+    <!-- Modal Limite Notas -->
+    <div class="modal-overlay" id="modal-limite-notas">
+        <div class="modal">
+            <h3 id="modal-limite-title">Alterar limite de notas</h3>
+
+            <div class="form-group">
+                <label>Limite mensal de notas</label>
+                <input type="number" id="limite-notas-input" min="1" step="1" />
+            </div>
+
+            <div class="success-msg" id="limite-success">Limite atualizado!</div>
+
+            <div class="modal-actions">
+                <button class="btn btn-primary" id="limite-save">Salvar</button>
+                <button class="btn" id="limite-close">Fechar</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const tbody = document.getElementById('tbody');
         const errContainer = document.getElementById('error-container');
@@ -155,6 +176,77 @@
         const btnLogout = document.getElementById('btn-logout');
 
         let clientesData = [];
+        let currentLimiteId = null;
+
+        const modalLimite = document.getElementById('modal-limite-notas');
+        const limiteInput = document.getElementById('limite-notas-input');
+        const limiteSuccess = document.getElementById('limite-success');
+        const limiteSave = document.getElementById('limite-save');
+        const limiteClose = document.getElementById('limite-close');
+
+        function openLimiteNotas(tenantId) {
+            currentLimiteId = tenantId;
+            limiteSuccess.style.display = 'none';
+
+            const c = clientesData.find(x => x.id === tenantId);
+            document.getElementById('modal-limite-title').textContent =
+                'Alterar limite de notas — ' + (c?.nome || '#' + tenantId);
+
+            limiteInput.value = String(c?.limite_mensal ?? 100);
+            modalLimite.classList.add('show');
+        }
+
+        limiteClose.onclick = () => modalLimite.classList.remove('show');
+        modalLimite.onclick = (e) => { if (e.target === modalLimite) modalLimite.classList.remove('show'); };
+
+        limiteSave.onclick = async () => {
+            const limite = parseInt(limiteInput.value, 10);
+            if (!Number.isFinite(limite) || limite <= 0) {
+                alert('Informe um limite mensal válido.');
+                return;
+            }
+
+            try {
+                limiteSave.disabled = true;
+                const res = await fetch('/api/admin/tenant/' + currentLimiteId + '/limite-notas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ limite_notas: limite })
+                });
+                const data = await res.json();
+                if (!data.sucesso) throw new Error(data.erro || 'Erro ao atualizar limite');
+
+                limiteSuccess.style.display = 'block';
+                setTimeout(() => {
+                    modalLimite.classList.remove('show');
+                    loadDashboard();
+                }, 700);
+            } catch (e) {
+                alert(e.message || 'Erro ao atualizar limite');
+            } finally {
+                limiteSave.disabled = false;
+            }
+        };
+
+        async function excluirCliente(tenantId) {
+            const c = clientesData.find(x => x.id === tenantId);
+            const nome = c?.nome || ('#' + tenantId);
+
+            if (!confirm('Excluir cliente "' + nome + '"? (Isso vai inativar o tenant e cancelar assinatura ativa.)')) return;
+
+            try {
+                const res = await fetch('/api/admin/tenant/' + tenantId + '/excluir', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                if (!data.sucesso) throw new Error(data.erro || 'Erro ao excluir');
+                loadDashboard();
+            } catch (e) {
+                alert(e.message || 'Erro ao excluir cliente');
+            }
+        }
 
         async function loadDashboard() {
             try {
@@ -175,7 +267,7 @@
             return 'status-' + s;
         }
         function statusLabel(s) {
-            const map = { ativa: 'Ativa', cancelada: 'Cancelada', atrasada: 'Atrasada', sem_assinatura: 'Sem assinatura' };
+            const map = { ativa: 'Ativa (modo produção)', cancelada: 'Cancelada', atrasada: 'Atrasada', sem_assinatura: 'Sem assinatura' };
             return map[s] || s || 'Sem assinatura';
         }
         function formatDate(d) {
@@ -208,6 +300,8 @@
                         <td class="td-actions">
                             <a href="/admin/cliente/${c.id}" class="btn btn-blue btn-sm">Entrar</a>
                             <button class="btn btn-sm" onclick="openConfig(${c.id})">Config</button>
+                            <button class="btn btn-sm" onclick="openLimiteNotas(${c.id})" title="Alterar limite mensal de notas">Limite</button>
+                            <button class="btn btn-danger btn-sm" onclick="excluirCliente(${c.id})" title="Excluir cliente">Excluir</button>
                         </td>
                     </tr>`;
                 }).join('');

@@ -4,7 +4,7 @@
 
 const crypto = require('crypto');
 const logger = require('../services/logger');
-const { listarTenantsComUso, salvarTenant, hasDatabase, listarConfiguracoesTenant, salvarConfiguracaoTenant } = require('../config/database');
+const { listarTenantsComUso, salvarTenant, hasDatabase, listarConfiguracoesTenant, salvarConfiguracaoTenant, query } = require('../config/database');
 const { hashToken } = require('../middleware/tenantAuth');
 
 function generateToken() {
@@ -197,9 +197,100 @@ async function salvarClienteConfig(req, res) {
   }
 }
 
+/**
+ * POST /api/admin/tenant/:id/limite-notas
+ * Atualiza o limite mensal de notas do tenant (subscriptions.notas_incluidas).
+ */
+async function atualizarLimiteNotas(req, res) {
+  try {
+    const tenantId = parseInt(req.params.id, 10);
+    if (isNaN(tenantId)) return res.status(400).json({ sucesso: false, erro: 'ID inválido' });
+
+    const limiteRaw = req.body?.limite_notas ?? req.body?.limite;
+    const limite = parseInt(limiteRaw, 10);
+    if (!Number.isFinite(limite) || limite <= 0) {
+      return res.status(400).json({ sucesso: false, erro: 'Informe um limite mensal válido' });
+    }
+
+    // Se existir assinatura ativa, atualiza. Se não existir, cria uma assinatura "ativa" para 30 dias.
+    const active = await query(
+      `SELECT id FROM subscriptions
+       WHERE tenant_id = $1 AND status = 'ativa' AND periodo_fim > NOW()
+       ORDER BY periodo_fim DESC
+       LIMIT 1`,
+      [tenantId]
+    );
+
+    if (active.rows?.length > 0) {
+      await query(
+        `UPDATE subscriptions SET notas_incluidas = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [limite, active.rows[0].id]
+      );
+    } else {
+      const latest = await query(
+        `SELECT plano FROM subscriptions
+         WHERE tenant_id = $1
+         ORDER BY periodo_fim DESC
+         LIMIT 1`,
+        [tenantId]
+      );
+      const plano = latest.rows?.[0]?.plano || 'basico';
+
+      await query(
+        `INSERT INTO subscriptions (tenant_id, plano, status, notas_incluidas, periodo_inicio, periodo_fim, created_at, updated_at)
+         VALUES ($1, $2, 'ativa', $3, NOW(), NOW() + INTERVAL '30 days', NOW(), NOW())`,
+        [tenantId, plano, limite]
+      );
+    }
+
+    // Invalidar cache do tenant (importante quando assinatura ativa altera ambiente do Focus)
+    try {
+      const { invalidateCache } = require('../services/tenantService');
+      if (invalidateCache) invalidateCache(tenantId);
+    } catch (e) { /* ignore */ }
+
+    res.json({ sucesso: true, mensagem: 'Limite de notas atualizado' });
+  } catch (error) {
+    logger.error('Erro ao atualizar limite de notas', { error: error.message });
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * POST /api/admin/tenant/:id/excluir
+ * Exclui (soft-delete) um tenant: ativo=false e cancela assinaturas ativas.
+ */
+async function excluirCliente(req, res) {
+  try {
+    const tenantId = parseInt(req.params.id, 10);
+    if (isNaN(tenantId)) return res.status(400).json({ sucesso: false, erro: 'ID inválido' });
+
+    await query(`UPDATE tenants SET ativo = false, updated_at = NOW() WHERE id = $1`, [tenantId]);
+    await query(
+      `UPDATE subscriptions
+       SET status = 'cancelada', periodo_fim = NOW(), updated_at = NOW()
+       WHERE tenant_id = $1 AND status = 'ativa'`,
+      [tenantId]
+    );
+
+    try {
+      const { invalidateCache } = require('../services/tenantService');
+      if (invalidateCache) invalidateCache(tenantId);
+    } catch (e) { /* ignore */ }
+
+    res.json({ sucesso: true, mensagem: 'Cliente excluído (inativado)' });
+  } catch (error) {
+    logger.error('Erro ao excluir cliente', { error: error.message });
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
 module.exports = {
   getDashboard,
   criarCliente,
   getClienteConfig,
-  salvarClienteConfig
+  salvarClienteConfig,
+  atualizarLimiteNotas,
+  excluirCliente
 };

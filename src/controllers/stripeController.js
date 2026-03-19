@@ -8,6 +8,7 @@ const { salvarTenant, salvarSubscription, buscarTenantPorTokenHash } = require('
 const { hashToken } = require('../middleware/tenantAuth');
 const stripeService = require('../services/stripeService');
 const emailService = require('../services/emailService');
+const { invalidateCache } = require('../services/tenantService');
 
 function generateToken() {
   return 'nf_' + crypto.randomBytes(32).toString('hex');
@@ -181,6 +182,10 @@ async function handleSubscriptionUpdated(subscription) {
   );
 
   if (result.rows.length > 0) {
+    const tenantId = result.rows[0]?.tenant_id;
+    if (tenantId && typeof invalidateCache === 'function') {
+      try { invalidateCache(tenantId); } catch (e) { /* ignore */ }
+    }
     logger.info('Subscription atualizada', { subscription_id: subscriptionId, status });
   }
 }
@@ -189,10 +194,18 @@ async function handleSubscriptionDeleted(subscription) {
   const subscriptionId = subscription.id;
 
   const { query } = require('../config/database');
-  await query(
-    `UPDATE subscriptions SET status = 'cancelada', updated_at = NOW() WHERE stripe_subscription_id = $1`,
+  const result = await query(
+    `UPDATE subscriptions
+     SET status = 'cancelada', periodo_fim = NOW(), updated_at = NOW()
+     WHERE stripe_subscription_id = $1
+     RETURNING tenant_id`,
     [subscriptionId]
   );
+
+  const tenantId = result.rows?.[0]?.tenant_id;
+  if (tenantId && typeof invalidateCache === 'function') {
+    try { invalidateCache(tenantId); } catch (e) { /* ignore */ }
+  }
 
   logger.info('Subscription cancelada', { subscription_id: subscriptionId });
 }
