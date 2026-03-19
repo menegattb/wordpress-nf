@@ -212,13 +212,9 @@ app.post('/api/migrate', async (req, res) => { // requireAuth comentado
 //   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 // });
 
-// Rota raiz - servir login/admin quando nao autenticado
-// Depois do login, manda para a tela do cliente.
+// Rota raiz - sempre abrir tela de login.
+// Fluxo desejado: / -> login, depois /admin, e só então /admin/cliente/:id.
 app.get('/', (req, res) => {
-  const isAuthed = !!(req.session && req.session.authenticated);
-  if (isAuthed) {
-    return res.sendFile(path.join(__dirname, 'public', 'index.html'));
-  }
   return res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
