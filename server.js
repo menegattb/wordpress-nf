@@ -84,6 +84,7 @@ app.use(adminTenantImpersonate);
 
 // Servir arquivos estáticos da pasta public (exceto login.html - LOGIN DESABILITADO)
 app.use(express.static(path.join(__dirname, 'public'), {
+  index: false,
   setHeaders: (res, path) => {
     // Bloquear acesso ao login.html
     if (path.endsWith('login.html')) {
@@ -211,9 +212,14 @@ app.post('/api/migrate', async (req, res) => { // requireAuth comentado
 //   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 // });
 
-// Rota raiz - servir index.html do front-end (protegida) - LOGIN DESABILITADO
-app.get('/', (req, res) => { // requireAuth comentado
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Rota raiz - servir login/admin quando nao autenticado
+// Depois do login, manda para a tela do cliente.
+app.get('/', (req, res) => {
+  const isAuthed = !!(req.session && req.session.authenticated);
+  if (isAuthed) {
+    return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  }
+  return res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
 // Landing e obrigado (páginas estáticas)
