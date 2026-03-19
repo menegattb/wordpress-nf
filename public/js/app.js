@@ -1293,12 +1293,21 @@ const POLLING_DELAY = 30000; // 30 segundos
  * Usa window._categoriasProdutoCache (carregado do banco) ou fallback para "Livro Faíscas".
  */
 function isPedidoDeProduto(pedido, categoriasProduto) {
-    const cats = categoriasProduto || window._categoriasProdutoCache || [];
-    const catsLower = cats.map(c => c.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+    const catsRaw = (categoriasProduto !== undefined ? categoriasProduto : window._categoriasProdutoCache);
 
-    // Fallback se nenhuma categoria configurada
-    if (catsLower.length === 0) {
-        catsLower.push('livro faiscas', 'livro faíscas');
+    let catsLower = [];
+
+    // Se ainda nao carregou config (null/undefined), usa fallback antigo para nao quebrar fluxo.
+    if (catsRaw === null || catsRaw === undefined) {
+        catsLower = ['livro faiscas', 'livro faíscas'];
+    } else if (Array.isArray(catsRaw) && catsRaw.length === 0) {
+        // Se o usuario salvou lista vazia, nao ha categorias de produto.
+        // Mantem Woo Produtos coerente com a configuracao do painel.
+        return false;
+    } else {
+        catsLower = (Array.isArray(catsRaw) ? catsRaw : []).map(c =>
+            String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        );
     }
 
     const dadosPedido = typeof pedido.dados_pedido === 'string'
@@ -2983,68 +2992,7 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
                         `).join('')}
                     </select>
                 </div>
-                
-                <div style="display: flex; align-items: center; gap: 8px; position: relative;">
-                    <label style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">Categoria:</label>
-                    <div style="position: relative;">
-                        <button 
-                            type="button"
-                            id="btn-filtro-categoria"
-                            onclick="toggleDropdownCategorias()"
-                            style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; min-width: 200px; background: white; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
-                            <span id="texto-filtro-categoria">${filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.length > 0 ? `${filtroCategoria.length} categoria(s) selecionada(s)` : 'Todas as categorias'}</span>
-                            <span style="margin-left: 8px;">▼</span>
-                        </button>
-                        <div 
-                            id="dropdown-categorias"
-                            style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; max-height: 300px; overflow-y: auto; min-width: 250px; padding: 8px;">
-                            <div style="padding: 8px; border-bottom: 1px solid #eee;">
-                                <label style="display: flex; align-items: center; cursor: pointer; font-weight: 600;">
-                                    <input 
-                                        type="checkbox" 
-                                        class="checkbox-categoria-todas"
-                                        onchange="toggleTodasCategorias(this)"
-                                        style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
-                                        ${!filtroCategoria || filtroCategoria.length === 0 ? 'checked' : ''}>
-                                    <span>Todas as categorias</span>
-                                </label>
-                            </div>
-                            ${categoriasOrdenadas.map(cat => {
-        const catId = cat.toLowerCase().replace(/\s+/g, '-');
-        const isSelected = filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.includes(catId);
-        return `
-                                    <div style="padding: 8px; border-bottom: 1px solid #f0f0f0;">
-                                        <label style="display: flex; align-items: center; cursor: pointer;">
-                                            <input 
-                                                type="checkbox" 
-                                                class="checkbox-categoria"
-                                                value="${catId}"
-                                                data-categoria="${cat}"
-                                                onchange="atualizarFiltroCategorias()"
-                                                style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
-                                                ${isSelected ? 'checked' : ''}>
-                                            <span>${cat}</span>
-                                        </label>
-                                    </div>
-                                `;
-    }).join('')}
-                            <div style="padding: 8px; border-top: 1px solid #eee;">
-                                <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input 
-                                        type="checkbox" 
-                                        class="checkbox-categoria"
-                                        value="sem-categoria"
-                                        data-categoria="Sem categoria"
-                                        onchange="atualizarFiltroCategorias()"
-                                        style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
-                                        ${filtroCategoria && Array.isArray(filtroCategoria) && filtroCategoria.includes('sem-categoria') ? 'checked' : ''}>
-                                    <span>Sem categoria</span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
+
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <label style="font-weight: 600; font-size: 14px; color: var(--color-gray-dark);">
                         <input 
@@ -3057,7 +3005,7 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
                     </label>
                 </div>
                 
-                ${(filtroStatus || (filtroCategoria && filtroCategoria.length > 0) || agruparPorCategoria) ? `
+                ${(filtroStatus || agruparPorCategoria) ? `
                     <button 
                         type="button"
                         class="btn btn-secondary"
@@ -3437,12 +3385,11 @@ function aplicarFiltrosPedidos() {
     const filtroStatus = statusSelect ? statusSelect.value : null;
     const agruparPorCategoria = agruparCheckbox ? agruparCheckbox.checked : false;
 
-    // Obter categorias selecionadas
-    const categoriasSelecionadas = obterCategoriasSelecionadas();
-
     // Salvar no estado
     estadoAtual.filtroStatus = filtroStatus === 'todos' ? null : filtroStatus;
-    estadoAtual.filtroCategoria = categoriasSelecionadas.length > 0 ? categoriasSelecionadas : null;
+    // Woo Produtos usa o painel de "Categorias de Produto (NFe)" para definir produto x servico.
+    // Por isso, aqui nao aplicamos filtro de categoria adicional na tabela.
+    estadoAtual.filtroCategoria = null;
     estadoAtual.agruparPorCategoria = agruparPorCategoria;
 
     // Renderizar com filtros
@@ -3467,80 +3414,25 @@ function obterCategoriasSelecionadas() {
  * Atualiza o filtro de categorias quando um checkbox é alterado
  */
 function atualizarFiltroCategorias() {
-    const categoriasSelecionadas = obterCategoriasSelecionadas();
-    const checkboxTodas = document.querySelector('.checkbox-categoria-todas');
-
-    // Se nenhuma categoria está selecionada, marcar "Todas"
-    if (categoriasSelecionadas.length === 0) {
-        if (checkboxTodas) checkboxTodas.checked = true;
-    } else {
-        if (checkboxTodas) checkboxTodas.checked = false;
-    }
-
-    // Atualizar texto do botão
-    const textoFiltro = document.getElementById('texto-filtro-categoria');
-    if (textoFiltro) {
-        textoFiltro.textContent = categoriasSelecionadas.length > 0
-            ? `${categoriasSelecionadas.length} categoria(s) selecionada(s)`
-            : 'Todas as categorias';
-    }
-
-    // Aplicar filtros
-    aplicarFiltrosPedidos();
+    // Woo Produtos: o filtro de categoria na tabela foi removido.
+    // Mantido apenas para compatibilidade com HTML legado.
+    return;
 }
 
 /**
  * Seleciona ou desseleciona todas as categorias
  */
 function toggleTodasCategorias(checkbox) {
-    const checkboxes = document.querySelectorAll('.checkbox-categoria');
-
-    if (checkbox.checked) {
-        // Se "Todas" foi marcada, desmarcar todas as categorias específicas
-        checkboxes.forEach(cb => {
-            cb.checked = false;
-        });
-    }
-    // Se "Todas" foi desmarcada, não fazer nada (manter seleções atuais)
-
-    // Atualizar texto do botão
-    const textoFiltro = document.getElementById('texto-filtro-categoria');
-    if (textoFiltro) {
-        if (checkbox.checked) {
-            textoFiltro.textContent = 'Todas as categorias';
-        } else {
-            const categoriasSelecionadas = obterCategoriasSelecionadas();
-            textoFiltro.textContent = categoriasSelecionadas.length > 0
-                ? `${categoriasSelecionadas.length} categoria(s) selecionada(s)`
-                : 'Todas as categorias';
-        }
-    }
-
-    // Aplicar filtros
-    aplicarFiltrosPedidos();
+    // Woo Produtos: categoria na tabela removida.
+    return;
 }
 
 /**
  * Abre/fecha o dropdown de categorias
  */
 function toggleDropdownCategorias() {
-    const dropdown = document.getElementById('dropdown-categorias');
-    if (dropdown) {
-        const isVisible = dropdown.style.display !== 'none';
-        dropdown.style.display = isVisible ? 'none' : 'block';
-
-        // Fechar ao clicar fora
-        if (!isVisible) {
-            setTimeout(() => {
-                document.addEventListener('click', function fecharDropdown(e) {
-                    if (!dropdown.contains(e.target) && e.target.id !== 'btn-filtro-categoria') {
-                        dropdown.style.display = 'none';
-                        document.removeEventListener('click', fecharDropdown);
-                    }
-                });
-            }, 100);
-        }
-    }
+    // Woo Produtos: dropdown de categoria removido.
+    return;
 }
 
 /**
@@ -3550,14 +3442,6 @@ function limparFiltrosPedidosTela() {
     estadoAtual.filtroStatus = null;
     estadoAtual.filtroCategoria = null;
     estadoAtual.agruparPorCategoria = false;
-
-    // Desmarcar todos os checkboxes de categoria
-    const checkboxes = document.querySelectorAll('.checkbox-categoria');
-    checkboxes.forEach(cb => cb.checked = false);
-
-    // Marcar "Todas as categorias"
-    const checkboxTodas = document.querySelector('.checkbox-categoria-todas');
-    if (checkboxTodas) checkboxTodas.checked = true;
 
     renderizarTelaPedidos(
         estadoAtual.dados.todosPedidos,
@@ -6720,6 +6604,12 @@ async function salvarCategoriasProduto() {
                 label.style.background = cb.checked ? '#f0fff0' : '#fff';
             }
         });
+
+        // Atualizar a tabela agora que a classificacao produto/servico mudou.
+        // Woo Produtos depende dessa configuracao.
+        if (estadoAtual && estadoAtual.secaoAtiva === 'pedidos') {
+            await carregarPedidos();
+        }
     } catch (e) {
         alert('Erro ao salvar: ' + e.message);
     }
