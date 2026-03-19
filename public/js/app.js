@@ -1301,9 +1301,12 @@ function isPedidoDeProduto(pedido, categoriasProduto) {
     if (catsRaw === null || catsRaw === undefined) {
         catsLower = ['livro faiscas', 'livro faíscas'];
     } else if (Array.isArray(catsRaw) && catsRaw.length === 0) {
-        // Se o usuario salvou lista vazia, nao ha categorias de produto.
-        // Mantem Woo Produtos coerente com a configuracao do painel.
-        return false;
+        // Diferencia "config vazia salva" de "sem config carregada".
+        // Sem config: fallback seguro para evitar produto aparecendo em serviços.
+        if (window._categoriasProdutoTemConfig === true) {
+            return false;
+        }
+        catsLower = ['livro faiscas', 'livro faíscas', 'livro'];
     } else {
         catsLower = (Array.isArray(catsRaw) ? catsRaw : []).map(c =>
             String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -1317,21 +1320,25 @@ function isPedidoDeProduto(pedido, categoriasProduto) {
     const lineItems = dadosPedido.line_items || pedido.line_items || [];
     if (lineItems.length === 0) return false;
 
+    let encontrouCategoriaNoPedido = false;
     for (const item of lineItems) {
+        const nomeItemNorm = (item.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         if (item.categories && Array.isArray(item.categories)) {
+            if (item.categories.length > 0) encontrouCategoriaNoPedido = true;
             for (const cat of item.categories) {
                 const nome = (typeof cat === 'string' ? cat : cat.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (nome.includes('livro')) return true;
                 if (catsLower.some(c => nome.includes(c) || c.includes(nome))) return true;
             }
         }
         if (item.category) {
+            encontrouCategoriaNoPedido = true;
             const nome = (typeof item.category === 'string' ? item.category : item.category.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            if (nome.includes('livro')) return true;
             if (catsLower.some(c => nome.includes(c) || c.includes(nome))) return true;
         }
-        if (item.name) {
-            const nome = item.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-            if (catsLower.some(c => nome.includes(c))) return true;
-        }
+        // Nome do item como fallback apenas quando o Woo não trouxe categoria.
+        if (!encontrouCategoriaNoPedido && item.name && catsLower.some(c => nomeItemNorm.includes(c))) return true;
     }
 
     if (window.Components && typeof window.Components.extrairCategoriasPedido === 'function') {
@@ -1344,6 +1351,34 @@ function isPedidoDeProduto(pedido, categoriasProduto) {
     }
 
     return false;
+}
+
+function isPedidoDeServico(pedido, categoriasServico) {
+    // Primeiro garante que nao seja produto
+    if (isPedidoDeProduto(pedido)) return false;
+
+    const catsRaw = (categoriasServico !== undefined ? categoriasServico : window._categoriasServicoCache);
+    // Sem configuracao manual de servico: todo "nao produto" entra como servico
+    if (catsRaw === null || catsRaw === undefined) return true;
+
+    const selecionadas = Array.isArray(catsRaw) ? catsRaw : [];
+    // Lista salva vazia = usuario optou por não considerar nenhum serviço
+    if (selecionadas.length === 0) return false;
+
+    const normalize = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const alvo = selecionadas.map(normalize);
+    const aceitaSemCategoria = alvo.includes(normalize('Sem categoria'));
+
+    const categorias = window.Components && typeof window.Components.extrairCategoriasPedido === 'function'
+        ? window.Components.extrairCategoriasPedido(pedido)
+        : extrairCategoriasPedido(pedido);
+
+    if (!categorias || categorias.length === 0) return aceitaSemCategoria;
+
+    return categorias.some(cat => {
+        const nome = normalize(cat);
+        return alvo.some(a => nome.includes(a) || a.includes(nome));
+    });
 }
 
 async function carregarPedidos() {
@@ -1373,7 +1408,7 @@ async function carregarPedidos() {
         atualizarStatusConexao('Carregando do banco...', 'info');
 
         let todosPedidos = [];
-        const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
+        const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 10000 });
 
         if (resultadoBanco.sucesso && resultadoBanco.dados && resultadoBanco.dados.length > 0) {
             todosPedidos = resultadoBanco.dados;
@@ -1459,17 +1494,19 @@ async function carregarPedidosServico(mostrarLoading = true) {
 
     try {
         await carregarCategoriasProdutoCache();
+        await carregarCategoriasServicoCache();
 
         if (mostrarLoading) atualizarStatusConexaoServico('Carregando do banco...', 'info');
 
         let todosPedidos = [];
-        const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
+        const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 10000 });
 
         if (resultadoBanco.sucesso && resultadoBanco.dados && resultadoBanco.dados.length > 0) {
             todosPedidos = resultadoBanco.dados;
 
             todosPedidos = todosPedidos.map(pedido => converterPedidoBancoParaWooCommerce(pedido));
 
+            // Regra principal da aba Woo Serviços: mostrar todos os pedidos que não são produto.
             todosPedidos = todosPedidos.filter(pedido => !isPedidoDeProduto(pedido));
 
             // Ordenar por data
@@ -1652,10 +1689,10 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                     <button 
                         type="button" 
                         class="btn btn-secondary" 
-                        onclick="sincronizarExcel()"
-                        id="btn-sincronizar-excel"
+                        onclick="sincronizarWooServicosBanco()"
+                        id="btn-sincronizar-woo-servicos"
                         style="padding: 8px 16px; font-size: 14px;">
-                        🔄 Sincronizar (Geral)
+                        🔄 Sincronizar Woo (Banco)
                     </button>
                 <div id="status-woocommerce-servico" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
                         <span style="color: #28a745; font-size: 12px;">✓ ${pedidosFiltrados.length} pedidos ${filtroStatus || filtroCategoria ? 'filtrados' : 'carregados'}</span>
@@ -1663,17 +1700,37 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                 </div>
             </div>
             
+            <!-- Toggle Emissão Automática (Serviço) -->
+            <div id="auto-emitir-servico-container" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; border: 2px solid #dee2e6; background: #f8f9fa;">
+                <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                    <label class="toggle-switch" style="position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0;">
+                        <input type="checkbox" id="toggle-auto-emitir-servico" onchange="toggleAutoEmitirServico(this.checked)" style="opacity: 0; width: 0; height: 0;">
+                        <span class="toggle-slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .3s; border-radius: 26px;"></span>
+                    </label>
+                    <div>
+                        <span style="font-weight: 600; font-size: 14px;">Emissão automática (Serviços)</span>
+                        <span id="auto-emitir-servico-status" style="font-size: 12px; margin-left: 8px; padding: 2px 8px; border-radius: 4px; font-weight: 600;">⏳ carregando...</span>
+                    </div>
+                </div>
+                <span style="font-size: 12px; color: #666; max-width: 340px;">Quando ativado, pedidos de serviço (NFSe) também serão emitidos automaticamente via webhook.</span>
+            </div>
+
             <!-- Categorias de Serviço -->
             <div id="categorias-servico-container" style="padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #dee2e6; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 600; font-size: 14px;">Categorias de Serviço (NFSe)</span>
-                    <span id="cat-servico-info" style="font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #e2e3e5; color: #383d41;">carregando...</span>
-                </div>
-                <p style="font-size: 12px; color: #666; margin: 0 0 8px;">
-                    Pedidos cujas categorias <strong>não</strong> são de produto aparecem aqui como serviço e geram NFSe.
-                </p>
-                <div id="cat-servico-list" style="display: flex; flex-wrap: wrap; gap: 6px;">
-                    <span style="color: #888; font-size: 13px;">Carregando...</span>
+                <button type="button" onclick="toggleCategoriasServicoPanel()" style="background:none;border:none;width:100%;padding:0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;text-align:left;">
+                    <span style="font-weight: 600; font-size: 14px; color:#333;">Categorias de Serviço (NFSe)</span>
+                    <span style="display:flex;align-items:center;gap:10px;">
+                        <span id="cat-servico-info" style="font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #e2e3e5; color: #383d41;">carregando...</span>
+                        <span id="cat-servico-arrow" style="font-size:14px;color:#666;">▶</span>
+                    </span>
+                </button>
+                <div id="cat-servico-panel" style="display:none;margin-top:8px;">
+                    <p style="font-size: 12px; color: #666; margin: 0 0 8px;">
+                        Por padrão, ficam selecionadas todas as categorias que <strong>não</strong> estão marcadas em produto. Você pode desmarcar manualmente as que não quer tratar como serviço.
+                    </p>
+                    <div id="cat-servico-list" style="display: flex; flex-direction: column; gap: 6px;">
+                        <span style="color: #888; font-size: 13px;">Carregando...</span>
+                    </div>
                 </div>
             </div>
 
@@ -1854,7 +1911,8 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
     contentArea.innerHTML = html;
     
     setTimeout(() => {
-        if (typeof carregarCategoriasServicoInfo === 'function') carregarCategoriasServicoInfo();
+        if (typeof carregarEstadoAutoEmitirServico === 'function') carregarEstadoAutoEmitirServico();
+        if (typeof carregarSeletorCategoriasServico === 'function') carregarSeletorCategoriasServico();
         if (typeof carregarConfigGSheets === 'function') carregarConfigGSheets();
     }, 0);
 
@@ -1896,19 +1954,10 @@ function toggleAccordionServico(mesId) {
  */
 function aplicarFiltrosPedidosServico() {
     const filtroStatus = document.getElementById('filtro-status-pedidos-servico')?.value || null;
-    const filtroCategoriaEl = document.getElementById('filtro-categoria-pedidos-servico');
     const agruparPorCategoria = document.getElementById('agrupar-por-categoria-servico')?.checked || false;
 
-    let filtroCategoria = null;
-    if (filtroCategoriaEl) {
-        const selecionadas = Array.from(filtroCategoriaEl.selectedOptions).map(opt => opt.value);
-        if (selecionadas.length > 0 && !selecionadas.includes('todas')) {
-            filtroCategoria = selecionadas;
-        }
-    }
-
     estadoAtual.filtroStatus = filtroStatus === 'todos' ? null : filtroStatus;
-    estadoAtual.filtroCategoria = filtroCategoria;
+    estadoAtual.filtroCategoria = null;
     estadoAtual.agruparPorCategoria = agruparPorCategoria;
 
     renderizarTelaPedidosServico(
@@ -2408,7 +2457,7 @@ async function sincronizarEmBackgroundServico() {
         if (resultado.sucesso && resultado.salvos > 0) {
             atualizarStatusConexaoServico(`🔄 ${resultado.salvos} novos pedidos encontrados`, 'info');
 
-            const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
+            const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 10000 });
             if (resultadoBanco.sucesso && resultadoBanco.dados) {
                 let todosPedidos = resultadoBanco.dados;
 
@@ -2451,7 +2500,7 @@ async function importarPrimeiraVezServico(meses) {
     });
 
     if (resultado.sucesso) {
-        const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
+        const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 10000 });
         if (resultadoBanco.sucesso && resultadoBanco.dados) {
             let todosPedidos = resultadoBanco.dados;
 
@@ -2507,7 +2556,7 @@ function iniciarPollingPedidosServico() {
             }
 
             // Buscar pedidos atualizados do banco
-            const resultado = await API.Pedidos.listarDoBanco({ limite: 1000 });
+            const resultado = await API.Pedidos.listarDoBanco({ limite: 10000 });
 
             if (resultado.sucesso && resultado.dados) {
                 // Converter pedidos do banco para formato WooCommerce ANTES de filtrar
@@ -2562,7 +2611,7 @@ async function sincronizarEmBackground() {
             // Tem pedidos novos - recarregar do banco e atualizar tela
             atualizarStatusConexao(`🔄 ${resultado.salvos} novos pedidos encontrados`, 'info');
 
-            const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
+            const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 10000 });
             if (resultadoBanco.sucesso && resultadoBanco.dados) {
                 let todosPedidos = resultadoBanco.dados;
 
@@ -2612,7 +2661,7 @@ async function importarPrimeiraVez(meses) {
     });
 
     if (resultado.sucesso) {
-        const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 2000 });
+        const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 10000 });
         if (resultadoBanco.sucesso && resultadoBanco.dados) {
             let todosPedidos = resultadoBanco.dados;
 
@@ -2709,7 +2758,7 @@ function iniciarPollingPedidos() {
             }
 
             // Buscar pedidos atualizados do banco
-            const resultado = await API.Pedidos.listarDoBanco({ limite: 1000 });
+            const resultado = await API.Pedidos.listarDoBanco({ limite: 10000 });
 
             if (resultado.sucesso && resultado.dados) {
                 const novosTotal = resultado.dados.length;
@@ -2817,7 +2866,7 @@ async function forcarAtualizacaoWooCommerce() {
             atualizarStatusConexao(`✓ ${resultado.paginas} páginas: ${resultado.salvos} novos, ${resultado.atualizados} atualizados`, 'success');
 
             // Recarregar do banco
-            const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 1000 });
+            const resultadoBanco = await API.Pedidos.listarDoBanco({ limite: 10000 });
             if (resultadoBanco.sucesso && resultadoBanco.dados) {
                 let todosPedidos = resultadoBanco.dados;
 
@@ -2982,13 +3031,18 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
 
             <!-- Categorias de Produto -->
             <div id="categorias-produto-container" style="padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #dee2e6; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 600; font-size: 14px;">Categorias de Produto (NFe)</span>
-                    <span id="cat-produto-status" style="font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #e2e3e5; color: #383d41;">carregando...</span>
-                </div>
-                <p style="font-size: 12px; color: #666; margin: 0 0 10px;">Selecione quais categorias do WooCommerce são de <strong>produto</strong>. Pedidos com essas categorias aparecem aqui e geram NFe.</p>
-                <div id="cat-produto-checkboxes" style="display: flex; flex-wrap: wrap; gap: 8px;">
-                    <span style="color: #888; font-size: 13px;">Carregando categorias do WooCommerce...</span>
+                <button type="button" onclick="toggleCategoriasProdutoPanel()" style="background:none;border:none;width:100%;padding:0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;text-align:left;">
+                    <span style="font-weight: 600; font-size: 14px; color:#333;">Categorias de Produto (NFe)</span>
+                    <span style="display:flex;align-items:center;gap:10px;">
+                        <span id="cat-produto-status" style="font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #e2e3e5; color: #383d41;">carregando...</span>
+                        <span id="cat-produto-arrow" style="font-size:14px;color:#666;">▶</span>
+                    </span>
+                </button>
+                <div id="cat-produto-panel" style="display:none;margin-top:8px;">
+                    <p style="font-size: 12px; color: #666; margin: 0 0 10px;">Selecione quais categorias do WooCommerce são de <strong>produto</strong>. Pedidos com essas categorias aparecem aqui e geram NFe.</p>
+                    <div id="cat-produto-checkboxes" style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <span style="color: #888; font-size: 13px;">Carregando categorias do WooCommerce...</span>
+                    </div>
                 </div>
             </div>
             
@@ -6466,8 +6520,14 @@ window.fecharModalProgresso = fecharModalProgresso;
 window.limparReferencia = limparReferencia;
 window.toggleAutoEmitir = toggleAutoEmitir;
 window.carregarEstadoAutoEmitir = carregarEstadoAutoEmitir;
+window.toggleAutoEmitirServico = toggleAutoEmitirServico;
+window.carregarEstadoAutoEmitirServico = carregarEstadoAutoEmitirServico;
+window.toggleCategoriasServicoPanel = toggleCategoriasServicoPanel;
+window.toggleCategoriasProdutoPanel = toggleCategoriasProdutoPanel;
 window.salvarCategoriasProduto = salvarCategoriasProduto;
 window.carregarSeletorCategorias = carregarSeletorCategorias;
+window.salvarCategoriasServico = salvarCategoriasServico;
+window.carregarSeletorCategoriasServico = carregarSeletorCategoriasServico;
 window.carregarCategoriasServicoInfo = carregarCategoriasServicoInfo;
 
 async function carregarEstadoAutoEmitir() {
@@ -6539,14 +6599,18 @@ function atualizarUIAutoEmitir(ativo) {
 
 // Cache global de categorias de produto para uso em filtragem
 window._categoriasProdutoCache = null;
+window._categoriasProdutoTemConfig = false;
+window._categoriasServicoCache = null;
 
 async function carregarCategoriasProdutoCache() {
     if (window._categoriasProdutoCache) return window._categoriasProdutoCache;
     try {
         const res = await API.Config.getCategoriasProduto();
         window._categoriasProdutoCache = (res.sucesso && res.categorias) ? res.categorias : [];
+        window._categoriasProdutoTemConfig = res?.tem_config === true;
     } catch (e) {
         window._categoriasProdutoCache = [];
+        window._categoriasProdutoTemConfig = false;
     }
     return window._categoriasProdutoCache;
 }
@@ -6565,6 +6629,7 @@ async function carregarSeletorCategorias() {
         const todasCats = (catRes.sucesso && catRes.categorias) ? catRes.categorias : [];
         const salvas = (savedRes.sucesso && savedRes.categorias) ? savedRes.categorias : [];
         window._categoriasProdutoCache = salvas;
+        window._categoriasProdutoTemConfig = savedRes?.tem_config === true;
 
         if (todasCats.length === 0) {
             container.innerHTML = '<span style="color:#888;font-size:13px;">Nenhuma categoria encontrada. Verifique a conexão WooCommerce.</span>';
@@ -6624,6 +6689,9 @@ async function salvarCategoriasProduto() {
         // Woo Produtos depende dessa configuracao.
         if (estadoAtual && estadoAtual.secaoAtiva === 'pedidos') {
             await carregarPedidos();
+        } else if (estadoAtual && estadoAtual.secaoAtiva === 'pedidos-excel') {
+            // A seleção de produto impacta diretamente quais categorias entram como serviço.
+            await carregarPedidosServico(false);
         }
     } catch (e) {
         alert('Erro ao salvar: ' + e.message);
@@ -6898,46 +6966,202 @@ async function carregarPedidosExcel() {
     }
 }
 
-async function carregarCategoriasServicoInfo() {
+async function carregarEstadoAutoEmitirServico() {
+    try {
+        const res = await API.Config.getAutoEmitirServico();
+        atualizarUIAutoEmitirServico(res.auto_emitir === true);
+    } catch (e) {
+        atualizarUIAutoEmitirServico(false);
+    }
+}
+
+function atualizarUIAutoEmitirServico(ativo) {
+    const toggle = document.getElementById('toggle-auto-emitir-servico');
+    const statusEl = document.getElementById('auto-emitir-servico-status');
+    const container = document.getElementById('auto-emitir-servico-container');
+
+    if (toggle) toggle.checked = ativo;
+    if (statusEl) {
+        statusEl.textContent = ativo ? 'ATIVADO' : 'DESATIVADO';
+        statusEl.style.background = ativo ? '#d4edda' : '#f8d7da';
+        statusEl.style.color = ativo ? '#155724' : '#721c24';
+    }
+    if (container) {
+        container.style.borderColor = ativo ? '#28a745' : '#dc3545';
+        container.style.background = ativo ? '#f0fff0' : '#fff5f5';
+    }
+}
+
+async function toggleAutoEmitirServico(ativo) {
+    const msg = ativo
+        ? 'Ativar emissão automática para serviços (NFSe) via webhook?'
+        : 'Desativar emissão automática para serviços (NFSe)?';
+    if (!confirm(msg)) {
+        const toggle = document.getElementById('toggle-auto-emitir-servico');
+        if (toggle) toggle.checked = !ativo;
+        await carregarEstadoAutoEmitirServico();
+        return;
+    }
+    try {
+        await API.Config.setAutoEmitirServico(ativo);
+        atualizarUIAutoEmitirServico(ativo);
+    } catch (e) {
+        alert('Erro ao salvar configuração: ' + e.message);
+        await carregarEstadoAutoEmitirServico();
+    }
+}
+
+function toggleCategoriasServicoPanel() {
+    const panel = document.getElementById('cat-servico-panel');
+    const arrow = document.getElementById('cat-servico-arrow');
+    if (!panel) return;
+
+    const aberto = panel.style.display !== 'none';
+    panel.style.display = aberto ? 'none' : 'block';
+    if (arrow) arrow.textContent = aberto ? '▶' : '▼';
+}
+
+function toggleCategoriasProdutoPanel() {
+    const panel = document.getElementById('cat-produto-panel');
+    const arrow = document.getElementById('cat-produto-arrow');
+    if (!panel) return;
+
+    const aberto = panel.style.display !== 'none';
+    panel.style.display = aberto ? 'none' : 'block';
+    if (arrow) arrow.textContent = aberto ? '▶' : '▼';
+}
+
+async function carregarCategoriasServicoCache() {
+    try {
+        const [catRes, prodRes, servRes] = await Promise.all([
+            API.Config.getCategoriasWoo(),
+            API.Config.getCategoriasProduto(),
+            API.Config.getCategoriasServico()
+        ]);
+
+        const todasCats = (catRes.sucesso && catRes.categorias) ? catRes.categorias : [];
+        const produtoCats = (prodRes.sucesso && prodRes.categorias) ? prodRes.categorias : [];
+        const normalize = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        const produtoNorm = produtoCats.map(normalize);
+        const isCategoriaProduto = (nome) => {
+            const n = normalize(nome);
+            return produtoNorm.some(p => n.includes(p) || p.includes(n));
+        };
+        const defaultServico = todasCats
+            .map(c => c.name)
+            .filter(name => !isCategoriaProduto(name));
+
+        if (servRes.sucesso && servRes.tem_config === true) {
+            window._categoriasServicoCache = Array.isArray(servRes.categorias) ? servRes.categorias : [];
+        } else {
+            window._categoriasServicoCache = [...defaultServico, 'Sem categoria'];
+        }
+    } catch (e) {
+        window._categoriasServicoCache = null;
+    }
+    return window._categoriasServicoCache;
+}
+
+async function carregarSeletorCategoriasServico() {
     const container = document.getElementById('cat-servico-list');
     const infoEl = document.getElementById('cat-servico-info');
     if (!container) return;
 
     try {
-        const [catRes, savedRes] = await Promise.all([
+        const [catRes, prodRes, servRes] = await Promise.all([
             API.Config.getCategoriasWoo(),
-            API.Config.getCategoriasProduto()
+            API.Config.getCategoriasProduto(),
+            API.Config.getCategoriasServico()
         ]);
 
         const todasCats = (catRes.sucesso && catRes.categorias) ? catRes.categorias : [];
-        const produtoCats = (savedRes.sucesso && savedRes.categorias) ? savedRes.categorias : [];
+        const produtoCats = (prodRes.sucesso && prodRes.categorias) ? prodRes.categorias : [];
+        const normalize = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        const produtoNorm = produtoCats.map(normalize);
+        const isCategoriaProduto = (nome) => {
+            const n = normalize(nome);
+            return produtoNorm.some(p => n.includes(p) || p.includes(n));
+        };
 
-        const servicoCats = todasCats.filter(cat => !produtoCats.includes(cat.name));
+        const servicoBase = todasCats.filter(cat => !isCategoriaProduto(cat.name));
+        const servicoBaseNomes = servicoBase.map(cat => cat.name);
+        let selecionadas = [];
+        if (servRes.sucesso && servRes.tem_config === true) {
+            selecionadas = Array.isArray(servRes.categorias) ? servRes.categorias : [];
+        } else {
+            selecionadas = [...servicoBaseNomes, 'Sem categoria'];
+        }
+        window._categoriasServicoCache = selecionadas;
 
-        if (servicoCats.length === 0 && todasCats.length === 0) {
+        if (servicoBase.length === 0 && todasCats.length === 0) {
             container.innerHTML = '<span style="color:#888;font-size:13px;">Nenhuma categoria encontrada. Verifique a conexão WooCommerce.</span>';
             if (infoEl) { infoEl.textContent = 'sem categorias'; infoEl.style.background = '#fff3cd'; infoEl.style.color = '#856404'; }
             return;
         }
 
-        if (servicoCats.length === 0) {
-            container.innerHTML = '<span style="color:#888;font-size:13px;">Todas as categorias estão marcadas como produto. Configure na tela Woo Produtos.</span>';
-            if (infoEl) { infoEl.textContent = 'nenhuma categoria de serviço'; infoEl.style.background = '#fff3cd'; infoEl.style.color = '#856404'; }
-            return;
-        }
+        const linhas = servicoBase.map(cat => {
+            const checked = selecionadas.includes(cat.name);
+            return `<label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid ${checked ? '#28a745' : '#ddd'};border-radius:6px;background:${checked ? '#f0fff0' : '#fff'};cursor:pointer;font-size:13px;">
+                <span style="display:flex;align-items:center;gap:8px;">
+                    <input type="checkbox" class="cat-servico-check" value="${cat.name}" ${checked ? 'checked' : ''} onchange="salvarCategoriasServico()" style="width:15px;height:15px;cursor:pointer;">
+                    ${cat.name}
+                </span>
+                <span style="color:#aaa;font-size:11px;">(${cat.count || 0})</span>
+            </label>`;
+        });
 
-        container.innerHTML = servicoCats.map(cat =>
-            '<span style="display:inline-block;padding:4px 10px;border:1px solid #1976d2;border-radius:6px;background:#e3f2fd;font-size:13px;color:#1565c0;">' + cat.name + ' <span style="color:#90caf9;font-size:11px;">(' + cat.count + ')</span></span>'
-        ).join('');
+        const semCatChecked = selecionadas.includes('Sem categoria');
+        linhas.push(`<label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid ${semCatChecked ? '#28a745' : '#ddd'};border-radius:6px;background:${semCatChecked ? '#f0fff0' : '#fff'};cursor:pointer;font-size:13px;">
+            <span style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" class="cat-servico-check" value="Sem categoria" ${semCatChecked ? 'checked' : ''} onchange="salvarCategoriasServico()" style="width:15px;height:15px;cursor:pointer;">
+                Sem categoria
+            </span>
+        </label>`);
 
+        container.innerHTML = linhas.join('');
         if (infoEl) {
-            infoEl.textContent = servicoCats.length + ' categoria(s) de serviço';
-            infoEl.style.background = '#d4edda';
-            infoEl.style.color = '#155724';
+            infoEl.textContent = selecionadas.length + ' selecionada(s)';
+            infoEl.style.background = selecionadas.length > 0 ? '#d4edda' : '#f8d7da';
+            infoEl.style.color = selecionadas.length > 0 ? '#155724' : '#721c24';
         }
     } catch (e) {
-        container.innerHTML = '<span style="color:#dc3545;font-size:13px;">Erro ao carregar categorias</span>';
+        container.innerHTML = '<span style="color:#dc3545;font-size:13px;">Erro ao carregar categorias: ' + e.message + '</span>';
     }
+}
+
+async function salvarCategoriasServico() {
+    const checks = document.querySelectorAll('.cat-servico-check:checked');
+    const categorias = Array.from(checks).map(c => c.value);
+    try {
+        await API.Config.salvarCategoriasServico(categorias);
+        window._categoriasServicoCache = categorias;
+
+        const infoEl = document.getElementById('cat-servico-info');
+        if (infoEl) {
+            infoEl.textContent = categorias.length + ' selecionada(s) - salvo!';
+            infoEl.style.background = categorias.length > 0 ? '#d4edda' : '#f8d7da';
+            infoEl.style.color = categorias.length > 0 ? '#155724' : '#721c24';
+        }
+
+        document.querySelectorAll('.cat-servico-check').forEach(cb => {
+            const label = cb.closest('label');
+            if (label) {
+                label.style.borderColor = cb.checked ? '#28a745' : '#ddd';
+                label.style.background = cb.checked ? '#f0fff0' : '#fff';
+            }
+        });
+
+        if (estadoAtual && estadoAtual.secaoAtiva === 'pedidos-excel') {
+            await carregarPedidosServico(false);
+        }
+    } catch (e) {
+        alert('Erro ao salvar categorias de serviço: ' + e.message);
+    }
+}
+
+// Compatibilidade com blocos antigos da tela de Woo Serviços.
+async function carregarCategoriasServicoInfo() {
+    return carregarSeletorCategoriasServico();
 }
 
 function toggleMesExcel(mesId) {
@@ -7207,6 +7431,7 @@ function formatarDataHuman(dataIso) {
 // Atualiza a sincronização para buscar 30 dias por padrão ou perguntar
 async function sincronizarExcel() {
     const btn = document.getElementById('btn-sincronizar-excel');
+    const statusServico = document.getElementById('status-woocommerce-servico');
 
     // Forçar busca completa sem perguntar
     const dias = 'todos';
@@ -7215,22 +7440,80 @@ async function sincronizarExcel() {
         btn.disabled = true;
         btn.textContent = '⏳ Sincronizando TUDO...';
     }
+    if (statusServico) {
+        statusServico.innerHTML = '<span style="color:#666;font-size:12px;">⏳ Sincronizando tudo...</span>';
+    }
 
     try {
-        const res = await API.Excel.sincronizar(dias);
+        const res = await Promise.race([
+            API.Excel.sincronizar(dias),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout da sincronização. Tente novamente.')), 180000))
+        ]);
+
         if (res.sucesso) {
             // Recarregar lista
-            await carregarPedidosExcel();
-            mostrarFeedbackExcel('success', `Sincronização concluída: ${res.resumo.inseridos} novos, ${res.resumo.atualizados} atualizados.`);
+            await carregarPedidosServico(false);
+            const msg = `Sincronização concluída: ${res.resumo.inseridos} novos, ${res.resumo.atualizados} atualizados.`;
+            mostrarFeedbackExcel('success', msg);
+            if (statusServico) {
+                statusServico.innerHTML = `<span style="color:#28a745;font-size:12px;">✓ ${msg}</span>`;
+            }
         } else {
             mostrarFeedbackExcel('error', `Erro na sincronização: ${res.erro}`);
+            if (statusServico) {
+                statusServico.innerHTML = `<span style="color:#dc3545;font-size:12px;">✗ Erro: ${res.erro || 'Falha na sincronização'}</span>`;
+            }
         }
     } catch (err) {
         mostrarFeedbackExcel('error', `Erro ao chamar sincronização: ${err.message}`);
+        if (statusServico) {
+            statusServico.innerHTML = `<span style="color:#dc3545;font-size:12px;">✗ ${err.message}</span>`;
+        }
     } finally {
         if (btn) {
             btn.disabled = false;
             btn.textContent = '🔄 Sincronizar (Geral)';
+        }
+    }
+}
+
+async function sincronizarWooServicosBanco() {
+    const btn = document.getElementById('btn-sincronizar-woo-servicos');
+    const statusServico = document.getElementById('status-woocommerce-servico');
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Sincronizando Woo...';
+    }
+    if (statusServico) {
+        statusServico.innerHTML = '<span style="color:#666;font-size:12px;">⏳ Carregando pedidos no banco (incremental)...</span>';
+    }
+
+    try {
+        const resultado = await API.Pedidos.sincronizarTodosDoWooCommerce((p) => {
+            if (statusServico) {
+                statusServico.innerHTML = `<span style="color:#666;font-size:12px;">⏳ Página ${p.pagina} | novos: ${p.salvos} | atualizados: ${p.atualizados} | erros: ${p.erros}</span>`;
+            }
+        });
+
+        if (!resultado.sucesso) {
+            throw new Error(resultado.erro || 'Erro na sincronização incremental');
+        }
+
+        await carregarPedidosServico(false);
+        if (statusServico) {
+            const aviso = resultado.aviso ? ` (${resultado.aviso})` : '';
+            statusServico.innerHTML = `<span style="color:#28a745;font-size:12px;">✓ Woo→Banco concluído | novos: ${resultado.salvos || 0} | atualizados: ${resultado.atualizados || 0}${aviso}</span>`;
+        }
+    } catch (err) {
+        if (statusServico) {
+            statusServico.innerHTML = `<span style="color:#dc3545;font-size:12px;">✗ ${err.message}</span>`;
+        }
+        if (window.Toast) window.Toast.error('Erro na sincronização Woo→Banco: ' + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '🔄 Sincronizar Woo (Banco)';
         }
     }
 }
@@ -7533,6 +7816,7 @@ async function alterarStatusManual(pedidoId, novoStatus) {
 
 window.carregarPedidosExcel = carregarPedidosExcel;
 window.sincronizarExcel = sincronizarExcel;
+window.sincronizarWooServicosBanco = sincronizarWooServicosBanco;
 window.emitirNotaExcel = emitirNotaExcel;
 window.cancelarNotaExcel = cancelarNotaExcel;
 window.alterarStatusManual = alterarStatusManual;

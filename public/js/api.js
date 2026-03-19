@@ -297,9 +297,14 @@ const PedidosAPI = {
         let totalSalvos = 0;
         let totalAtualizados = 0;
         let totalErros = 0;
+        let semProgressoSeguido = 0;
+        const MAX_PAGINAS = 500;
 
-        while (true) {
-            const resultado = await this.sincronizarDoWooCommerce(pagina, 30);
+        while (pagina <= MAX_PAGINAS) {
+            const resultado = await Promise.race([
+                this.sincronizarDoWooCommerce(pagina, 30),
+                new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout na página ${pagina}`)), 30000))
+            ]);
 
             if (!resultado.sucesso) {
                 return { sucesso: false, erro: resultado.erro };
@@ -308,6 +313,8 @@ const PedidosAPI = {
             totalSalvos += resultado.salvos || 0;
             totalAtualizados += resultado.atualizados || 0;
             totalErros += resultado.erros || 0;
+            const progressoPagina = (resultado.salvos || 0) + (resultado.atualizados || 0);
+            semProgressoSeguido = progressoPagina === 0 ? semProgressoSeguido + 1 : 0;
 
             if (onProgress) {
                 onProgress({
@@ -319,6 +326,16 @@ const PedidosAPI = {
             }
 
             if (!resultado.tem_mais) break;
+            if (semProgressoSeguido >= 3) {
+                return {
+                    sucesso: true,
+                    paginas: pagina,
+                    salvos: totalSalvos,
+                    atualizados: totalAtualizados,
+                    erros: totalErros,
+                    aviso: 'Sincronização encerrada por falta de progresso'
+                };
+            }
             pagina++;
         }
 
@@ -444,6 +461,28 @@ const ConfigAPI = {
         return await apiRequest('/api/config/auto-emitir', {
             method: 'POST',
             body: { ativo }
+        });
+    },
+    
+    async getAutoEmitirServico() {
+        return await apiRequest('/api/config/auto-emitir-servico');
+    },
+
+    async setAutoEmitirServico(ativo) {
+        return await apiRequest('/api/config/auto-emitir-servico', {
+            method: 'POST',
+            body: { ativo }
+        });
+    },
+
+    async getCategoriasServico() {
+        return await apiRequest('/api/config/categorias-servico');
+    },
+
+    async salvarCategoriasServico(categorias) {
+        return await apiRequest('/api/config/categorias-servico', {
+            method: 'POST',
+            body: { categorias }
         });
     },
 

@@ -2,6 +2,7 @@ const logger = require('../services/logger');
 const { mapearWooCommerceParaPedido } = require('../utils/mapeador');
 const { salvarPedido, buscarPedidoPorPedidoId, atualizarPedido, salvarNFSe, atualizarNFSe, buscarNFSePorReferencia, salvarNFe, atualizarNFe, buscarNFePorReferencia, buscarConfiguracaoTenant, buscarConfiguracao } = require('../config/database');
 const { emitirNFe } = require('../services/focusNFe');
+const { emitirNFSe } = require('../services/focusNFSe');
 const { getConfigForTenant } = require('../services/tenantService');
 const { verificarLimite, registrarEmissao } = require('../services/usageService');
 const config = require('../../config');
@@ -15,6 +16,69 @@ async function isAutoEmitirAtivo(tenantId) {
     valor = await buscarConfiguracao('AUTO_EMITIR');
   }
   return valor === 'true' || valor === '1';
+}
+
+async function isAutoEmitirServicoAtivo(tenantId) {
+  let valor = null;
+  if (tenantId) {
+    valor = await buscarConfiguracaoTenant(tenantId, 'AUTO_EMITIR_SERVICO');
+  }
+  if (valor === null) {
+    valor = await buscarConfiguracao('AUTO_EMITIR_SERVICO');
+  }
+  // Compatibilidade com config antiga
+  if (valor === null) {
+    if (tenantId) valor = await buscarConfiguracaoTenant(tenantId, 'AUTO_EMITIR');
+    if (valor === null) valor = await buscarConfiguracao('AUTO_EMITIR');
+  }
+  return valor === 'true' || valor === '1';
+}
+
+async function getCategoriasServicoSelecionadas(tenantId) {
+  let valor = null;
+  try {
+    if (tenantId) {
+      valor = await buscarConfiguracaoTenant(tenantId, 'CATEGORIAS_SERVICO');
+    }
+    if (!valor) {
+      valor = await buscarConfiguracao('CATEGORIAS_SERVICO');
+    }
+    if (!valor) return null; // null = sem configuração manual
+    const arr = JSON.parse(valor);
+    return Array.isArray(arr) ? arr : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function pedidoPertenceCategoriasServicoSelecionadas(pedidoWC, categoriasServicoSelecionadas) {
+  if (!Array.isArray(categoriasServicoSelecionadas)) return true;
+  if (categoriasServicoSelecionadas.length === 0) return false;
+
+  const normalize = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const alvos = categoriasServicoSelecionadas.map(normalize);
+  const permiteSemCategoria = alvos.includes(normalize('Sem categoria'));
+  const lineItems = Array.isArray(pedidoWC?.line_items) ? pedidoWC.line_items : [];
+
+  if (lineItems.length === 0) return permiteSemCategoria;
+
+  let encontrouCategoria = false;
+  for (const item of lineItems) {
+    if (item.categories && Array.isArray(item.categories) && item.categories.length > 0) {
+      encontrouCategoria = true;
+      for (const cat of item.categories) {
+        const nome = normalize(typeof cat === 'string' ? cat : cat?.name);
+        if (alvos.some(a => nome.includes(a) || a.includes(nome))) return true;
+      }
+    } else if (item.category) {
+      encontrouCategoria = true;
+      const nome = normalize(typeof item.category === 'string' ? item.category : item.category?.name);
+      if (alvos.some(a => nome.includes(a) || a.includes(nome))) return true;
+    }
+  }
+
+  if (!encontrouCategoria) return permiteSemCategoria;
+  return false;
 }
 
 /**
@@ -199,8 +263,10 @@ async function processarWebhook(req, res) {
     // Livro Faíscas = NFe (produto), resto = NFSe (serviço)
     const tipoNota = await verificarTipoNota(pedidoWC, tenantId);
 
-    // Verificar se emissao automatica esta ativa
-    const autoEmitir = await isAutoEmitirAtivo(tenantId);
+    // Verificar se emissao automatica esta ativa para o tipo
+    const autoEmitirProduto = await isAutoEmitirAtivo(tenantId);
+    const autoEmitirServico = await isAutoEmitirServicoAtivo(tenantId);
+    const autoEmitir = tipoNota === 'produto' ? autoEmitirProduto : autoEmitirServico;
 
     if (!autoEmitir) {
       logger.webhook('Emissao automatica desativada - pedido salvo como pendente', {
@@ -316,29 +382,90 @@ async function processarWebhook(req, res) {
         });
       }
     } else {
-      // Para serviços: apenas salvar pedido com status "pendente" - NÃO emitir NFSe automaticamente
-      logger.webhook('Pedido de serviço recebido - aguardando emissão manual', {
+      const categoriasServicoSelecionadas = await getCategoriasServicoSelecionadas(tenantId);
+      const permitidoServico = pedidoPertenceCategoriasServicoSelecionadas(pedidoWC, categoriasServicoSelecionadas);
+      if (!permitidoServico) {
+        logger.webhook('Pedido de serviço fora das categorias selecionadas - mantendo pendente', {
+          pedido_id: dadosPedido.pedido_id,
+          tipo_nota: 'servico',
+          categorias_servico_config: categoriasServicoSelecionadas
+        });
+        await atualizarPedido(dadosPedido.pedido_id_db, { status: 'pendente' });
+        return res.status(200).json({
+          mensagem: 'Pedido de serviço salvo (fora da seleção manual de categorias de serviço)',
+          pedido_id: dadosPedido.pedido_id,
+          status: 'pendente',
+          tipo_nota: 'servico'
+        });
+      }
+
+      const cfg = tenantId ? await getConfigForTenant(tenantId) : config;
+      const configFiscal = cfg.fiscal || config.fiscal;
+      const configFocus = tenantId && cfg.focusNFe ? { token: cfg.focusNFe.token, ambiente: cfg.focusNFe.ambiente } : null;
+
+      const limiteCheck = await verificarLimite(tenantId);
+      if (!limiteCheck.pode) {
+        logger.webhook('Limite de notas atingido - emissão de serviço bloqueada', {
+          pedido_id: dadosPedido.pedido_id,
+          tenant_id: tenantId,
+          usado: limiteCheck.usado,
+          limite: limiteCheck.limite
+        });
+        return res.status(402).json({
+          sucesso: false,
+          erro: 'limite_atingido',
+          mensagem: limiteCheck.mensagem,
+          usado: limiteCheck.usado,
+          limite: limiteCheck.limite,
+          upgrade_url: (process.env.APP_URL || '').replace(/\/$/, '') + '/landing'
+        });
+      }
+
+      logger.webhook('Iniciando emissão automática de NFSe (Serviço)', {
         pedido_id: dadosPedido.pedido_id,
         tipo_nota: 'servico',
-        status_salvo: 'pendente',
         cliente: dadosPedido.nome,
-        valor_total: dadosPedido.valor_total,
-        quantidade_servicos: dadosPedido.servicos?.length || 0,
-        acao: 'pedido_salvo_aguardando_emissao_manual'
+        valor_total: dadosPedido.valor_total
       });
-      
-      // Garantir que o status está como "pendente" (já foi salvo acima, mas vamos garantir)
-      await atualizarPedido(dadosPedido.pedido_id_db, {
-        status: 'pendente'
-      });
-      
-      return res.status(200).json({
-        mensagem: 'Pedido de serviço recebido e salvo - aguardando emissão manual',
-        pedido_id: dadosPedido.pedido_id,
-        status: 'pendente',
-        tipo_nota: 'servico',
-        observacao: 'NFSe será emitida manualmente através da interface'
-      });
+
+      try {
+        const resultado = await emitirNFSe(dadosPedido, cfg.emitente, configFiscal, 'servico', configFocus);
+        if (resultado.sucesso) {
+          await registrarEmissao(tenantId);
+          await atualizarPedido(dadosPedido.pedido_id_db, {
+            status: resultado.status === 'autorizado' ? 'emitida' : 'processando'
+          });
+          return res.status(200).json({
+            mensagem: 'Pedido processado e NFSe emitida automaticamente',
+            pedido_id: dadosPedido.pedido_id,
+            status: resultado.status,
+            referencia: resultado.referencia,
+            tipo_nota: 'servico'
+          });
+        }
+
+        await atualizarPedido(dadosPedido.pedido_id_db, { status: 'erro' });
+        return res.status(200).json({
+          mensagem: 'Pedido de serviço recebido, erro na emissão da NFSe',
+          pedido_id: dadosPedido.pedido_id,
+          erro: resultado.erro,
+          tipo_nota: 'servico'
+        });
+      } catch (err) {
+        logger.error('Erro ao processar emissão automática de NFSe', {
+          pedido_id: dadosPedido.pedido_id,
+          error: err.message,
+          stack: err.stack,
+          tipo_nota: 'servico'
+        });
+        await atualizarPedido(dadosPedido.pedido_id_db, { status: 'erro' });
+        return res.status(200).json({
+          mensagem: 'Pedido recebido, erro no processamento da NFSe',
+          pedido_id: dadosPedido.pedido_id,
+          erro: err.message,
+          tipo_nota: 'servico'
+        });
+      }
     }
     
   } catch (error) {

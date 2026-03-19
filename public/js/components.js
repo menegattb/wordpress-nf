@@ -782,7 +782,7 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                         <th>Cliente</th>
                         <th>Total</th>
                         <th>Status</th>
-                        <th>Categoria</th>
+                        <th>Produto</th>
                         <th style="width: 120px;">Ações</th>
                     </tr>
                 </thead>

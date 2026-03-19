@@ -137,7 +137,7 @@ const excelController = {
             const params = {
                 per_page: 100, // Máximo permitido
                 page: 1,
-                tatus: 'completed' // Já filtrar no Woo se possível, mas a API padrão pode não aceitar 'status' filtro dependendo da versão, vamos manter filtro manual por segurança ou testar.
+                status: 'completed'
                 // A função buscarPedidos aceita filtros e passa params.
             };
 
@@ -152,10 +152,14 @@ const excelController = {
 
             let page = 1;
             let hasMore = true;
+            const maxPages = 500;
+            const seenFirstOrderIds = new Set();
 
-            while (hasMore) {
+            while (hasMore && page <= maxPages) {
                 params.page = page;
-                logger.info(`Buscando página ${page} do WooCommerce...`);
+                if (page === 1 || page % 20 === 0) {
+                    logger.info(`Sincronização Woo: página ${page}`);
+                }
 
                 const resposta = await buscarPedidos(params, credentials);
                 const novosPedidos = resposta.pedidos || [];
@@ -163,16 +167,33 @@ const excelController = {
                 if (novosPedidos.length === 0) {
                     hasMore = false;
                 } else {
+                    const firstId = novosPedidos[0]?.id;
+                    if (firstId && seenFirstOrderIds.has(firstId)) {
+                        logger.warn('Sincronização Woo interrompida para evitar loop de paginação', { page, first_id: firstId });
+                        hasMore = false;
+                        break;
+                    }
+                    if (firstId) seenFirstOrderIds.add(firstId);
+
                     pedidosWoo = pedidosWoo.concat(novosPedidos);
 
-                    // Se a API retornou total_pages, podemos usar. Ou apenas verificar se retornou menos que o per_page.
-                    // buscarPedidos retorna total_pages
-                    if (page >= (resposta.total_pages || 1)) {
+                    const totalPages = parseInt(resposta.total_pages || 0, 10);
+                    if (totalPages > 0) {
+                        if (page >= totalPages) {
+                            hasMore = false;
+                        } else {
+                            page++;
+                        }
+                    } else if (novosPedidos.length < params.per_page) {
                         hasMore = false;
                     } else {
                         page++;
                     }
                 }
+            }
+
+            if (page > maxPages) {
+                logger.warn('Sincronização Woo atingiu limite máximo de páginas', { max_pages: maxPages });
             }
 
             logger.info(`Total recuperado do Woo: ${pedidosWoo.length} pedidos. Iniciando processamento...`);
@@ -195,8 +216,14 @@ const excelController = {
                     const normalize = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                     let categoriasExcluir = ['presencial sem nota'];
                     try {
-                        const { buscarConfiguracao } = require('../config/database');
-                        const catProdVal = await buscarConfiguracao('CATEGORIAS_PRODUTO');
+                        const { buscarConfiguracao, buscarConfiguracaoTenant } = require('../config/database');
+                        let catProdVal = null;
+                        if (tenantId) {
+                            catProdVal = await buscarConfiguracaoTenant(tenantId, 'CATEGORIAS_PRODUTO');
+                        }
+                        if (!catProdVal) {
+                            catProdVal = await buscarConfiguracao('CATEGORIAS_PRODUTO');
+                        }
                         if (catProdVal) {
                             const parsed = JSON.parse(catProdVal);
                             categoriasExcluir = categoriasExcluir.concat(parsed);

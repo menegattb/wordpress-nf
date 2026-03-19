@@ -538,6 +538,60 @@ router.post('/auto-emitir', async (req, res) => {
 });
 
 /**
+ * GET /api/config/auto-emitir-servico
+ * Retorna se emissao automatica de SERVICO esta ativa
+ */
+router.get('/auto-emitir-servico', async (req, res) => {
+  try {
+    let valor = null;
+    if (req.tenant_id) {
+      valor = await buscarConfiguracaoTenant(req.tenant_id, 'AUTO_EMITIR_SERVICO');
+    }
+    if (valor === null) {
+      valor = await buscarConfiguracao('AUTO_EMITIR_SERVICO');
+    }
+    // Compatibilidade: se não houver config específica de serviço, usar AUTO_EMITIR
+    if (valor === null) {
+      if (req.tenant_id) valor = await buscarConfiguracaoTenant(req.tenant_id, 'AUTO_EMITIR');
+      if (valor === null) valor = await buscarConfiguracao('AUTO_EMITIR');
+    }
+    res.json({ sucesso: true, auto_emitir: valor === 'true' || valor === '1' });
+  } catch (error) {
+    res.json({ sucesso: true, auto_emitir: false });
+  }
+});
+
+/**
+ * POST /api/config/auto-emitir-servico
+ * Body: { ativo: true/false }
+ */
+router.post('/auto-emitir-servico', async (req, res) => {
+  try {
+    const { ativo } = req.body;
+    const valor = ativo ? 'true' : 'false';
+
+    if (req.tenant_id) {
+      await salvarConfiguracaoTenant(req.tenant_id, 'AUTO_EMITIR_SERVICO', valor);
+    } else {
+      await salvarConfiguracao('AUTO_EMITIR_SERVICO', valor);
+    }
+
+    try {
+      const { invalidateCache } = require('../services/tenantService');
+      if (invalidateCache) invalidateCache(req.tenant_id);
+    } catch (e) { /* ok */ }
+
+    logger.info('Emissao automatica de servico ' + (ativo ? 'ativada' : 'desativada'), {
+      tenant_id: req.tenant_id || 'global'
+    });
+    res.json({ sucesso: true, auto_emitir: ativo === true });
+  } catch (error) {
+    logger.error('Erro ao salvar auto-emitir-servico', { error: error.message });
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+});
+
+/**
  * GET /api/config/categorias-produto
  * Retorna lista de categorias que sao de produto (NFe)
  */
@@ -551,12 +605,13 @@ router.get('/categorias-produto', async (req, res) => {
       valor = await buscarConfiguracao('CATEGORIAS_PRODUTO');
     }
     let categorias = [];
-    if (valor) {
+    const temConfig = valor !== null && valor !== undefined && valor !== '';
+    if (temConfig) {
       try { categorias = JSON.parse(valor); } catch (e) { categorias = []; }
     }
-    res.json({ sucesso: true, categorias });
+    res.json({ sucesso: true, categorias, tem_config: temConfig });
   } catch (error) {
-    res.json({ sucesso: true, categorias: [] });
+    res.json({ sucesso: true, categorias: [], tem_config: false });
   }
 });
 
@@ -588,6 +643,62 @@ router.post('/categorias-produto', async (req, res) => {
     res.json({ sucesso: true, categorias });
   } catch (error) {
     logger.error('Erro ao salvar categorias de produto', { error: error.message });
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+});
+
+/**
+ * GET /api/config/categorias-servico
+ * Retorna lista de categorias de serviço selecionadas manualmente
+ */
+router.get('/categorias-servico', async (req, res) => {
+  try {
+    let valor = null;
+    if (req.tenant_id) {
+      valor = await buscarConfiguracaoTenant(req.tenant_id, 'CATEGORIAS_SERVICO');
+    }
+    if (valor === null) {
+      valor = await buscarConfiguracao('CATEGORIAS_SERVICO');
+    }
+    let categorias = [];
+    let temConfig = false;
+    if (valor !== null && valor !== undefined && valor !== '') {
+      temConfig = true;
+      try { categorias = JSON.parse(valor); } catch (e) { categorias = []; }
+    }
+    res.json({ sucesso: true, categorias, tem_config: temConfig });
+  } catch (error) {
+    res.json({ sucesso: true, categorias: [], tem_config: false });
+  }
+});
+
+/**
+ * POST /api/config/categorias-servico
+ * Body: { categorias: ["Cat A", "Cat B", "Sem categoria"] }
+ */
+router.post('/categorias-servico', async (req, res) => {
+  try {
+    const { categorias } = req.body;
+    if (!Array.isArray(categorias)) {
+      return res.status(400).json({ sucesso: false, erro: 'categorias deve ser um array' });
+    }
+    const valor = JSON.stringify(categorias);
+
+    if (req.tenant_id) {
+      await salvarConfiguracaoTenant(req.tenant_id, 'CATEGORIAS_SERVICO', valor);
+    } else {
+      await salvarConfiguracao('CATEGORIAS_SERVICO', valor);
+    }
+
+    try {
+      const { invalidateCache } = require('../services/tenantService');
+      if (invalidateCache) invalidateCache(req.tenant_id);
+    } catch (e) { /* ok */ }
+
+    logger.info('Categorias de serviço salvas', { tenant_id: req.tenant_id || 'global', categorias });
+    res.json({ sucesso: true, categorias });
+  } catch (error) {
+    logger.error('Erro ao salvar categorias de serviço', { error: error.message });
     res.status(500).json({ sucesso: false, erro: error.message });
   }
 });
