@@ -7047,9 +7047,8 @@ async function carregarCategoriasServicoCache() {
             const n = normalize(nome);
             return produtoNorm.some(p => n.includes(p) || p.includes(n));
         };
-        const defaultServico = todasCats
-            .map(c => c.name)
-            .filter(name => !isCategoriaProduto(name));
+        const todasNomes = todasCats.map(c => c.name).filter(Boolean);
+        const defaultServico = todasNomes.filter(name => !isCategoriaProduto(name));
 
         if (servRes.sucesso && servRes.tem_config === true) {
             window._categoriasServicoCache = Array.isArray(servRes.categorias) ? servRes.categorias : [];
@@ -7083,25 +7082,30 @@ async function carregarSeletorCategoriasServico() {
             return produtoNorm.some(p => n.includes(p) || p.includes(n));
         };
 
-        const servicoBase = todasCats.filter(cat => !isCategoriaProduto(cat.name));
-        const servicoBaseNomes = servicoBase.map(cat => cat.name);
+        // Em Woo Serviços devem aparecer TODAS as categorias.
+        // As categorias que já estão em Produtos ficam desmarcadas por padrão.
+        const allCats = (todasCats || []).filter(cat => !!cat?.name);
+        const allNames = Array.from(new Set(allCats.map(cat => cat.name)));
+        const defaultSelecionadas = allNames.filter(name => !isCategoriaProduto(name));
         let selecionadas = [];
         if (servRes.sucesso && servRes.tem_config === true) {
             selecionadas = Array.isArray(servRes.categorias) ? servRes.categorias : [];
         } else {
-            selecionadas = [...servicoBaseNomes, 'Sem categoria'];
+            selecionadas = [...defaultSelecionadas, 'Sem categoria'];
         }
+        // Evitar duplicidades (ex.: "Sem categoria")
+        selecionadas = Array.from(new Set(selecionadas));
         window._categoriasServicoCache = selecionadas;
 
-        if (servicoBase.length === 0 && todasCats.length === 0) {
+        if (allCats.length === 0) {
             container.innerHTML = '<span style="color:#888;font-size:13px;">Nenhuma categoria encontrada. Verifique a conexão WooCommerce.</span>';
             if (infoEl) { infoEl.textContent = 'sem categorias'; infoEl.style.background = '#fff3cd'; infoEl.style.color = '#856404'; }
             return;
         }
 
-        const linhas = servicoBase.map(cat => {
+        const linhas = allCats.map(cat => {
             const checked = selecionadas.includes(cat.name);
-            return `<label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid ${checked ? '#28a745' : '#ddd'};border-radius:6px;background:${checked ? '#f0fff0' : '#fff'};cursor:pointer;font-size:13px;">
+            return `<label style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border:1px solid ${checked ? '#28a745' : '#ddd'};border-radius:6px;background:${checked ? '#f0fff0' : '#fff'};cursor:pointer;font-size:13px;min-width:180px;">
                 <span style="display:flex;align-items:center;gap:8px;">
                     <input type="checkbox" class="cat-servico-check" value="${cat.name}" ${checked ? 'checked' : ''} onchange="salvarCategoriasServico()" style="width:15px;height:15px;cursor:pointer;">
                     ${cat.name}
@@ -7110,15 +7114,21 @@ async function carregarSeletorCategoriasServico() {
             </label>`;
         });
 
+        const hasSemCategoria = allNames.some(n => String(n).toLowerCase().includes('sem categoria'));
+        const hasUncategorized = allNames.some(n => String(n).toLowerCase() === 'uncategorized');
+
+        // Adiciona opção "Sem categoria" extra somente se ela não existir na origem.
         const semCatChecked = selecionadas.includes('Sem categoria');
-        linhas.push(`<label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid ${semCatChecked ? '#28a745' : '#ddd'};border-radius:6px;background:${semCatChecked ? '#f0fff0' : '#fff'};cursor:pointer;font-size:13px;">
+        if (!hasSemCategoria && !hasUncategorized) {
+            linhas.push(`<label style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border:1px solid ${semCatChecked ? '#28a745' : '#ddd'};border-radius:6px;background:${semCatChecked ? '#f0fff0' : '#fff'};cursor:pointer;font-size:13px;min-width:180px;">
             <span style="display:flex;align-items:center;gap:8px;">
                 <input type="checkbox" class="cat-servico-check" value="Sem categoria" ${semCatChecked ? 'checked' : ''} onchange="salvarCategoriasServico()" style="width:15px;height:15px;cursor:pointer;">
                 Sem categoria
             </span>
         </label>`);
+        }
 
-        container.innerHTML = linhas.join('');
+        container.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;">${linhas.join('')}</div>`;
         if (infoEl) {
             infoEl.textContent = selecionadas.length + ' selecionada(s)';
             infoEl.style.background = selecionadas.length > 0 ? '#d4edda' : '#f8d7da';
