@@ -590,10 +590,111 @@ function extrairCategoriasPedido(pedido) {
     return Array.from(categorias);
 }
 
+/** Número de colunas na tabela Woo (checkbox + dados + status nota + ações) */
+const COLSPAN_TABELA_PEDIDOS_WOO = 9;
+
+/**
+ * Rótulo amigável do status da nota local (_status_emissao no pedido do banco).
+ */
+function labelStatusNotaWoo(pedido) {
+    const raw = (pedido._status_emissao || pedido.status_emissao || '').toString().toLowerCase().trim();
+    if (['emitida', 'autorizada', 'autorizado'].includes(raw)) return 'Autorizada';
+    if (raw === 'processando') return 'Processando...';
+    if (raw === 'erro') return 'Erro';
+    if (['cancelada', 'cancelado'].includes(raw)) return 'Cancelada';
+    if (pedido._tem_nfse || pedido._tem_nfe) return 'Autorizada';
+    return 'Pendente';
+}
+
+/**
+ * Valor interno do select (alinhado ao campo status do pedido no banco)
+ */
+function statusNotaDbAtual(pedido) {
+    const raw = (pedido._status_emissao || pedido.status_emissao || '').toString().toLowerCase().trim();
+    if (['emitida', 'autorizada', 'autorizado'].includes(raw)) return 'emitida';
+    if (raw === 'processando') return 'processando';
+    if (raw === 'erro') return 'erro';
+    if (['cancelada', 'cancelado'].includes(raw)) return 'cancelada';
+    if (pedido._tem_nfse || pedido._tem_nfe) return 'emitida';
+    return 'pendente';
+}
+
+function selectStatusNotaWooHtml(pedido, id) {
+    const current = statusNotaDbAtual(pedido);
+    const safeId = String(id).replace(/'/g, "\\'");
+    const opts = [
+        { v: 'pendente', l: 'Pendente' },
+        { v: 'processando', l: 'Processando...' },
+        { v: 'emitida', l: 'Autorizada' },
+        { v: 'erro', l: 'Erro' },
+        { v: 'cancelada', l: 'Cancelada' }
+    ];
+    const cores = {
+        pendente: '#6c757d',
+        processando: '#e65100',
+        emitida: '#28a745',
+        erro: '#dc3545',
+        cancelada: '#dc3545'
+    };
+    const cor = cores[current] || '#6c757d';
+    const options = opts.map(o =>
+        `<option value="${o.v}"${o.v === current ? ' selected' : ''}>${o.l}</option>`
+    ).join('');
+    return `<select onchange="alterarStatusNotaPedidoWoo('${safeId}', this.value)" title="Status da nota (local)" style="padding:4px 8px;font-size:12px;font-weight:600;color:#fff;background:${cor};border:1px solid ${cor};border-radius:4px;cursor:pointer;max-width:170px;">${options}</select>`;
+}
+
+function celulaAcoesWoo(pedido, id, modo) {
+    const notaLabel = labelStatusNotaWoo(pedido);
+    const autorizada = notaLabel === 'Autorizada' || statusNotaDbAtual(pedido) === 'emitida';
+    const safeId = String(id).replace(/'/g, "\\'");
+    if (autorizada) {
+        return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span title="Autorizada">✅</span>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation();event.preventDefault();cancelarNFSePedido('${safeId}');return false;" style="padding:4px 10px;font-size:12px;">Cancelar Nota</button>
+        </div>`;
+    }
+    const labelEmissao = modo === 'produto' ? 'Emitir NFe' : 'Emitir NFSe';
+    return `<button type="button" class="btn btn-primary" onclick="event.stopPropagation();event.preventDefault();emitirNFSePedido('${safeId}');return false;" style="padding:4px 12px;font-size:12px;white-space:nowrap;">${labelEmissao}</button>`;
+}
+
+function montarLinhaPedidoWoo(pedido, categoriaTexto, modo, statusLabels) {
+    const id = pedido.id || pedido.number || '-';
+    const data = formatarData(pedido.date_created || pedido.created_at);
+    const cliente = pedido.billing
+        ? `${pedido.billing.first_name || ''} ${pedido.billing.last_name || ''}`.trim() || pedido.billing.company || 'N/A'
+        : 'N/A';
+    const total = formatarValor(parseFloat(pedido.total || 0));
+    const statusAtual = pedido.status || 'pending';
+    const statusLabel = statusLabels[statusAtual] || statusAtual;
+    return `
+        <tr>
+            <td>
+                <input 
+                    type="checkbox" 
+                    class="checkbox-pedido" 
+                    data-pedido-id="${id}"
+                    onchange="atualizarSelecaoPedidos()"
+                    style="width: 18px; height: 18px; cursor: pointer;">
+            </td>
+            <td><strong>#${id}</strong></td>
+            <td>${data}</td>
+            <td>${cliente}</td>
+            <td>${total}</td>
+            <td>${statusLabel}</td>
+            <td>${categoriaTexto}</td>
+            <td style="min-width:140px;white-space:nowrap;">${selectStatusNotaWooHtml(pedido, id)}</td>
+            <td style="min-width:150px;">${celulaAcoesWoo(pedido, id, modo)}</td>
+        </tr>
+    `;
+}
+
 /**
  * Renderiza tabela de pedidos WooCommerce
+ * @param {object} [options] - { modo: 'produto' | 'servico' } define rótulo Emitir NFe vs Emitir NFSe
  */
-function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
+function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false, options = {}) {
+    const modo = options.modo === 'produto' ? 'produto' : 'servico';
+
     console.log('renderizarTabelaPedidos chamado com:', pedidos ? pedidos.length : 0, 'pedidos');
 
     if (!pedidos || pedidos.length === 0) {
@@ -642,60 +743,17 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
         // Renderizar por categoria
         Object.keys(pedidosPorCategoria).sort().forEach(categoria => {
             const pedidosCategoria = pedidosPorCategoria[categoria];
-            const categoriaId = categoria.toLowerCase().replace(/\s+/g, '-');
 
             rows += `
                 <tr style="background-color: var(--color-gray-light);">
-                    <td colspan="7" style="padding: 12px; font-weight: 600; font-size: 16px;">
+                    <td colspan="${COLSPAN_TABELA_PEDIDOS_WOO}" style="padding: 12px; font-weight: 600; font-size: 16px;">
                         ${categoria} (${pedidosCategoria.length} pedido${pedidosCategoria.length !== 1 ? 's' : ''})
                     </td>
                 </tr>
             `;
 
             pedidosCategoria.forEach(pedido => {
-                const id = pedido.id || pedido.number || '-';
-                const data = formatarData(pedido.date_created || pedido.created_at);
-                const cliente = pedido.billing
-                    ? `${pedido.billing.first_name || ''} ${pedido.billing.last_name || ''}`.trim() || pedido.billing.company || 'N/A'
-                    : 'N/A';
-                const total = formatarValor(parseFloat(pedido.total || 0));
-                const statusAtual = pedido.status || 'pending';
-                const statusLabel = statusLabels[statusAtual] || statusAtual;
-
-                rows += `
-                    <tr>
-                        <td>
-                            <input 
-                                type="checkbox" 
-                                class="checkbox-pedido" 
-                                data-pedido-id="${id}"
-                                onchange="atualizarSelecaoPedidos()"
-                                style="width: 18px; height: 18px; cursor: pointer;">
-                        </td>
-                        <td>#${id}</td>
-                        <td>${data}</td>
-                        <td>${cliente}</td>
-                        <td>${total}</td>
-                        <td>${statusLabel}</td>
-                        <td>${categoria}</td>
-                        <td>
-                            <button 
-                                type="button"
-                                class="btn btn-primary"
-                                onclick="event.stopPropagation(); event.preventDefault(); emitirNFSePedido('${id}'); return false;"
-                                style="padding: 4px 12px; font-size: 12px; white-space: nowrap;">
-                                Emitir NF
-                            </button>
-                            <button 
-                                type="button"
-                                class="btn btn-danger"
-                                onclick="event.stopPropagation(); event.preventDefault(); cancelarNFSePedido('${id}'); return false;"
-                                style="padding: 4px 12px; font-size: 12px; white-space: nowrap; margin-left: 5px;">
-                                Cancelar Nota
-                            </button>
-                        </td>
-                    </tr>
-                `;
+                rows += montarLinhaPedidoWoo(pedido, categoria, modo, statusLabels);
             });
         });
     } else {
@@ -709,53 +767,12 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                     total: pedido.total
                 });
             }
-            const id = pedido.id || pedido.number || '-';
-            const data = formatarData(pedido.date_created || pedido.created_at);
-            const cliente = pedido.billing
-                ? `${pedido.billing.first_name || ''} ${pedido.billing.last_name || ''}`.trim() || pedido.billing.company || 'N/A'
-                : 'N/A';
-            const total = formatarValor(parseFloat(pedido.total || 0));
-            const statusAtual = pedido.status || 'pending';
-            const statusLabel = statusLabels[statusAtual] || statusAtual;
 
             // Extrair categorias
             const categorias = extrairCategoriasPedido(pedido);
             const categoriaTexto = categorias.length > 0 ? categorias.join(', ') : 'Sem categoria';
 
-            rows += `
-                <tr>
-                    <td>
-                        <input 
-                            type="checkbox" 
-                            class="checkbox-pedido" 
-                            data-pedido-id="${id}"
-                            onchange="atualizarSelecaoPedidos()"
-                            style="width: 18px; height: 18px; cursor: pointer;">
-                    </td>
-                    <td>#${id}</td>
-                    <td>${data}</td>
-                    <td>${cliente}</td>
-                    <td>${total}</td>
-                    <td>${statusLabel}</td>
-                    <td>${categoriaTexto}</td>
-                    <td>
-                        <button 
-                            type="button"
-                            class="btn btn-primary"
-                            onclick="event.stopPropagation(); event.preventDefault(); emitirNFSePedido('${id}'); return false;"
-                            style="padding: 4px 12px; font-size: 12px; white-space: nowrap;">
-                            Emitir NF
-                        </button>
-                        <button 
-                            type="button"
-                            class="btn btn-danger"
-                            onclick="event.stopPropagation(); event.preventDefault(); cancelarNFSePedido('${id}'); return false;"
-                            style="padding: 4px 12px; font-size: 12px; white-space: nowrap; margin-left: 5px;">
-                            Cancelar Nota
-                        </button>
-                    </td>
-                </tr>
-            `;
+            rows += montarLinhaPedidoWoo(pedido, categoriaTexto, modo, statusLabels);
         });
     }
 
@@ -765,8 +782,8 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
     const tabelaId = 'tabela-pedidos-' + Date.now();
 
     return `
-        <div class="table-container">
-            <table class="table" id="${tabelaId}">
+        <div class="table-container table-pedidos-woo-wrap">
+            <table class="table table-pedidos-woo" id="${tabelaId}">
                 <thead>
                     <tr>
                         <th style="width: 50px;">
@@ -780,10 +797,11 @@ function renderizarTabelaPedidos(pedidos, agruparPorCategoria = false) {
                         <th>ID</th>
                         <th>Data</th>
                         <th>Cliente</th>
-                        <th>Total</th>
-                        <th>Status</th>
+                        <th>Valor</th>
+                        <th>Status Woo</th>
                         <th>Produto</th>
-                        <th style="width: 120px;">Ações</th>
+                        <th style="min-width:140px;">Status Nota</th>
+                        <th style="min-width:150px;">Ações</th>
                     </tr>
                 </thead>
                 <tbody>

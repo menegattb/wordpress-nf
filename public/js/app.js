@@ -1290,23 +1290,18 @@ const POLLING_DELAY = 30000; // 30 segundos
 
 /**
  * Verifica se o pedido contém itens de categorias configuradas como produto.
- * Usa window._categoriasProdutoCache (carregado do banco) ou fallback para "Livro Faíscas".
+ * Sem hardcode por nome: a classificação é sempre baseada nas categorias salvas.
  */
 function isPedidoDeProduto(pedido, categoriasProduto) {
     const catsRaw = (categoriasProduto !== undefined ? categoriasProduto : window._categoriasProdutoCache);
 
     let catsLower = [];
 
-    // Se ainda nao carregou config (null/undefined), usa fallback antigo para nao quebrar fluxo.
+    // Se ainda nao carregou config (null/undefined), considera sem categorias de produto.
     if (catsRaw === null || catsRaw === undefined) {
-        catsLower = ['livro faiscas', 'livro faíscas'];
+        catsLower = [];
     } else if (Array.isArray(catsRaw) && catsRaw.length === 0) {
-        // Diferencia "config vazia salva" de "sem config carregada".
-        // Sem config: fallback seguro para evitar produto aparecendo em serviços.
-        if (window._categoriasProdutoTemConfig === true) {
-            return false;
-        }
-        catsLower = ['livro faiscas', 'livro faíscas', 'livro'];
+        return false;
     } else {
         catsLower = (Array.isArray(catsRaw) ? catsRaw : []).map(c =>
             String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -1327,14 +1322,12 @@ function isPedidoDeProduto(pedido, categoriasProduto) {
             if (item.categories.length > 0) encontrouCategoriaNoPedido = true;
             for (const cat of item.categories) {
                 const nome = (typeof cat === 'string' ? cat : cat.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                if (nome.includes('livro')) return true;
                 if (catsLower.some(c => nome.includes(c) || c.includes(nome))) return true;
             }
         }
         if (item.category) {
             encontrouCategoriaNoPedido = true;
             const nome = (typeof item.category === 'string' ? item.category : item.category.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-            if (nome.includes('livro')) return true;
             if (catsLower.some(c => nome.includes(c) || c.includes(nome))) return true;
         }
         // Nome do item como fallback apenas quando o Woo não trouxe categoria.
@@ -1468,7 +1461,7 @@ async function carregarPedidos() {
 }
 
 /**
- * Carrega seção de Pedidos Woo Serviço - Mostra apenas pedidos de serviço (excluindo Livro Faíscas)
+ * Carrega seção de Pedidos Woo Serviço - Mostra pedidos não classificados como produto
  */
 async function carregarPedidosServico(mostrarLoading = true) {
     const contentArea = document.getElementById('content-area');
@@ -1728,7 +1721,7 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                     <p style="font-size: 12px; color: #666; margin: 0 0 8px;">
                         Por padrão, ficam selecionadas todas as categorias que <strong>não</strong> estão marcadas em produto. Você pode desmarcar manualmente as que não quer tratar como serviço.
                     </p>
-                    <div id="cat-servico-list" style="display: flex; flex-direction: column; gap: 6px;">
+                    <div id="cat-servico-list" style="display:flex;flex-wrap:wrap;gap:8px;">
                         <span style="color: #888; font-size: 13px;">Carregando...</span>
                     </div>
                 </div>
@@ -1835,26 +1828,28 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                                 onclick="toggleMesServico('${mesId}')"
                                 style="width: 100%; padding: 16px; background-color: var(--color-gray-light); border: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; text-align: left; font-size: 16px; font-weight: 600; color: var(--color-gray-dark);">
                                 <span>${mes.label}</span>
+                                <span style="font-size:12px;color:#666;font-weight:500;">${grupo.quantidade || grupo.pedidos.length || 0} pedidos</span>
                                 <span id="icon-${mesId}" style="font-size: 20px; transition: transform 0.3s;">▼</span>
                     </button>
                             <div id="${mesId}" class="mes-accordion-content" style="display: none; padding: 0;">
-                                ${grupo.pedidos.length > 0 ? (window.Components && typeof window.Components.renderizarTabelaPedidos === 'function' ? window.Components.renderizarTabelaPedidos(grupo.pedidos, agruparPorCategoria) : '<div style="padding: 20px; text-align: center; color: #dc3545;">Erro: Components não disponível. Recarregue a página.</div>') : '<div style="padding: 20px; text-align: center; color: var(--color-gray-medium);">Nenhum pedido neste mês</div>'}
+                                ${grupo.pedidos.length > 0 ? (window.Components && typeof window.Components.renderizarTabelaPedidos === 'function' ? window.Components.renderizarTabelaPedidos(grupo.pedidos, agruparPorCategoria, { modo: 'servico' }) : '<div style="padding: 20px; text-align: center; color: #dc3545;">Erro: Components não disponível. Recarregue a página.</div>') : '<div style="padding: 20px; text-align: center; color: var(--color-gray-medium);">Nenhum pedido neste mês</div>'}
                                 ${grupo.pedidos.length > 0 ? `
                                     <div style="padding: 16px; background-color: #f8f9fa; border-top: 1px solid var(--color-border);">
-                                        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; margin-bottom: 16px;">
+                                        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
                                             <button 
                                                 type="button" 
+                                                id="btn-gerar-todas-${mes.value}-servico"
                                                 class="btn btn-primary"
                                                 onclick="emitirNotasMesServico('${mes.value}')"
-                                                style="padding: 12px 32px; font-size: 16px; font-weight: 600;">
-                                                📄 Emitir Nota
+                                                style="padding: 10px 18px; font-size: 14px; font-weight: 600;">
+                                                Gerar Todas Notas
                                             </button>
                                             <button 
                                                 type="button"
                                                 class="btn btn-secondary"
-                                                onclick="emitirNFTeste('auto')"
-                                                style="padding: 8px 16px; font-size: 12px; font-weight: 400; opacity: 0.7;">
-                                                🧪 Emitir Teste
+                                                onclick="atualizarStatusMes('servico', '${mes.value}')"
+                                                style="padding: 10px 16px; font-size: 13px; font-weight: 600;">
+                                                Atualizar Status
                                             </button>
                                         </div>
                                         <!-- Área de Logs -->
@@ -1936,20 +1931,6 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
 }
 
 /**
- * Toggle accordion para pedidos serviço
- */
-function toggleAccordionServico(mesId) {
-    const content = document.getElementById(mesId);
-    const icon = document.getElementById(`icon-${mesId}`);
-
-    if (content && icon) {
-        const isOpen = content.style.display !== 'none';
-        content.style.display = isOpen ? 'none' : 'block';
-        icon.textContent = isOpen ? '▶' : '▼';
-    }
-}
-
-/**
  * Aplica filtros na aba de pedidos serviço
  */
 function aplicarFiltrosPedidosServico() {
@@ -2004,47 +1985,6 @@ async function atualizarDadosWooCommerceServico() {
             statusBar.innerHTML = `<span style="color: #dc3545; font-size: 12px;">✗ Erro: ${error.message}</span>`;
         }
     }
-}
-
-/**
- * Toggle dropdown de categorias para serviço
- */
-function toggleDropdownCategoriasServico() {
-    const dropdown = document.getElementById('dropdown-categorias-servico');
-    if (dropdown) {
-        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
-    }
-}
-
-/**
- * Toggle todas as categorias para serviço
- */
-function toggleTodasCategoriasServico(checkbox) {
-    const checkboxes = document.querySelectorAll('.checkbox-categoria-servico');
-    checkboxes.forEach(cb => {
-        cb.checked = checkbox.checked;
-    });
-    atualizarFiltroCategoriasServico();
-}
-
-/**
- * Atualiza filtro de categorias para serviço
- */
-function atualizarFiltroCategoriasServico() {
-    const checkboxes = document.querySelectorAll('.checkbox-categoria-servico:checked');
-    const categorias = Array.from(checkboxes).map(cb => cb.value);
-
-    const textoEl = document.getElementById('texto-filtro-categoria-servico');
-    if (textoEl) {
-        textoEl.textContent = categorias.length > 0 ? `${categorias.length} categoria(s) selecionada(s)` : 'Todas as categorias';
-    }
-
-    const todasCheckbox = document.querySelector('.checkbox-categoria-todas-servico');
-    if (todasCheckbox) {
-        todasCheckbox.checked = categorias.length === 0;
-    }
-
-    aplicarFiltrosPedidosServico();
 }
 
 /**
@@ -2437,10 +2377,6 @@ window.aplicarFiltrosPedidosServico = aplicarFiltrosPedidosServico;
 window.limparFiltrosPedidosServico = limparFiltrosPedidosServico;
 window.atualizarDadosWooCommerceServico = atualizarDadosWooCommerceServico;
 window.carregarPedidosServico = carregarPedidosServico;
-window.toggleAccordionServico = toggleAccordionServico;
-window.toggleDropdownCategoriasServico = toggleDropdownCategoriasServico;
-window.toggleTodasCategoriasServico = toggleTodasCategoriasServico;
-window.atualizarFiltroCategoriasServico = atualizarFiltroCategoriasServico;
 window.toggleMesServico = toggleMesServico;
 window.toggleLogsMesServico = toggleLogsMesServico;
 window.carregarLogsMesServico = carregarLogsMesServico;
@@ -3098,26 +3034,28 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
                                 onclick="toggleMes('${mesId}')"
                                 style="width: 100%; padding: 16px; background-color: var(--color-gray-light); border: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; text-align: left; font-size: 16px; font-weight: 600; color: var(--color-gray-dark);">
                                 <span>${mes.label}</span>
+                                <span style="font-size:12px;color:#666;font-weight:500;">${grupo.quantidade || grupo.pedidos.length || 0} pedidos</span>
                                 <span id="icon-${mesId}" style="font-size: 20px; transition: transform 0.3s;">▼</span>
                     </button>
                             <div id="${mesId}" class="mes-accordion-content" style="display: none; padding: 0;">
-                                ${grupo.pedidos.length > 0 ? (window.Components && typeof window.Components.renderizarTabelaPedidos === 'function' ? window.Components.renderizarTabelaPedidos(grupo.pedidos, agruparPorCategoria) : '<div style="padding: 20px; text-align: center; color: #dc3545;">Erro: Components não disponível. Recarregue a página.</div>') : '<div style="padding: 20px; text-align: center; color: var(--color-gray-medium);">Nenhum pedido neste mês</div>'}
+                                ${grupo.pedidos.length > 0 ? (window.Components && typeof window.Components.renderizarTabelaPedidos === 'function' ? window.Components.renderizarTabelaPedidos(grupo.pedidos, agruparPorCategoria, { modo: 'produto' }) : '<div style="padding: 20px; text-align: center; color: #dc3545;">Erro: Components não disponível. Recarregue a página.</div>') : '<div style="padding: 20px; text-align: center; color: var(--color-gray-medium);">Nenhum pedido neste mês</div>'}
                                 ${grupo.pedidos.length > 0 ? `
                                     <div style="padding: 16px; background-color: #f8f9fa; border-top: 1px solid var(--color-border);">
-                                        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; margin-bottom: 16px;">
+                                        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
                                             <button 
                                                 type="button" 
                                                 class="btn btn-primary"
+                                                id="btn-gerar-todas-${mes.value}-produto"
                                                 onclick="emitirNotasMes('${mes.value}')"
-                                                style="padding: 12px 32px; font-size: 16px; font-weight: 600;">
-                                                📄 Emitir Nota
+                                                style="padding: 10px 18px; font-size: 14px; font-weight: 600;">
+                                                Gerar Todas Notas
                                             </button>
                                             <button 
                                                 type="button"
                                                 class="btn btn-secondary"
-                                                onclick="emitirNFTeste('auto')"
-                                                style="padding: 8px 16px; font-size: 12px; font-weight: 400; opacity: 0.7;">
-                                                🧪 Emitir Teste
+                                                onclick="atualizarStatusMes('produto', '${mes.value}')"
+                                                style="padding: 10px 16px; font-size: 13px; font-weight: 600;">
+                                                Atualizar Status
                                             </button>
                                         </div>
                                         <!-- Área de Logs -->
@@ -3211,6 +3149,14 @@ function toggleMes(mesId) {
         icon.textContent = '▼';
         icon.style.transform = 'rotate(0deg)';
     }
+}
+
+async function atualizarStatusMes(tipo, mes) {
+    if (tipo === 'servico') {
+        await carregarLogsMesServico(mes);
+        return;
+    }
+    await carregarLogsMes(mes);
 }
 
 /**
@@ -3341,7 +3287,7 @@ async function buscarPedidosFiltrados() {
         }
 
         // Mostrar tabela de pedidos
-        tabelaArea.innerHTML = window.Components ? window.Components.renderizarTabelaPedidos(estadoAtual.dados.pedidos) : '<div>Erro: Components não disponível</div>';
+        tabelaArea.innerHTML = window.Components ? window.Components.renderizarTabelaPedidos(estadoAtual.dados.pedidos, false, { modo: 'produto' }) : '<div>Erro: Components não disponível</div>';
 
         // Mostrar botão de emissão em lote
         if (areaEmissao) {
@@ -3973,13 +3919,7 @@ async function emitirNotasMes(mes) {
         const pedidosServico = [];
 
         for (const pedido of pedidosMes) {
-            const categorias = window.Components ? window.Components.extrairCategoriasPedido(pedido) : [];
-            const temLivroFaiscas = categorias.some(cat => {
-                const catLower = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                return catLower.includes('livro') && catLower.includes('faiscas');
-            });
-
-            if (temLivroFaiscas) {
+            if (isPedidoDeProduto(pedido)) {
                 pedidosProduto.push(pedido);
             } else {
                 pedidosServico.push(pedido);
@@ -6493,6 +6433,7 @@ window.resetarFocusConfig = resetarFocusConfig;
 window.testarConexaoFocus = testarConexaoFocus;
 window.toggleMes = toggleMes;
 window.atualizarDadosWooCommerce = atualizarDadosWooCommerce;
+window.atualizarStatusMes = atualizarStatusMes;
 window.filtrarNotasEnviadas = filtrarNotasEnviadas;
 window.limparFiltrosNotasEnviadas = limparFiltrosNotasEnviadas;
 window.mudarPaginaNotasEnviadas = mudarPaginaNotasEnviadas;
@@ -6782,188 +6723,8 @@ window.cancelarPorReferencia = cancelarPorReferencia;
  * Carrega a seção de Pedidos Excel com layout de Accordion por Mês
  */
 async function carregarPedidosExcel() {
-    // Woo Serviços (pedidos de servico) deve usar a mesma logica organizada da aba de produtos:
-    // - lista pedidos de servico do WooCommerce/DB
-    // - emissoes chamam a API correta da Focus (NFSe para servico)
-    // - Google Sheets fica como painel secundario de import/config
-    return await carregarPedidosServico();
-    const contentArea = document.getElementById('content-area');
-    const meses = gerarListaMeses();
-
-    contentArea.innerHTML = `
-        <div class="content-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                <h2 class="section-title" style="margin: 0;">Woo Serviços</h2>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <div id="status-servicos-excel" style="padding: 4px 12px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
-                        <span style="color: #666; font-size: 12px;">Carregando...</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Categorias de Serviço -->
-            <div id="categorias-servico-container" style="padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #dee2e6; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 600; font-size: 14px;">Categorias de Serviço (NFSe)</span>
-                    <span id="cat-servico-info" style="font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #e2e3e5; color: #383d41;">carregando...</span>
-                </div>
-                <p style="font-size: 12px; color: #666; margin: 0 0 8px;">Pedidos cujas categorias <strong>não</strong> são de produto aparecem aqui como serviço e geram NFSe.</p>
-                <div id="cat-servico-list" style="display: flex; flex-wrap: wrap; gap: 6px;">
-                    <span style="color: #888; font-size: 13px;">Carregando...</span>
-                </div>
-            </div>
-
-            <!-- Importar do Google Sheets (collapsible) -->
-            <div style="margin-bottom: 16px;">
-                <button type="button" onclick="toggleConfigGSheets()" style="background: none; border: 1px solid #dee2e6; border-radius: 8px; padding: 10px 16px; cursor: pointer; width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: #333;">
-                    <span><strong>Importar do Google Sheets</strong> <span id="gsheets-config-status" style="font-size: 12px; margin-left: 8px; padding: 2px 8px; border-radius: 4px;">⏳</span></span>
-                    <span id="gsheets-config-arrow">▶</span>
-                </button>
-                <div id="gsheets-config-panel" style="display: none; border: 1px solid #dee2e6; border-top: none; border-radius: 0 0 8px 8px; padding: 20px; background: #fafafa;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; box-sizing: border-box;">
-                        <div style="min-width: 0;">
-                            <h4 style="margin: 0 0 12px 0; color: #333;">Credenciais</h4>
-                            <div style="margin-bottom: 12px;">
-                                <label style="font-weight: 600; font-size: 13px; color: #555; display: block; margin-bottom: 4px;">ID da Planilha</label>
-                                <input type="text" id="gsheets-id" placeholder="Ex: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; font-family: monospace; box-sizing: border-box;">
-                                <small style="color: #888; font-size: 11px;">Encontre na URL: docs.google.com/spreadsheets/d/<strong>{ID}</strong>/edit</small>
-                            </div>
-                            <div style="margin-bottom: 12px;">
-                                <label style="font-weight: 600; font-size: 13px; color: #555; display: block; margin-bottom: 4px;">JSON da Service Account</label>
-                                <textarea id="gsheets-credentials" rows="6" placeholder='Cole aqui o conteúdo do arquivo .json da Service Account do Google Cloud...' style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; font-family: monospace; resize: vertical; box-sizing: border-box;"></textarea>
-                                <small style="color: #888; font-size: 11px;">Baixado do Google Cloud Console > APIs > Credenciais > Service Account > Chaves</small>
-                            </div>
-                            <div style="margin-bottom: 8px;" id="gsheets-client-email-info"></div>
-                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                <button type="button" class="btn btn-primary" onclick="salvarConfigGSheets()" style="padding: 8px 16px; font-size: 13px;">Salvar</button>
-                                <button type="button" class="btn btn-secondary" onclick="testarConfigGSheets()" style="padding: 8px 16px; font-size: 13px;">Testar Conexão</button>
-                                <button type="button" class="btn btn-secondary" onclick="sincronizarExcel()" id="btn-sincronizar-excel" style="padding: 8px 16px; font-size: 13px;">Sincronizar Planilha</button>
-                                <a id="link-abrir-planilha" href="https://docs.google.com/spreadsheets" target="_blank" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px; text-decoration: none;">Abrir Planilha</a>
-                            </div>
-                            <div id="gsheets-feedback" style="margin-top: 8px; display: none; padding: 8px 12px; border-radius: 6px; font-size: 13px;"></div>
-                        </div>
-                        <div style="min-width: 0;">
-                            <h4 style="margin: 0 0 12px 0; color: #333;">Modelo da Planilha</h4>
-                            <p style="font-size: 12px; color: #666; margin-bottom: 8px;">Aba <strong>"Pedidos"</strong> com colunas:</p>
-                            <div style="overflow-x: auto; border: 1px solid #ddd; border-radius: 6px; font-size: 11px;">
-                                <table style="width: 100%; border-collapse: collapse;">
-                                    <thead><tr style="background: #e8f5e9;">
-                                        <th style="padding: 4px 8px; border: 1px solid #ddd;">A</th><th style="padding: 4px 8px; border: 1px solid #ddd;">B</th><th style="padding: 4px 8px; border: 1px solid #ddd;">C</th><th style="padding: 4px 8px; border: 1px solid #ddd;">D</th><th style="padding: 4px 8px; border: 1px solid #ddd;">E</th><th style="padding: 4px 8px; border: 1px solid #ddd;">F</th><th style="padding: 4px 8px; border: 1px solid #ddd;">G</th>
-                                    </tr></thead>
-                                    <tbody>
-                                        <tr style="background: #f1f8e9; font-weight: 600;">
-                                            <td style="padding: 4px 8px; border: 1px solid #ddd;">ID Pedido</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Data</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Cliente</td><td style="padding: 4px 8px; border: 1px solid #ddd;">CPF/CNPJ</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Email</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Serviço</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Valor</td>
-                                        </tr>
-                                        <tr style="color: #999;">
-                                            <td style="padding: 4px 8px; border: 1px solid #ddd;">6454</td><td style="padding: 4px 8px; border: 1px solid #ddd;">2026-03-15</td><td style="padding: 4px 8px; border: 1px solid #ddd;">João Silva</td><td style="padding: 4px 8px; border: 1px solid #ddd;">123.456.789-00</td><td style="padding: 4px 8px; border: 1px solid #ddd;">joao@email.com</td><td style="padding: 4px 8px; border: 1px solid #ddd;">Atendimento</td><td style="padding: 4px 8px; border: 1px solid #ddd;">150.00</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                            <p style="font-size: 11px; color: #888; margin-top: 6px;">+ colunas H-M: Status Woo, Status Nota, N Nota, Link PDF, Msg Erro, JSON Pedido</p>
-                            <div style="margin-top: 12px; padding: 10px; background: #fff3e0; border-radius: 6px; border: 1px solid #ffe0b2;">
-                                <p style="font-size: 12px; color: #e65100; margin: 0 0 6px 0; font-weight: 600;">Como configurar</p>
-                                <ol style="font-size: 11px; color: #666; margin: 0; padding-left: 16px; line-height: 1.7;">
-                                    <li>No <a href="https://console.cloud.google.com" target="_blank" style="color: #1976d2;">Google Cloud Console</a>, crie um projeto</li>
-                                    <li>Ative a <strong>Google Sheets API</strong></li>
-                                    <li>Crie uma <strong>Service Account</strong> e baixe o JSON</li>
-                                    <li>Compartilhe a planilha com o email da Service Account (Editor)</li>
-                                    <li>Cole o ID da planilha e o JSON aqui</li>
-                                </ol>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div id="status-excel" style="margin-bottom: 16px; display: none; padding: 12px; border-radius: 8px;"></div>
-
-            <div class="accordion" id="accordion-meses-excel">
-                ${meses.map((mes, index) => {
-        const [anoM, mesM] = mes.value.split('-');
-        const mesNome = mes.label.split(' ')[0];
-
-        return `
-                    <div id="card-excel-${mes.value}" class="accordion-item">
-                        <div class="accordion-header ${index === 0 ? 'active' : ''}" onclick="toggleMesExcel('${mes.value}')">
-                            <h3>${mes.label}</h3>
-                            <span class="badge" id="count-excel-${mes.value}">0 pedidos</span>
-                            <span class="accordion-icon">▼</span>
-                        </div>
-                        <div class="accordion-content ${index === 0 ? 'active' : ''}" id="content-excel-${mes.value}">
-                             <div style="padding: 10px 0; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px;">
-                                <button class="btn-sm" style="background-color: #fff; border: 1px solid #e0e0e0; color: #333; display: flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
-                                    onclick="importarNubankMes('${mesNome}', '${anoM}')">Importar Nubank</button>
-                                <button class="btn-sm" style="background-color: #fff; border: 1px solid #e0e0e0; color: #666; display: flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
-                                    onclick="removerNubankMes('${mesNome}', '${anoM}')">Retirar</button>
-                                <button class="btn-sm" style="background-color: #fff; border: 1px solid #e0e0e0; color: #333; display: flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
-                                    onclick="ordenarPedidosPorDataLocal('${mes.value}')">Ordenar por Data</button>
-                                <button class="btn-sm" style="background-color: #fff; border: 1px solid #e0e0e0; color: #e65100; display: flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 10px;"
-                                    onclick="atualizarStatusGeral('${mes.value}')">Atualizar Status</button>
-                                <button id="btn-gerar-todas-${mes.value}" class="btn-sm" style="background-color: #e65100; border: 1px solid #e65100; color: #fff; display: flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 10px; font-weight: 600;"
-                                    onclick="gerarTodasNotasMes('${mes.value}')">Gerar Todas Notas</button>
-                                <button style="background-color: #1976d2; border: 1px solid #1976d2; color: #fff; display: flex; align-items: center; gap: 4px; cursor: pointer; border-radius: 4px; padding: 4px 10px; font-weight: 600; font-size: 12px;"
-                                    onclick="verificarTodosProcessando()" title="Verificar notas em Processando...">Atualizar Status</button>
-                             </div>
-                            <div class="table-container">
-                                <table class="table">
-                                    <thead>
-                                        <tr>
-                                            <th>ID</th>
-                                            <th>Data</th>
-                                            <th>Cliente</th>
-                                            <th>Valor</th>
-                                            <th>Status Woo</th>
-                                            <th>Status Nota</th>
-                                            <th>Links</th>
-                                            <th>Ações</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="lista-excel-${mes.value}">
-                                        <tr><td colspan="8" style="text-align: center; padding: 20px;">Carregando...</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                `}).join('')}
-            </div>
-        </div>
-    `;
-
-    carregarConfigGSheets();
-    carregarCategoriasServicoInfo();
-
-    try {
-        const activeMonths = [];
-        document.querySelectorAll('.accordion-content.active').forEach(el => {
-            const id = el.id.replace('content-excel-', '');
-            activeMonths.push(id);
-        });
-
-        const resultado = await API.Excel.listar();
-
-        if (resultado.sucesso) {
-            window.pedidosExcelCache = resultado.dados || [];
-            distribuirPedidosExcelPorMes(window.pedidosExcelCache);
-
-            activeMonths.forEach(mesId => {
-                toggleMesExcel(mesId);
-            });
-
-            const statusEl = document.getElementById('status-servicos-excel');
-            if (statusEl) statusEl.innerHTML = '<span style="color: #28a745; font-size: 12px;">' + (window.pedidosExcelCache.length) + ' pedidos carregados</span>';
-        } else {
-            document.querySelectorAll('[id^="lista-excel-"]').forEach(el => {
-                el.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #888;">Nenhum dado do Google Sheets. Configure acima para importar.</td></tr>';
-            });
-            const statusEl = document.getElementById('status-servicos-excel');
-            if (statusEl) statusEl.innerHTML = '<span style="color: #888; font-size: 12px;">Sem dados</span>';
-        }
-    } catch (error) {
-        console.error(error);
-        mostrarFeedbackExcel('error', 'Erro de conexão: ' + error.message);
-    }
+    // A navegação "pedidos-excel" corresponde à aba Woo Serviços.
+    return carregarPedidosServico();
 }
 
 async function carregarEstadoAutoEmitirServico() {
@@ -7824,12 +7585,31 @@ async function alterarStatusManual(pedidoId, novoStatus) {
     }
 }
 
+/**
+ * Atualiza status da nota no pedido local (Woo) — PUT /api/pedidos/:id/status
+ * Valores: pendente, processando, emitida, erro, cancelada
+ */
+async function alterarStatusNotaPedidoWoo(pedidoId, statusDb) {
+    const idStr = String(pedidoId);
+    const res = await API.Pedidos.atualizarStatus(idStr, statusDb);
+    const ok = res && res.sucesso !== false && !res.erro;
+    if (ok && window.Toast) {
+        window.Toast.success(`Pedido #${idStr}: status da nota atualizado`);
+    }
+    if (estadoAtual.secaoAtiva === 'pedidos-excel') {
+        await carregarPedidosServico(false);
+    } else if (estadoAtual.secaoAtiva === 'pedidos') {
+        await carregarPedidos();
+    }
+}
+
 window.carregarPedidosExcel = carregarPedidosExcel;
 window.sincronizarExcel = sincronizarExcel;
 window.sincronizarWooServicosBanco = sincronizarWooServicosBanco;
 window.emitirNotaExcel = emitirNotaExcel;
 window.cancelarNotaExcel = cancelarNotaExcel;
 window.alterarStatusManual = alterarStatusManual;
+window.alterarStatusNotaPedidoWoo = alterarStatusNotaPedidoWoo;
 window.toggleMesExcel = toggleMesExcel;
 window.gerarTodasNotasMes = gerarTodasNotasMes;
 window.toggleConfigGSheets = toggleConfigGSheets;
