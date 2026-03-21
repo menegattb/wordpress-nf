@@ -653,8 +653,20 @@ const excelController = {
             // Se não foi passada referência, buscar no banco
             if (!referencia) {
                 // 1. Buscar referência da nota no banco de dados
-                const nfse = await database.buscarNFSePorPedidoId(pedido_id);
-                referencia = nfse ? nfse.referencia : null;
+                try {
+                    const { buscarNFSePorReferencia } = require('../config/database');
+                    // Tentar referências comuns: PED-{id}, NFSE-{id}
+                    const refsParaTentar = [`PED-${pedido_id}`, `NFSE-${pedido_id}`];
+                    for (const ref of refsParaTentar) {
+                        const nfse = await buscarNFSePorReferencia(ref);
+                        if (nfse) {
+                            referencia = nfse.referencia || ref;
+                            break;
+                        }
+                    }
+                } catch (dbErr) {
+                    logger.warn('Erro ao buscar referência no banco', { pedido_id, erro: dbErr.message });
+                }
             }
 
             // Se ainda não tem referência (nem no banco nem explícita), tentar referência padrão
