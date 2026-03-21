@@ -4850,7 +4850,18 @@ async function emitirNFSePedido(pedidoId) {
                         if (logConclusao) {
                             pollingAtivo = false;
                             const dadosFinais = logConclusao.data || {};
-                            _addLog('SUCCESS', `✓ Concluído! Sucessos: ${dadosFinais.sucessos || 0}, Erros: ${dadosFinais.erros || 0}.`);
+                            const sucessos = dadosFinais.sucessos || 0;
+                            const errosJob = dadosFinais.erros || 0;
+                            _addLog('SUCCESS', `✓ Concluído! Sucessos: ${sucessos}, Erros: ${errosJob}.`);
+
+                            // Atualizar status do pedido no banco como fallback
+                            if (sucessos > 0) {
+                                try {
+                                    await API.Pedidos.atualizarStatus(String(pedidoId), 'emitida');
+                                } catch (e) {
+                                    console.warn('[DEBUG] Erro ao atualizar status do pedido (fallback):', e.message);
+                                }
+                            }
 
                             await _recarregarTabela();
                             setTimeout(async () => {
@@ -4897,6 +4908,14 @@ async function emitirNFSePedido(pedidoId) {
                     status: resultadoPedido.status || 'Processando',
                     tipo: tipoNF
                 });
+
+                // Atualizar status do pedido no banco como fallback
+                try {
+                    const novoStatus = (resultadoPedido.status === 'autorizado') ? 'emitida' : 'processando';
+                    await API.Pedidos.atualizarStatus(String(pedidoId), novoStatus);
+                } catch (e) {
+                    console.warn('[DEBUG] Erro ao atualizar status do pedido (fallback sync):', e.message);
+                }
 
                 await _recarregarTabela();
                 await _recarregarLogs();
@@ -7653,9 +7672,12 @@ async function alterarStatusNotaPedidoWoo(pedidoId, statusDb) {
     if (ok && window.Toast) {
         window.Toast.success(`Pedido #${idStr}: status da nota atualizado`);
     }
+    // Recarregar a seção ativa para refletir a mudança
     if (estadoAtual.secaoAtiva === 'pedidos-excel') {
         await carregarPedidosServico(false);
-    } else if (estadoAtual.secaoAtiva === 'pedidos') {
+    } else if (estadoAtual.secaoAtiva === 'pedidos-servico') {
+        await carregarPedidosServico(false);
+    } else if (estadoAtual.secaoAtiva === 'pedidos' || estadoAtual.secaoAtiva === 'pedidos-produto') {
         await carregarPedidos();
     }
 }

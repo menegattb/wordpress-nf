@@ -150,6 +150,16 @@ async function emitirNFSeLote(req, res) {
             status: resultadoNFSe.status
           });
           sucesso++;
+
+          // Atualizar status do pedido no banco local
+          try {
+            await atualizarPedido(pedidoId, {
+              status: resultadoNFSe.status === 'autorizado' ? 'emitida' : 'processando',
+              referencia: resultadoNFSe.referencia
+            });
+          } catch (e) {
+            logger.warn(`Erro ao atualizar status local do pedido ${pedidoId} (NFe)`, { erro: e.message });
+          }
         } else {
           logger.error(`[${i + 1}/${pedido_ids.length}] Erro ao emitir ${tipoNotaLabel}`, {
             pedido_id: pedidoId,
