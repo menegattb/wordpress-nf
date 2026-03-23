@@ -1375,6 +1375,22 @@ async function mapearPedidoParaNFe(dadosPedido, configEmitente, configFiscal) {
   const valorFrete = parseFloat(dadosPedido.frete || 0);
   const valorTotal = valorProdutos + valorFrete;
 
+  // Distribuir frete proporcionalmente entre os itens (SEFAZ exige soma dos fretes = total)
+  // Sem isso, a SEFAZ rejeita com erro 535: "Total do Frete difere do somatório dos itens"
+  if (valorFrete > 0 && items.length > 0) {
+    let freteDistribuido = 0;
+    for (let i = 0; i < items.length; i++) {
+      if (i === items.length - 1) {
+        // Último item recebe o restante (evita erro de arredondamento)
+        items[i].valor_frete = parseFloat((valorFrete - freteDistribuido).toFixed(2));
+      } else {
+        const proporcao = items[i].valor_bruto / valorProdutos;
+        items[i].valor_frete = parseFloat((valorFrete * proporcao).toFixed(2));
+        freteDistribuido += items[i].valor_frete;
+      }
+    }
+  }
+
   // Determinar indicador de inscrição estadual do destinatário
   let indicadorInscricaoEstadual = 9; // Não contribuinte
   if (documento.tipo === 'CNPJ') {
