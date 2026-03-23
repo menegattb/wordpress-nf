@@ -780,6 +780,12 @@ async function listarNFSe(filtros = {}) {
     let params = [];
     let paramCount = 1;
 
+    if (tenant_id != null) {
+      whereClause.push(`(n.tenant_id = $${paramCount} OR n.tenant_id IS NULL)`);
+      params.push(tenant_id);
+      paramCount++;
+    }
+
     if (status_focus) {
       whereClause.push(`n.status_focus = $${paramCount}`);
       params.push(status_focus);

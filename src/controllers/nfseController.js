@@ -35,10 +35,14 @@ async function emitirNFSeLote(req, res) {
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
     logger.info(`Recebida solicitação de emissão assíncrona`, {
+      service: 'auto_emitir',
+      action: 'lote_recebido',
       job_id: jobId,
+      tenant_id: req.tenant_id || 'global',
       total_pedidos: pedido_ids.length,
       tipo_nf: tipoNF,
-      ambiente: process.env.FOCUS_NFE_AMBIENTE
+      ambiente: process.env.FOCUS_NFE_AMBIENTE,
+      pedido_ids_preview: pedido_ids.slice(0, 20)
     });
 
     // Retornar IMEDIATAMENTE (Fire and Forget)
@@ -91,7 +95,10 @@ async function processarLoteAsync(pedido_ids, tipoNF, jobId, tenantId = null) {
   let erros = 0;
 
   logger.info(`[JOB:${jobId}] Iniciando processamento background para ${tipoNotaLabel}`, {
+    service: 'auto_emitir',
+    action: 'job_inicio',
     job_id: jobId,
+    tenant_id: tenantId || 'global',
     total: pedido_ids.length,
     tipo: tipoNF,
     ambiente: configFocus?.ambiente || process.env.FOCUS_NFE_AMBIENTE
@@ -115,7 +122,10 @@ async function processarLoteAsync(pedido_ids, tipoNF, jobId, tenantId = null) {
       }
 
       logger.info(`${progresso} Processando pedido ${pedidoIdWC} (${tipoNotaLabel})`, {
+        service: 'auto_emitir',
+        action: 'pedido_processando',
         job_id: jobId,
+        tenant_id: tenantId || 'global',
         pedido_id: pedidoIdWC,
         progresso_atual: i + 1,
         total: pedido_ids.length,
@@ -149,7 +159,10 @@ async function processarLoteAsync(pedido_ids, tipoNF, jobId, tenantId = null) {
       if (resultadoEmissao.sucesso) {
         await registrarEmissao(tenantId);
         logger.info(`${progresso} ${tipoNotaLabel} emitida com sucesso para ${pedidoIdWC}`, {
+          service: 'auto_emitir',
+          action: 'pedido_emitido',
           job_id: jobId,
+          tenant_id: tenantId || 'global',
           pedido_id: pedidoIdWC,
           referencia: resultadoEmissao.referencia,
           status: resultadoEmissao.status,
@@ -185,7 +198,10 @@ async function processarLoteAsync(pedido_ids, tipoNF, jobId, tenantId = null) {
     } catch (error) {
       erros++;
       logger.error(`${progresso} Falha no processamento do pedido ${pedidoIdWC}`, {
+        service: 'auto_emitir',
+        action: 'pedido_erro',
         job_id: jobId,
+        tenant_id: tenantId || 'global',
         pedido_id: pedidoIdWC,
         erro: error.message
       });
@@ -206,7 +222,10 @@ async function processarLoteAsync(pedido_ids, tipoNF, jobId, tenantId = null) {
 
   const tempoTotal = Date.now() - inicioLote;
   logger.info(`[JOB:${jobId}] Processamento concluído de ${tipoNotaLabel}`, {
+    service: 'auto_emitir',
+    action: 'job_concluido',
     job_id: jobId,
+    tenant_id: tenantId || 'global',
     total: pedido_ids.length,
     sucessos: sucesso,
     erros: erros,

@@ -936,14 +936,31 @@ async function listarPedidosBanco(req, res) {
 async function catchupPendentes(req, res) {
   try {
     const tipo = String(req.body?.tipo || '').toLowerCase().trim();
+    const tenantId = req.tenant_id || null;
+    const requestId = `catchup_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+    logger.info('Catch-up: inicio da busca de pendentes', {
+      service: 'auto_emitir',
+      action: 'catchup_inicio',
+      tenant_id: tenantId || 'global',
+      tipo,
+      request_id: requestId
+    });
+
     if (!['produto', 'servico'].includes(tipo)) {
+      logger.warn('Catch-up: tipo invalido recebido', {
+        service: 'auto_emitir',
+        action: 'catchup_tipo_invalido',
+        tenant_id: tenantId || 'global',
+        tipo,
+        request_id: requestId
+      });
       return res.status(400).json({
         sucesso: false,
         erro: 'Tipo invalido. Use "produto" ou "servico".'
       });
     }
 
-    const tenantId = req.tenant_id || null;
     const resultadoNotas = tipo === 'produto'
       ? await listarNFe({ status_focus: 'autorizado', limite: 1, tenant_id: tenantId })
       : await listarNFSe({ status_focus: 'autorizado', limite: 1, tenant_id: tenantId });
@@ -955,12 +972,24 @@ async function catchupPendentes(req, res) {
     const ultimaAutorizadaEm = ultimaNota?.created_at || null;
     const dataCorte = ultimaAutorizadaEm ? new Date(ultimaAutorizadaEm) : null;
 
+    logger.info('Catch-up: ultima nota autorizada localizada', {
+      service: 'auto_emitir',
+      action: 'catchup_ultima_autorizada',
+      tenant_id: tenantId || 'global',
+      tipo,
+      request_id: requestId,
+      referencia: ultimaNota?.referencia || null,
+      desde: ultimaAutorizadaEm
+    });
+
     const pedidos = await listarPedidos({ limite: 10000, offset: 0, tenant_id: tenantId });
     const listaPedidos = Array.isArray(pedidos) ? pedidos : (pedidos?.dados || []);
 
+    const statusNaoElegiveis = new Set(['emitida', 'cancelada', 'processando']);
     const pendentes = [];
     for (const p of listaPedidos) {
-      if (String(p.status || '').toLowerCase() !== 'pendente') continue;
+      const statusAtual = String(p.status || '').toLowerCase().trim();
+      if (statusNaoElegiveis.has(statusAtual)) continue;
       const criadoEm = p.created_at ? new Date(p.created_at) : null;
       if (dataCorte && criadoEm && criadoEm <= dataCorte) continue;
 
@@ -990,6 +1019,17 @@ async function catchupPendentes(req, res) {
     pendentes.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     const pedidoIds = pendentes.map(p => p.pedido_id);
 
+    logger.info('Catch-up: busca concluida', {
+      service: 'auto_emitir',
+      action: 'catchup_busca_concluida',
+      tenant_id: tenantId || 'global',
+      tipo,
+      request_id: requestId,
+      total_pendentes: pedidoIds.length,
+      pendentes_preview: pedidoIds.slice(0, 20),
+      desde: ultimaAutorizadaEm
+    });
+
     return res.json({
       sucesso: true,
       tipo,
@@ -999,6 +1039,9 @@ async function catchupPendentes(req, res) {
     });
   } catch (error) {
     logger.error('Erro no catch-up de pendentes', {
+      service: 'auto_emitir',
+      action: 'catchup_erro',
+      tenant_id: req.tenant_id || 'global',
       error: error.message
     });
     return res.status(500).json({

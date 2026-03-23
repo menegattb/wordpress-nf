@@ -6622,24 +6622,33 @@ async function toggleAutoEmitir(ativo) {
         statusEl.style.color = '#856404';
     }
 
-    const msgExtra = ativo
-        ? 'Notas serão emitidas automaticamente ao receber pedidos via webhook. Deseja ativar?'
-        : 'A emissão automática será desativada. Pedidos continuarão sendo salvos. Deseja desativar?';
-
-    if (!confirm(msgExtra)) {
-        const toggle = document.getElementById('toggle-auto-emitir');
-        if (toggle) toggle.checked = !ativo;
-        await carregarEstadoAutoEmitir();
-        return;
+    if (!ativo) {
+        const msgOff = 'A emissão automática será desativada. Pedidos continuarão sendo salvos. Deseja desativar?';
+        if (!confirm(msgOff)) {
+            const toggle = document.getElementById('toggle-auto-emitir');
+            if (toggle) toggle.checked = !ativo;
+            await carregarEstadoAutoEmitir();
+            return;
+        }
     }
 
     try {
+        let catchupAprovado = null;
+        if (ativo) {
+            catchupAprovado = await executarCatchupAutoEmitir('produto', { previewOnly: true });
+        }
         await API.Config.setAutoEmitir(ativo);
         atualizarUIAutoEmitir(ativo);
         if (ativo) {
-            await executarCatchupAutoEmitir('produto');
+            await executarCatchupAutoEmitir('produto', { preloaded: catchupAprovado });
         }
     } catch (e) {
+        if (e && e._cancelledByUser) {
+            const toggle = document.getElementById('toggle-auto-emitir');
+            if (toggle) toggle.checked = false;
+            await carregarEstadoAutoEmitir();
+            return;
+        }
         alert('Erro ao salvar configuração: ' + e.message);
         const toggle = document.getElementById('toggle-auto-emitir');
         if (toggle) toggle.checked = !ativo;
@@ -6889,28 +6898,42 @@ function atualizarUIAutoEmitirServico(ativo) {
 }
 
 async function toggleAutoEmitirServico(ativo) {
-    const msg = ativo
-        ? 'Ativar emissão automática para serviços (NFSe) via webhook?'
-        : 'Desativar emissão automática para serviços (NFSe)?';
-    if (!confirm(msg)) {
-        const toggle = document.getElementById('toggle-auto-emitir-servico');
-        if (toggle) toggle.checked = !ativo;
-        await carregarEstadoAutoEmitirServico();
-        return;
+    if (!ativo) {
+        const msg = 'Desativar emissão automática para serviços (NFSe)?';
+        if (!confirm(msg)) {
+            const toggle = document.getElementById('toggle-auto-emitir-servico');
+            if (toggle) toggle.checked = !ativo;
+            await carregarEstadoAutoEmitirServico();
+            return;
+        }
     }
     try {
+        let catchupAprovado = null;
+        if (ativo) {
+            catchupAprovado = await executarCatchupAutoEmitir('servico', { previewOnly: true });
+        }
         await API.Config.setAutoEmitirServico(ativo);
         atualizarUIAutoEmitirServico(ativo);
         if (ativo) {
-            await executarCatchupAutoEmitir('servico');
+            await executarCatchupAutoEmitir('servico', { preloaded: catchupAprovado });
         }
     } catch (e) {
+        if (e && e._cancelledByUser) {
+            const toggle = document.getElementById('toggle-auto-emitir-servico');
+            if (toggle) toggle.checked = false;
+            await carregarEstadoAutoEmitirServico();
+            return;
+        }
         alert('Erro ao salvar configuração: ' + e.message);
+        const toggle = document.getElementById('toggle-auto-emitir-servico');
+        if (toggle) toggle.checked = !ativo;
         await carregarEstadoAutoEmitirServico();
     }
 }
 
-async function executarCatchupAutoEmitir(tipo) {
+async function executarCatchupAutoEmitir(tipo, options = {}) {
+    const previewOnly = options && options.previewOnly === true;
+    const preloaded = options && options.preloaded;
     const isServico = tipo === 'servico';
     const tipoLabel = isServico ? 'servicos (NFSe)' : 'produtos (NFe)';
     const desdeLabel = (isoDate) => {
@@ -6922,26 +6945,49 @@ async function executarCatchupAutoEmitir(tipo) {
         }
     };
 
-    const pendentesRes = await API.Pedidos.buscarPendentesCatchup(tipo);
-    if (!pendentesRes || pendentesRes.sucesso === false) {
-        throw new Error(pendentesRes?.erro || 'Falha ao buscar pendentes para catch-up');
+    let pendentesRes = preloaded ? { sucesso: true, ...preloaded } : null;
+    if (!pendentesRes) {
+        pendentesRes = await API.Pedidos.buscarPendentesCatchup(tipo);
+        if (!pendentesRes || pendentesRes.sucesso === false) {
+            throw new Error(pendentesRes?.erro || 'Falha ao buscar pendentes para catch-up');
+        }
     }
 
     const pendentes = Array.isArray(pendentesRes.pendentes) ? pendentesRes.pendentes : [];
     const total = Number(pendentesRes.total || pendentes.length || 0);
     if (total <= 0) {
+        if (previewOnly) {
+            const msgZero = `Nenhum pedido pendente de ${tipoLabel} foi encontrado (apos a ultima autorizada). Deseja ativar assim mesmo?`;
+            if (!confirm(msgZero)) {
+                const err = new Error('Ativacao cancelada pelo usuario');
+                err._cancelledByUser = true;
+                throw err;
+            }
+            return { total: 0, pendentes: [] };
+        }
         if (window.Toast) {
             window.Toast.success(`Emissao automatica ativada: nenhum pedido pendente para ${tipoLabel}.`);
         }
         return;
     }
 
-    const msg = `Foram encontrados ${total} pedido(s) pendente(s) de ${tipoLabel}, da ultima autorizada (${desdeLabel(pendentesRes.desde)}) ate o mais recente. Deseja emitir agora?`;
-    if (!confirm(msg)) {
-        if (window.Toast) {
-            window.Toast.info('Emissao automatica ativada sem disparo em lote agora.');
+    if (!preloaded) {
+        const msg = `Foram encontrados ${total} pedido(s) pendente(s) de ${tipoLabel}, da ultima autorizada (${desdeLabel(pendentesRes.desde)}) ate o mais recente. Deseja emitir agora?`;
+        if (!confirm(msg)) {
+            if (previewOnly) {
+                const err = new Error('Ativacao cancelada pelo usuario');
+                err._cancelledByUser = true;
+                throw err;
+            }
+            if (window.Toast) {
+                window.Toast.info('Emissao automatica ativada sem disparo em lote agora.');
+            }
+            return;
         }
-        return;
+    }
+
+    if (previewOnly) {
+        return { total, pendentes, desde: pendentesRes.desde };
     }
 
     if (window.Toast) {
@@ -6952,15 +6998,17 @@ async function executarCatchupAutoEmitir(tipo) {
         throw new Error(resultado?.erro || 'Falha ao emitir lote no catch-up');
     }
 
-    const emitidas = Number(resultado?.dados?.resumo?.sucesso || resultado?.sucesso_count || 0);
-    const erros = Number(resultado?.dados?.resumo?.erro || resultado?.erro_count || 0);
-    const canceladas = Number(resultado?.dados?.resumo?.cancelada || 0);
-    const finalMsg = `Catch-up concluido (${tipoLabel}): ${emitidas} emitida(s), ${erros} com erro, ${canceladas} cancelada(s).`;
-
-    if (window.Toast) {
-        window.Toast.success(finalMsg);
+    if (resultado?.processamento_async) {
+        const msgAsync = `Catch-up iniciado (${tipoLabel}): ${total} pedido(s) enviados para processamento em segundo plano.`;
+        if (window.Toast) window.Toast.success(msgAsync);
+        else alert(msgAsync);
     } else {
-        alert(finalMsg);
+        const emitidas = Number(resultado?.dados?.resumo?.sucesso || resultado?.sucesso_count || 0);
+        const erros = Number(resultado?.dados?.resumo?.erro || resultado?.erro_count || 0);
+        const canceladas = Number(resultado?.dados?.resumo?.cancelada || 0);
+        const finalMsg = `Catch-up concluido (${tipoLabel}): ${emitidas} emitida(s), ${erros} com erro, ${canceladas} cancelada(s).`;
+        if (window.Toast) window.Toast.success(finalMsg);
+        else alert(finalMsg);
     }
 
     if (estadoAtual?.secaoAtiva === 'pedidos' || estadoAtual?.secaoAtiva === 'pedidos-produto') {
