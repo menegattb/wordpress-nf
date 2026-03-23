@@ -246,6 +246,16 @@ const PedidosAPI = {
     },
 
     /**
+     * Busca pedidos pendentes para catch-up de emissao automatica
+     */
+    async buscarPendentesCatchup(tipo) {
+        return await apiRequest('/api/pedidos/catchup', {
+            method: 'POST',
+            body: { tipo }
+        });
+    },
+
+    /**
      * Lista logs relacionados a pedidos
      */
     async listarLogs(filtros = {}) {

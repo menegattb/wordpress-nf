@@ -640,7 +640,7 @@ function selectStatusNotaWooHtml(pedido, id) {
     const options = opts.map(o =>
         `<option value="${o.v}"${o.v === current ? ' selected' : ''}>${o.l}</option>`
     ).join('');
-    return `<select onchange="alterarStatusNotaPedidoWoo('${safeId}', this.value)" title="Status da nota (local)" style="padding:4px 8px;font-size:12px;font-weight:600;color:#fff;background:${cor};border:1px solid ${cor};border-radius:4px;cursor:pointer;max-width:170px;">${options}</select>`;
+    return `<select onchange="alterarStatusNotaPedidoWoo('${safeId}', this.value, this)" title="Status da nota (local)" style="padding:4px 8px;font-size:12px;font-weight:600;color:#fff;background:${cor};border:1px solid ${cor};border-radius:4px;cursor:pointer;max-width:170px;">${options}</select>`;
 }
 
 function celulaAcoesWoo(pedido, id, modo) {

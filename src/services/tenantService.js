@@ -91,25 +91,24 @@ async function getConfigForTenant(tenantId) {
 
   const tenantConfig = buildConfigFromFlat(flat);
 
-  // Regra de negócio: assinatura ativa deve refletir em modo produção no Focus.
-  // Mesmo que o FOCUS_NFE_AMBIENTE esteja setado manualmente no tenant_config,
-  // aqui garantimos que: assinatura ativa + token produção => usa producao.
-  // Se não existir token de produção, fazemos fallback para homologacao.
+  // Regra de negócio:
+  // 1) Se o tenant escolheu explicitamente FOCUS_NFE_AMBIENTE, respeitar essa escolha.
+  // 2) Se não escolheu ambiente, usar assinatura ativa + token produção como auto-default.
+  // 3) Produção sem token válido cai para homologação para evitar emissão quebrada.
   try {
     const assinaturaAtiva = await buscarAssinaturaAtiva(tenantId);
     const hasProdToken = !!flat['FOCUS_NFE_TOKEN_PRODUCAO'];
     const tokenHomologacao = flat['FOCUS_NFE_TOKEN_HOMOLOGACAO'] || config.focusNFe.token;
+    const ambienteConfigurado = (flat['FOCUS_NFE_AMBIENTE'] || '').toString().toLowerCase().trim();
+    const ambienteFoiEscolhido = ambienteConfigurado === 'producao' || ambienteConfigurado === 'homologacao';
+    const ambienteDesejado = ambienteFoiEscolhido
+      ? ambienteConfigurado
+      : (assinaturaAtiva && hasProdToken ? 'producao' : 'homologacao');
 
-    if (assinaturaAtiva) {
-      if (hasProdToken) {
-        tenantConfig.focusNFe.ambiente = 'producao';
-        tenantConfig.focusNFe.baseUrl = 'https://api.focusnfe.com.br';
-        tenantConfig.focusNFe.token = flat['FOCUS_NFE_TOKEN_PRODUCAO'];
-      } else {
-        tenantConfig.focusNFe.ambiente = 'homologacao';
-        tenantConfig.focusNFe.baseUrl = 'https://homologacao.focusnfe.com.br';
-        tenantConfig.focusNFe.token = tokenHomologacao;
-      }
+    if (ambienteDesejado === 'producao' && hasProdToken) {
+      tenantConfig.focusNFe.ambiente = 'producao';
+      tenantConfig.focusNFe.baseUrl = 'https://api.focusnfe.com.br';
+      tenantConfig.focusNFe.token = flat['FOCUS_NFE_TOKEN_PRODUCAO'];
     } else {
       tenantConfig.focusNFe.ambiente = 'homologacao';
       tenantConfig.focusNFe.baseUrl = 'https://homologacao.focusnfe.com.br';

@@ -33,6 +33,12 @@ router.post('/notas/sincronizar', pedidoController.sincronizarNotas);
 router.get('/logs', pedidoController.listarLogsPedidos);
 
 /**
+ * POST /api/pedidos/catchup
+ * Busca pendentes apos ultima nota autorizada (produto/servico)
+ */
+router.post('/catchup', pedidoController.catchupPendentes);
+
+/**
  * PUT /api/pedidos/:id/status
  * Atualiza status de um pedido (deve vir antes de /:id)
  */

@@ -380,7 +380,17 @@ async function salvarPedido(pedido) {
       `INSERT INTO pedidos (pedido_id, origem, dados_pedido, status, tenant_id)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (pedido_id) 
-       DO UPDATE SET dados_pedido = $3, status = $4, tenant_id = COALESCE($5, pedidos.tenant_id), updated_at = CURRENT_TIMESTAMP
+       DO UPDATE SET
+         dados_pedido = $3,
+         status = CASE
+           -- Mantém status da nota quando o upsert vem só para sincronizar status do Woo
+           WHEN pedidos.status IN ('pendente', 'processando', 'emitida', 'erro', 'cancelada')
+            AND $4 IN ('pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed')
+           THEN pedidos.status
+           ELSE $4
+         END,
+         tenant_id = COALESCE($5, pedidos.tenant_id),
+         updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
       [pedido_id, origem || 'woocommerce', JSON.stringify(dados_pedido), status || 'pendente', tenant_id || null]
     );

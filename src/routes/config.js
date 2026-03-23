@@ -3,8 +3,8 @@ const router = express.Router();
 const config = require('../../config');
 const logger = require('../services/logger');
 const { testarConexao } = require('../services/focusNFSe');
-const { salvarConfiguracao, buscarConfiguracao, salvarConfiguracaoTenant, buscarConfiguracaoTenant, carregarConfiguracoesFocus } = require('../config/database');
-const { getConfigForTenant } = require('../services/tenantService');
+const { salvarConfiguracao, buscarConfiguracao, salvarConfiguracaoTenant, buscarConfiguracaoTenant, listarConfiguracoesTenant, carregarConfiguracoesFocus } = require('../config/database');
+const { getConfigForTenant, invalidateCache } = require('../services/tenantService');
 const fs = require('fs');
 const path = require('path');
 
@@ -321,6 +321,7 @@ router.post('/focus', async (req, res) => {
       await salvarConfiguracaoTenant(req.tenant_id, 'FOCUS_NFE_AMBIENTE', ambiente);
       if (token_homologacao) await salvarConfiguracaoTenant(req.tenant_id, 'FOCUS_NFE_TOKEN_HOMOLOGACAO', token_homologacao);
       if (token_producao) await salvarConfiguracaoTenant(req.tenant_id, 'FOCUS_NFE_TOKEN_PRODUCAO', token_producao);
+      invalidateCache(req.tenant_id);
       return res.json({
         sucesso: true,
         mensagem: 'Configurações salvas para o tenant.',

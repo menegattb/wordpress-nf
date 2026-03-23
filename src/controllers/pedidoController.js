@@ -4,6 +4,7 @@ const { listarTodasNFSe, consultarNFSe } = require('../services/focusNFSe');
 const { listarTodasNFe, consultarNFe } = require('../services/focusNFe');
 const woocommerce = require('../services/woocommerce');
 const { getConfigForTenant } = require('../services/tenantService');
+const { verificarTipoNota } = require('./webhookController');
 
 /**
  * Lista pedidos
@@ -927,6 +928,86 @@ async function listarPedidosBanco(req, res) {
   }
 }
 
+/**
+ * Detecta pedidos pendentes depois da ultima nota autorizada
+ * para catch-up ao ativar emissao automatica.
+ * Body: { tipo: 'produto' | 'servico' }
+ */
+async function catchupPendentes(req, res) {
+  try {
+    const tipo = String(req.body?.tipo || '').toLowerCase().trim();
+    if (!['produto', 'servico'].includes(tipo)) {
+      return res.status(400).json({
+        sucesso: false,
+        erro: 'Tipo invalido. Use "produto" ou "servico".'
+      });
+    }
+
+    const tenantId = req.tenant_id || null;
+    const resultadoNotas = tipo === 'produto'
+      ? await listarNFe({ status_focus: 'autorizado', limite: 1, tenant_id: tenantId })
+      : await listarNFSe({ status_focus: 'autorizado', limite: 1, tenant_id: tenantId });
+
+    const listaNotas = Array.isArray(resultadoNotas)
+      ? resultadoNotas
+      : (resultadoNotas?.dados || []);
+    const ultimaNota = listaNotas[0] || null;
+    const ultimaAutorizadaEm = ultimaNota?.created_at || null;
+    const dataCorte = ultimaAutorizadaEm ? new Date(ultimaAutorizadaEm) : null;
+
+    const pedidos = await listarPedidos({ limite: 10000, offset: 0, tenant_id: tenantId });
+    const listaPedidos = Array.isArray(pedidos) ? pedidos : (pedidos?.dados || []);
+
+    const pendentes = [];
+    for (const p of listaPedidos) {
+      if (String(p.status || '').toLowerCase() !== 'pendente') continue;
+      const criadoEm = p.created_at ? new Date(p.created_at) : null;
+      if (dataCorte && criadoEm && criadoEm <= dataCorte) continue;
+
+      let dadosPedido = p.dados_pedido || {};
+      if (typeof dadosPedido === 'string') {
+        try {
+          dadosPedido = JSON.parse(dadosPedido);
+        } catch (_) {
+          dadosPedido = {};
+        }
+      }
+
+      try {
+        const tipoNota = await verificarTipoNota(dadosPedido, tenantId);
+        if (tipo === 'produto' && tipoNota !== 'produto') continue;
+        if (tipo === 'servico' && tipoNota !== 'servico') continue;
+      } catch (e) {
+        if (tipo === 'produto') continue;
+      }
+
+      pendentes.push({
+        pedido_id: p.pedido_id,
+        created_at: p.created_at
+      });
+    }
+
+    pendentes.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    const pedidoIds = pendentes.map(p => p.pedido_id);
+
+    return res.json({
+      sucesso: true,
+      tipo,
+      desde: ultimaAutorizadaEm,
+      total: pedidoIds.length,
+      pendentes: pedidoIds
+    });
+  } catch (error) {
+    logger.error('Erro no catch-up de pendentes', {
+      error: error.message
+    });
+    return res.status(500).json({
+      sucesso: false,
+      erro: error.message
+    });
+  }
+}
+
 module.exports = {
   listar,
   buscarPorId,
@@ -937,6 +1018,7 @@ module.exports = {
   listarLogsPedidos,
   sincronizarNotas,
   sincronizarPedidosWooCommerce,
-  listarPedidosBanco
+  listarPedidosBanco,
+  catchupPendentes
 };
 

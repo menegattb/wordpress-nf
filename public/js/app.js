@@ -652,6 +652,38 @@ function resetarWooCommerce() {
     }
 }
 
+function cssClasseAmbiente(ambiente) {
+    return ambiente === 'producao' ? 'producao' : 'homologacao';
+}
+
+function rotuloAmbiente(ambiente) {
+    return ambiente === 'producao' ? 'PRODUCAO' : 'HOMOLOGACAO';
+}
+
+function renderAmbienteStatusBar(ambiente) {
+    const classe = cssClasseAmbiente(ambiente);
+    const rotulo = rotuloAmbiente(ambiente);
+    return `
+        <div class="ambiente-status-bar ${classe}" title="Ambiente atual do Focus NFe">
+            <span class="ambiente-status-dot"></span>
+            <span>Ambiente: ${rotulo}</span>
+        </div>
+    `;
+}
+
+async function carregarAmbienteFocusCache(force = false) {
+    if (!force && estadoAtual?.dados?.focusAmbiente) return estadoAtual.dados.focusAmbiente;
+    try {
+        const resultado = await API.Config.getFocus();
+        const ambiente = resultado?.dados?.ambiente === 'producao' ? 'producao' : 'homologacao';
+        estadoAtual.dados.focusAmbiente = ambiente;
+        return ambiente;
+    } catch (_) {
+        estadoAtual.dados.focusAmbiente = estadoAtual?.dados?.focusAmbiente || 'homologacao';
+        return estadoAtual.dados.focusAmbiente;
+    }
+}
+
 /**
  * Carrega seção de Conexão FocusNFe - Página única com todas as configurações
  */
@@ -676,6 +708,7 @@ async function carregarConexaoFocus() {
 
     // Usar sempre o ambiente do banco (dadosFocus.ambiente)
     const ambienteAtual = dadosFocus.ambiente || 'homologacao';
+    estadoAtual.dados.focusAmbiente = ambienteAtual === 'producao' ? 'producao' : 'homologacao';
 
     const tokenHomologacao = dadosFocus.token_homologacao || '';
     const tokenProducao = dadosFocus.token_producao || '';
@@ -685,6 +718,9 @@ async function carregarConexaoFocus() {
             <h2 class="section-title">Conexão FocusNFe</h2>
             <div style="max-width: 900px;">
                 <form id="form-focus-config">
+                    <div id="focus-ambiente-status-wrap" style="margin-bottom: 16px;">
+                        ${renderAmbienteStatusBar(ambienteAtual)}
+                    </div>
                     <!-- Ambiente -->
                     <div class="form-group" style="margin-bottom: 32px;">
                         <label class="form-label">Ambiente</label>
@@ -824,6 +860,7 @@ async function salvarFocusConfig() {
         if (resultado.sucesso) {
             // Atualizar o select diretamente com o valor retornado
             const ambienteSalvo = resultado.dados?.ambiente || ambiente;
+            estadoAtual.dados.focusAmbiente = ambienteSalvo === 'producao' ? 'producao' : 'homologacao';
             const selectAmbiente = document.getElementById('focus-ambiente');
             if (selectAmbiente) {
                 selectAmbiente.value = ambienteSalvo;
@@ -833,6 +870,10 @@ async function salvarFocusConfig() {
             const ambienteAtualText = document.querySelector('small strong');
             if (ambienteAtualText) {
                 ambienteAtualText.textContent = ambienteSalvo.toUpperCase();
+            }
+            const statusWrap = document.getElementById('focus-ambiente-status-wrap');
+            if (statusWrap) {
+                statusWrap.innerHTML = renderAmbienteStatusBar(ambienteSalvo);
             }
 
             // Verificar se é configuração temporária (Vercel)
@@ -1240,7 +1281,8 @@ function converterPedidoBancoParaWooCommerce(pedidoBanco) {
         number: pedidoId || '-',
         date_created: dateCreated,
         total: parseFloat(totalPedido) || 0, // Manter como número para cálculos
-        status: pedidoBanco.status || dados.status_wc || pedidoBanco._status_emissao || 'pending',
+        // Status Woo vem dos dados do pedido; status local de nota fica em _status_emissao.
+        status: dados.status_wc || dados.status || 'pending',
         billing: {
             first_name: firstName,
             last_name: lastName,
@@ -1395,6 +1437,7 @@ async function carregarPedidos() {
     `;
 
     try {
+        await carregarAmbienteFocusCache();
         // Carregar categorias de produto antes de filtrar
         await carregarCategoriasProdutoCache();
 
@@ -1486,6 +1529,7 @@ async function carregarPedidosServico(mostrarLoading = true) {
     }
 
     try {
+        await carregarAmbienteFocusCache();
         await carregarCategoriasProdutoCache();
         await carregarCategoriasServicoCache();
 
@@ -1666,6 +1710,8 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
         { value: 'failed', label: 'Falhou' }
     ];
 
+    const ambienteAtual = estadoAtual?.dados?.focusAmbiente || 'homologacao';
+
     const html = `
         <div class="content-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
@@ -1693,6 +1739,10 @@ function renderizarTelaPedidosServico(pedidos, meses, filtroStatus = null, filtr
                 </div>
             </div>
             
+            <div style="margin-bottom: 12px;">
+                ${renderAmbienteStatusBar(ambienteAtual)}
+            </div>
+
             <!-- Toggle Emissão Automática (Serviço) -->
             <div id="auto-emitir-servico-container" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; border: 2px solid #dee2e6; background: #f8f9fa;">
                 <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
@@ -2931,6 +2981,8 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
         { value: 'failed', label: 'Falhou' }
     ];
 
+    const ambienteAtual = estadoAtual?.dados?.focusAmbiente || 'homologacao';
+
     const html = `
         <div class="content-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
@@ -2948,6 +3000,10 @@ function renderizarTelaPedidos(pedidos, meses, filtroStatus = null, filtroCatego
                         <span style="color: #28a745; font-size: 12px;">✓ ${pedidosFiltrados.length} pedidos ${filtroStatus || filtroCategoria ? 'filtrados' : 'carregados'}</span>
                     </div>
                 </div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                ${renderAmbienteStatusBar(ambienteAtual)}
             </div>
 
             <!-- Toggle Emissão Automática -->
@@ -6580,6 +6636,9 @@ async function toggleAutoEmitir(ativo) {
     try {
         await API.Config.setAutoEmitir(ativo);
         atualizarUIAutoEmitir(ativo);
+        if (ativo) {
+            await executarCatchupAutoEmitir('produto');
+        }
     } catch (e) {
         alert('Erro ao salvar configuração: ' + e.message);
         const toggle = document.getElementById('toggle-auto-emitir');
@@ -6842,9 +6901,72 @@ async function toggleAutoEmitirServico(ativo) {
     try {
         await API.Config.setAutoEmitirServico(ativo);
         atualizarUIAutoEmitirServico(ativo);
+        if (ativo) {
+            await executarCatchupAutoEmitir('servico');
+        }
     } catch (e) {
         alert('Erro ao salvar configuração: ' + e.message);
         await carregarEstadoAutoEmitirServico();
+    }
+}
+
+async function executarCatchupAutoEmitir(tipo) {
+    const isServico = tipo === 'servico';
+    const tipoLabel = isServico ? 'servicos (NFSe)' : 'produtos (NFe)';
+    const desdeLabel = (isoDate) => {
+        if (!isoDate) return 'o inicio dos pedidos salvos';
+        try {
+            return new Date(isoDate).toLocaleString('pt-BR');
+        } catch (_) {
+            return 'a ultima autorizada';
+        }
+    };
+
+    const pendentesRes = await API.Pedidos.buscarPendentesCatchup(tipo);
+    if (!pendentesRes || pendentesRes.sucesso === false) {
+        throw new Error(pendentesRes?.erro || 'Falha ao buscar pendentes para catch-up');
+    }
+
+    const pendentes = Array.isArray(pendentesRes.pendentes) ? pendentesRes.pendentes : [];
+    const total = Number(pendentesRes.total || pendentes.length || 0);
+    if (total <= 0) {
+        if (window.Toast) {
+            window.Toast.success(`Emissao automatica ativada: nenhum pedido pendente para ${tipoLabel}.`);
+        }
+        return;
+    }
+
+    const msg = `Foram encontrados ${total} pedido(s) pendente(s) de ${tipoLabel}, da ultima autorizada (${desdeLabel(pendentesRes.desde)}) ate o mais recente. Deseja emitir agora?`;
+    if (!confirm(msg)) {
+        if (window.Toast) {
+            window.Toast.info('Emissao automatica ativada sem disparo em lote agora.');
+        }
+        return;
+    }
+
+    if (window.Toast) {
+        window.Toast.info(`Iniciando emissao em lote de ${total} pedido(s)...`);
+    }
+    const resultado = await API.NFSe.emitirLote(pendentes, tipo);
+    if (!resultado || resultado.sucesso === false) {
+        throw new Error(resultado?.erro || 'Falha ao emitir lote no catch-up');
+    }
+
+    const emitidas = Number(resultado?.dados?.resumo?.sucesso || resultado?.sucesso_count || 0);
+    const erros = Number(resultado?.dados?.resumo?.erro || resultado?.erro_count || 0);
+    const canceladas = Number(resultado?.dados?.resumo?.cancelada || 0);
+    const finalMsg = `Catch-up concluido (${tipoLabel}): ${emitidas} emitida(s), ${erros} com erro, ${canceladas} cancelada(s).`;
+
+    if (window.Toast) {
+        window.Toast.success(finalMsg);
+    } else {
+        alert(finalMsg);
+    }
+
+    if (estadoAtual?.secaoAtiva === 'pedidos' || estadoAtual?.secaoAtiva === 'pedidos-produto') {
+        await carregarPedidos();
+    } else if (estadoAtual?.secaoAtiva === 'pedidos-excel' || estadoAtual?.secaoAtiva === 'pedidos-servico') {
+        await carregarPedidosServico(false);
     }
 }
 
@@ -7665,20 +7787,44 @@ async function alterarStatusManual(pedidoId, novoStatus) {
  * Atualiza status da nota no pedido local (Woo) — PUT /api/pedidos/:id/status
  * Valores: pendente, processando, emitida, erro, cancelada
  */
-async function alterarStatusNotaPedidoWoo(pedidoId, statusDb) {
+async function alterarStatusNotaPedidoWoo(pedidoId, statusDb, selectEl = null) {
     const idStr = String(pedidoId);
-    const res = await API.Pedidos.atualizarStatus(idStr, statusDb);
-    const ok = res && res.sucesso !== false && !res.erro;
-    if (ok && window.Toast) {
-        window.Toast.success(`Pedido #${idStr}: status da nota atualizado`);
+    const cores = {
+        pendente: '#6c757d',
+        processando: '#e65100',
+        emitida: '#28a745',
+        erro: '#dc3545',
+        cancelada: '#dc3545'
+    };
+    const cor = cores[statusDb] || '#6c757d';
+    if (selectEl) {
+        selectEl.style.background = cor;
+        selectEl.style.borderColor = cor;
     }
-    // Recarregar a seção ativa para refletir a mudança
-    if (estadoAtual.secaoAtiva === 'pedidos-excel') {
-        await carregarPedidosServico(false);
-    } else if (estadoAtual.secaoAtiva === 'pedidos-servico') {
-        await carregarPedidosServico(false);
-    } else if (estadoAtual.secaoAtiva === 'pedidos' || estadoAtual.secaoAtiva === 'pedidos-produto') {
-        await carregarPedidos();
+
+    try {
+        const res = await API.Pedidos.atualizarStatus(idStr, statusDb);
+        const ok = res && res.sucesso !== false && !res.erro;
+        if (!ok) {
+            throw new Error(res?.erro || 'Falha ao atualizar status');
+        }
+        if (window.Toast) {
+            window.Toast.success(`Pedido #${idStr}: status da nota atualizado`);
+        }
+
+        // Recarregar a seção ativa para refletir a mudança em Woo Produtos e Woo Serviços
+        if (estadoAtual.secaoAtiva === 'pedidos-excel' || estadoAtual.secaoAtiva === 'pedidos-servico') {
+            await carregarPedidosServico(false);
+        } else if (estadoAtual.secaoAtiva === 'pedidos' || estadoAtual.secaoAtiva === 'pedidos-produto') {
+            await carregarPedidos();
+        }
+    } catch (error) {
+        console.error('Erro ao alterar status da nota Woo:', error);
+        if (window.Toast) {
+            window.Toast.error(`Erro ao atualizar status do pedido #${idStr}`);
+        } else {
+            alert(`Erro ao atualizar status do pedido #${idStr}: ${error.message}`);
+        }
     }
 }
 

@@ -624,6 +624,7 @@ async function processarWebhookFocusNFe(req, res) {
 
 module.exports = {
   processarWebhook,
-  processarWebhookFocusNFe
+  processarWebhookFocusNFe,
+  verificarTipoNota
 };
 
