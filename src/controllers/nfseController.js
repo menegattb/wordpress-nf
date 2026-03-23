@@ -30,198 +30,47 @@ async function emitirNFSeLote(req, res) {
     // Default para servico se não especificado
     const tipoNF = tipo_nf || 'servico';
 
-    // SE FOR SERVIÇO, USAR PROCESSO ASSÍNCRONO
-    if (tipoNF === 'servico') {
-      const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    // UNIFICAR PROCESSO ASSÍNCRONO PARA QUASE TUDO (PRODUTO E SERVIÇO)
+    // Isso evita timeouts da Vercel (10s) que acontecem no fluxo síncrono anterior
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
-      logger.info(`Recebida solicitação de emissão assíncrona`, {
-        job_id: jobId,
-        total_pedidos: pedido_ids.length,
-        tipo_nf: tipoNF
-      });
-
-      // Retornar IMEDIATAMENTE (Fire and Forget)
-      res.status(202).json({
-        sucesso: true,
-        processamento_async: true,
-        job_id: jobId,
-        mensagem: 'Processamento iniciado em segundo plano',
-        total_pedidos: pedido_ids.length
-      });
-
-      // Iniciar processamento em background (sem await)
-      processarLoteAsync(pedido_ids, tipoNF, jobId, req.tenant_id).catch(err => {
-        logger.error(`Erro fatal no processamento do job ${jobId}`, {
-          erro: err.message,
-          stack: err.stack
-        });
-      });
-
-      return;
-    }
-
-    // SE FOR PRODUTO (NFe), MANTER FLUXO SÍNCRONO ORIGINAL
-    const tenantId = req.tenant_id || null;
-    const cfg = tenantId ? await getConfigForTenant(tenantId) : config;
-    const configFiscal = cfg.fiscal || config.fiscal;
-    const configFocus = tenantId && cfg.focusNFe ? { token: cfg.focusNFe.token, ambiente: cfg.focusNFe.ambiente } : null;
-    const credentials = tenantId && cfg.woocommerce?.apiUrl ? cfg.woocommerce : null;
-
-    const inicioLote = Date.now();
-    const tipoNotaLabel = 'NFe';
-
-    logger.info(`Iniciando emissão em lote de ${tipoNotaLabel}`, {
-      total: pedido_ids.length,
+    logger.info(`Recebida solicitação de emissão assíncrona`, {
+      job_id: jobId,
+      total_pedidos: pedido_ids.length,
       tipo_nf: tipoNF,
-      timestamp: new Date().toISOString(),
-      pedido_ids: pedido_ids.slice(0, 10)
+      ambiente: process.env.FOCUS_NFE_AMBIENTE
     });
 
-    const resultados = [];
-    let sucesso = 0;
-    let erros = 0;
-
-    for (let i = 0; i < pedido_ids.length; i++) {
-      const pedidoId = pedido_ids[i];
-      const inicioPedido = Date.now();
-
-      try {
-        logger.info(`[${i + 1}/${pedido_ids.length}] Processando pedido`, {
-          pedido_id: pedidoId,
-          tipo_nf: tipoNF,
-          progresso: `${i + 1}/${pedido_ids.length}`
-        });
-
-        const resultadoWC = await buscarPedidoWC(pedidoId, credentials);
-
-        if (!resultadoWC.sucesso) {
-          logger.warn(`[${i + 1}/${pedido_ids.length}] Erro ao buscar pedido do WooCommerce`, {
-            pedido_id: pedidoId,
-            erro: resultadoWC.erro || 'Erro desconhecido'
-          });
-
-          resultados.push({
-            pedido_id: pedidoId,
-            sucesso: false,
-            erro: resultadoWC.erro || 'Erro ao buscar pedido'
-          });
-          erros++;
-          continue;
-        }
-
-        const pedidoMapeado = mapearWooCommerceParaPedido(resultadoWC.pedido);
-
-        const limiteCheck = await verificarLimite(tenantId);
-        if (!limiteCheck.pode) {
-          resultados.push({
-            pedido_id: pedidoId,
-            sucesso: false,
-            erro: limiteCheck.mensagem || 'Limite de notas atingido'
-          });
-          erros++;
-          continue;
-        }
-
-        logger.info(`[${i + 1}/${pedido_ids.length}] Emitindo ${tipoNotaLabel}`, {
-          pedido_id: pedidoId,
-          tipo_nf: tipoNF,
-          cliente: pedidoMapeado.nome || pedidoMapeado.razao_social
-        });
-
-        // Sempre emitir NFe pois tipoNF !== 'servico' aqui
-        const resultadoNFSe = await emitirNFe(pedidoMapeado, cfg.emitente, configFiscal, configFocus);
-
-        const tempoPedido = Date.now() - inicioPedido;
-
-        if (resultadoNFSe.sucesso) {
-          await registrarEmissao(tenantId);
-          logger.info(`[${i + 1}/${pedido_ids.length}] ${tipoNotaLabel} emitida com sucesso`, {
-            pedido_id: pedidoId,
-            referencia: resultadoNFSe.referencia,
-            status: resultadoNFSe.status,
-            tempo_processamento_ms: tempoPedido
-          });
-
-          resultados.push({
-            pedido_id: pedidoId,
-            sucesso: true,
-            referencia: resultadoNFSe.referencia,
-            nfse_numero: resultadoNFSe.numero || null,
-            status: resultadoNFSe.status
-          });
-          sucesso++;
-
-          // Atualizar status do pedido no banco local
-          try {
-            await atualizarPedido(pedidoId, {
-              status: resultadoNFSe.status === 'autorizado' ? 'emitida' : 'processando',
-              referencia: resultadoNFSe.referencia
-            });
-          } catch (e) {
-            logger.warn(`Erro ao atualizar status local do pedido ${pedidoId} (NFe)`, { erro: e.message });
-          }
-        } else {
-          logger.error(`[${i + 1}/${pedido_ids.length}] Erro ao emitir ${tipoNotaLabel}`, {
-            pedido_id: pedidoId,
-            erro: resultadoNFSe.erro || 'Erro desconhecido',
-            tempo_processamento_ms: tempoPedido
-          });
-
-          resultados.push({
-            pedido_id: pedidoId,
-            sucesso: false,
-            erro: resultadoNFSe.erro || 'Erro ao emitir NFSe'
-          });
-          erros++;
-        }
-
-      } catch (error) {
-        const tempoPedido = Date.now() - inicioPedido;
-
-        logger.error(`[${i + 1}/${pedido_ids.length}] Erro ao processar pedido`, {
-          pedido_id: pedidoId,
-          error: error.message,
-          stack: error.stack,
-          tempo_processamento_ms: tempoPedido
-        });
-
-        resultados.push({
-          pedido_id: pedidoId,
-          sucesso: false,
-          erro: error.message
-        });
-        erros++;
-      }
-    }
-
-    const tempoTotal = Date.now() - inicioLote;
-
-    logger.info('Emissão em lote concluída', {
-      total: pedido_ids.length,
-      sucesso,
-      erros,
-      tempo_total_ms: tempoTotal,
+    // Retornar IMEDIATAMENTE (Fire and Forget)
+    res.status(202).json({
+      sucesso: true,
+      processamento_async: true,
+      job_id: jobId,
+      mensagem: 'Processamento iniciado em segundo plano. Você pode acompanhar o progresso nos logs.',
+      total_pedidos: pedido_ids.length,
       tipo_nf: tipoNF
     });
 
-    res.json({
-      sucesso: true,
-      total: pedido_ids.length,
-      processados: resultados.length,
-      sucesso: sucesso,
-      erros: erros,
-      resultados: resultados
+    // Iniciar processamento em background (sem await)
+    processarLoteAsync(pedido_ids, tipoNF, jobId, req.tenant_id).catch(err => {
+      logger.error(`Erro fatal no processamento do job ${jobId}`, {
+        erro: err.message,
+        stack: err.stack
+      });
     });
 
+    return;
   } catch (error) {
-    logger.error('Erro ao emitir NFSe em lote', {
+    logger.error('Erro ao iniciar emissão em lote', {
       error: error.message
     });
 
-    res.status(500).json({
-      sucesso: false,
-      erro: error.message
-    });
+    if (!res.headersSent) {
+      res.status(500).json({
+        sucesso: false,
+        erro: error.message
+      });
+    }
   }
 }
 
@@ -235,25 +84,29 @@ async function processarLoteAsync(pedido_ids, tipoNF, jobId, tenantId = null) {
   const credentials = tenantId && cfg.woocommerce?.apiUrl ? cfg.woocommerce : null;
 
   const inicioLote = Date.now();
-  const tipoNotaLabel = 'NFSe'; // Async é apenas para serviço
+  const isProduto = tipoNF === 'produto' || tipoNF === 'nfe';
+  const tipoNotaLabel = isProduto ? 'NFe' : 'NFSe';
+  
   let sucesso = 0;
   let erros = 0;
 
-  logger.info(`[JOB:${jobId}] Iniciando processamento background`, {
+  logger.info(`[JOB:${jobId}] Iniciando processamento background para ${tipoNotaLabel}`, {
     job_id: jobId,
     total: pedido_ids.length,
-    tipo: tipoNotaLabel
+    tipo: tipoNF,
+    ambiente: configFocus?.ambiente || process.env.FOCUS_NFE_AMBIENTE
   });
 
   for (let i = 0; i < pedido_ids.length; i++) {
     const pedidoId = pedido_ids[i];
     const progresso = `[${i + 1}/${pedido_ids.length}]`;
+    const tempoInicioItem = Date.now();
 
     // Pequeno delay para não sobrecarregar API e permitir logging visível
     if (i > 0) await new Promise(r => setTimeout(r, 1000));
 
     try {
-      logger.info(`${progresso} Processando pedido ${pedidoId}`, {
+      logger.info(`${progresso} Processando pedido ${pedidoId} (${tipoNotaLabel})`, {
         job_id: jobId,
         pedido_id: pedidoId,
         progresso_atual: i + 1,
@@ -264,7 +117,7 @@ async function processarLoteAsync(pedido_ids, tipoNF, jobId, tenantId = null) {
       const resultadoWC = await buscarPedidoWC(pedidoId, credentials);
 
       if (!resultadoWC.sucesso) {
-        logger.error(`${progresso} Erro ao buscar pedido ${pedidoId}`, {
+        logger.error(`${progresso} Erro ao buscar pedido ${pedidoId} do WooCommerce`, {
           job_id: jobId,
           pedido_id: pedidoId,
           erro: resultadoWC.erro
@@ -287,45 +140,58 @@ async function processarLoteAsync(pedido_ids, tipoNF, jobId, tenantId = null) {
         continue;
       }
 
-      // Emitir NFSe
-      const resultadoNFSe = await emitirNFSe(pedidoMapeado, cfg.emitente, configFiscal, tipoNF, configFocus);
+      // Emitir Nota (NFe ou NFSe)
+      let resultadoEmissao;
+      if (isProduto) {
+        resultadoEmissao = await emitirNFe(pedidoMapeado, cfg.emitente, configFiscal, configFocus);
+      } else {
+        resultadoEmissao = await emitirNFSe(pedidoMapeado, cfg.emitente, configFiscal, tipoNF, configFocus);
+      }
 
-      if (resultadoNFSe.sucesso) {
+      const tempoProcessamento = Date.now() - tempoInicioItem;
+
+      if (resultadoEmissao.sucesso) {
         await registrarEmissao(tenantId);
-        logger.info(`${progresso} NFSe emitida com sucesso para ${pedidoId}`, {
+        logger.info(`${progresso} ${tipoNotaLabel} emitida com sucesso para ${pedidoId}`, {
           job_id: jobId,
           pedido_id: pedidoId,
-          referencia: resultadoNFSe.referencia,
-          status: resultadoNFSe.status,
-          numero: resultadoNFSe.numero || resultadoNFSe.chave_nfse
+          referencia: resultadoEmissao.referencia,
+          status: resultadoEmissao.status,
+          numero: resultadoEmissao.numero || resultadoEmissao.chave_nfe || resultadoEmissao.chave_nfse,
+          tempo_ms: tempoProcessamento
         });
         sucesso++;
 
-        // Atualizar status no banco local se possível
-        if (pedidoMapeado.id || pedidoId) {
-          try {
-            // Tentar atualizar status no banco se a função estiver disponível
-            if (atualizarPedido) {
-              await atualizarPedido(pedidoId, {
-                status: 'emitida',
-                referencia: resultadoNFSe.referencia
-              });
-            }
-          } catch (e) {
-            logger.warn(`Erro ao atualizar status local do pedido ${pedidoId}`, { erro: e.message });
+        // Atualizar status no banco local
+        try {
+          // Determinar status simplificado para o banco local
+          let statusBanco = 'processando';
+          if (resultadoEmissao.status === 'autorizado' || resultadoEmissao.status === 'concluido') {
+            statusBanco = 'emitida';
+          } else if (resultadoEmissao.status === 'erro_autorizacao' || resultadoEmissao.status === 'rejeitado') {
+            statusBanco = 'erro';
           }
+
+          await atualizarPedido(pedidoId, {
+            status: statusBanco,
+            referencia: resultadoEmissao.referencia,
+            tipo_nota: isProduto ? 'nfe' : 'nfse'
+          });
+        } catch (e) {
+          logger.warn(`Erro ao atualizar status local do pedido ${pedidoId}`, { erro: e.message });
         }
       } else {
-        logger.error(`${progresso} Falha na emissão para ${pedidoId}`, {
+        logger.error(`${progresso} Falha na emissão de ${tipoNotaLabel} para ${pedidoId}`, {
           job_id: jobId,
           pedido_id: pedidoId,
-          erro: resultadoNFSe.erro
+          erro: resultadoEmissao.erro || resultadoEmissao.mensagem,
+          tempo_ms: tempoProcessamento
         });
         erros++;
       }
 
     } catch (error) {
-      logger.error(`${progresso} Erro não tratado para ${pedidoId}`, {
+      logger.error(`${progresso} Erro crítico não tratado para ${pedidoId}`, {
         job_id: jobId,
         pedido_id: pedidoId,
         erro: error.message,
@@ -336,7 +202,7 @@ async function processarLoteAsync(pedido_ids, tipoNF, jobId, tenantId = null) {
   }
 
   const tempoTotal = Date.now() - inicioLote;
-  logger.info(`[JOB:${jobId}] Processamento concluído`, {
+  logger.info(`[JOB:${jobId}] Processamento concluído de ${tipoNotaLabel}`, {
     job_id: jobId,
     total: pedido_ids.length,
     sucessos: sucesso,
