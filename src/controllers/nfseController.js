@@ -1,7 +1,7 @@
 const logger = require('../services/logger');
 const { emitirNFSe, consultarNFSe, cancelarNFSe, listarTodasNFSe } = require('../services/focusNFSe');
 const { emitirNFe, consultarNFe, cancelarNFe, listarTodasNFe } = require('../services/focusNFe');
-const { listarNFSe, listarNFe, buscarNFePorChave } = require('../config/database');
+const { listarNFSe, listarNFe, buscarNFePorChave, buscarPedidoPorPedidoId } = require('../config/database');
 const { buscarPedidoPorId, atualizarPedido } = require('../config/database');
 const { validarCPFCNPJ } = require('../services/validator');
 const { buscarPedidoPorId: buscarPedidoWC } = require('../services/woocommerce');
@@ -98,63 +98,59 @@ async function processarLoteAsync(pedido_ids, tipoNF, jobId, tenantId = null) {
   });
 
   for (let i = 0; i < pedido_ids.length; i++) {
-    const pedidoId = pedido_ids[i];
+    const pedidoIdWC = pedido_ids[i];
     const progresso = `[${i + 1}/${pedido_ids.length}]`;
-    const tempoInicioItem = Date.now();
+    let pedidoInternoId = null;
 
     // Pequeno delay para não sobrecarregar API e permitir logging visível
     if (i > 0) await new Promise(r => setTimeout(r, 1000));
 
     try {
-      logger.info(`${progresso} Processando pedido ${pedidoId} (${tipoNotaLabel})`, {
+      // Resolver ID interno do banco de dados (pedidoIdWC é o ID do WooCommerce)
+      const pedidoExistente = await buscarPedidoPorPedidoId(pedidoIdWC, tenantId);
+      if (pedidoExistente) {
+        pedidoInternoId = pedidoExistente.id;
+        // Marcar como processando no banco local
+        await atualizarPedido(pedidoInternoId, { status: 'processando' });
+      }
+
+      logger.info(`${progresso} Processando pedido ${pedidoIdWC} (${tipoNotaLabel})`, {
         job_id: jobId,
-        pedido_id: pedidoId,
+        pedido_id: pedidoIdWC,
         progresso_atual: i + 1,
         total: pedido_ids.length,
         status_job: 'em_andamento'
       });
 
-      const resultadoWC = await buscarPedidoWC(pedidoId, credentials);
+      const resultadoWC = await buscarPedidoWC(pedidoIdWC, credentials);
 
       if (!resultadoWC.sucesso) {
-        logger.error(`${progresso} Erro ao buscar pedido ${pedidoId} do WooCommerce`, {
-          job_id: jobId,
-          pedido_id: pedidoId,
-          erro: resultadoWC.erro
-        });
-        erros++;
-        continue;
+        throw new Error(`Erro ao buscar pedido no WooCommerce: ${resultadoWC.erro?.message || JSON.stringify(resultadoWC.erro)}`);
       }
 
-      const pedidoMapeado = mapearWooCommerceParaPedido(resultadoWC.pedido);
+      const pedidoMapeado = mapearWooCommerceParaPedido(resultadoWC.pedido || resultadoWC.dados);
 
       const limiteCheck = await verificarLimite(tenantId);
       if (!limiteCheck.pode) {
-        logger.warn(`${progresso} Limite atingido - pulando ${pedidoId}`, {
-          job_id: jobId,
-          tenant_id: tenantId,
-          usado: limiteCheck.usado,
-          limite: limiteCheck.limite
-        });
-        erros++;
-        continue;
+        throw new Error(`Limite atingido: ${limiteCheck.mensagem}`);
       }
 
       // Emitir Nota (NFe ou NFSe)
       let resultadoEmissao;
+      const tempoInicioEmissao = Date.now();
       if (isProduto) {
         resultadoEmissao = await emitirNFe(pedidoMapeado, cfg.emitente, configFiscal, configFocus);
       } else {
         resultadoEmissao = await emitirNFSe(pedidoMapeado, cfg.emitente, configFiscal, tipoNF, configFocus);
       }
 
-      const tempoProcessamento = Date.now() - tempoInicioItem;
+      const tempoProcessamento = Date.now() - tempoInicioEmissao;
 
       if (resultadoEmissao.sucesso) {
         await registrarEmissao(tenantId);
-        logger.info(`${progresso} ${tipoNotaLabel} emitida com sucesso para ${pedidoId}`, {
+        logger.info(`${progresso} ${tipoNotaLabel} emitida com sucesso para ${pedidoIdWC}`, {
           job_id: jobId,
-          pedido_id: pedidoId,
+          pedido_id: pedidoIdWC,
           referencia: resultadoEmissao.referencia,
           status: resultadoEmissao.status,
           numero: resultadoEmissao.numero || resultadoEmissao.chave_nfe || resultadoEmissao.chave_nfse,
@@ -162,42 +158,49 @@ async function processarLoteAsync(pedido_ids, tipoNF, jobId, tenantId = null) {
         });
         sucesso++;
 
-        // Atualizar status no banco local
-        try {
-          // Determinar status simplificado para o banco local
-          let statusBanco = 'processando';
-          if (resultadoEmissao.status === 'autorizado' || resultadoEmissao.status === 'concluido') {
-            statusBanco = 'emitida';
-          } else if (resultadoEmissao.status === 'erro_autorizacao' || resultadoEmissao.status === 'rejeitado') {
-            statusBanco = 'erro';
-          }
+        // Atualizar status no banco local com ID INTERNO
+        if (pedidoInternoId) {
+          try {
+            let statusBanco = 'processando';
+            if (resultadoEmissao.status === 'autorizado' || resultadoEmissao.status === 'concluido') {
+              statusBanco = 'emitida';
+            } else if (resultadoEmissao.status === 'erro_autorizacao' || resultadoEmissao.status === 'rejeitado') {
+              statusBanco = 'erro';
+            }
 
-          await atualizarPedido(pedidoId, {
-            status: statusBanco,
-            referencia: resultadoEmissao.referencia,
-            tipo_nota: isProduto ? 'nfe' : 'nfse'
-          });
-        } catch (e) {
-          logger.warn(`Erro ao atualizar status local do pedido ${pedidoId}`, { erro: e.message });
+            await atualizarPedido(pedidoInternoId, {
+              status: statusBanco,
+              referencia: resultadoEmissao.referencia,
+              tipo_nota: isProduto ? 'nfe' : 'nfse',
+              dados_emissao: resultadoEmissao.dados
+            });
+          } catch (dbErr) {
+            logger.error(`${progresso} Erro ao atualizar status no banco local`, { error: dbErr.message });
+          }
         }
       } else {
-        logger.error(`${progresso} Falha na emissão de ${tipoNotaLabel} para ${pedidoId}`, {
-          job_id: jobId,
-          pedido_id: pedidoId,
-          erro: resultadoEmissao.erro || resultadoEmissao.mensagem,
-          tempo_ms: tempoProcessamento
-        });
-        erros++;
+        throw new Error(resultadoEmissao.erro || resultadoEmissao.mensagem || 'Falha na emissão pela Focus NFe');
       }
 
     } catch (error) {
-      logger.error(`${progresso} Erro crítico não tratado para ${pedidoId}`, {
-        job_id: jobId,
-        pedido_id: pedidoId,
-        erro: error.message,
-        stack: error.stack
-      });
       erros++;
+      logger.error(`${progresso} Falha no processamento do pedido ${pedidoIdWC}`, {
+        job_id: jobId,
+        pedido_id: pedidoIdWC,
+        erro: error.message
+      });
+
+      // Atualizar para erro no banco local se tivermos o ID INTERNO
+      if (pedidoInternoId) {
+        try {
+          await atualizarPedido(pedidoInternoId, { 
+            status: 'erro',
+            logs: `Erro em ${new Date().toLocaleString('pt-BR')}: ${error.message}`
+          });
+        } catch (dbErr) {
+          logger.error(`${progresso} Erro ao marcar falha no banco local`, { error: dbErr.message });
+        }
+      }
     }
   }
 
