@@ -90,14 +90,21 @@ router.get('/focus', async (req, res) => {
   try {
     // Quando tenant_id presente, usar config do tenant
     if (req.tenant_id) {
-      const cfg = await getConfigForTenant(req.tenant_id);
+      // Para tenants, buscar chaves brutas do banco para exibição no formulário
+      const flat = await listarConfiguracoesTenant(req.tenant_id);
+      const ambiente = flat['FOCUS_NFE_AMBIENTE'] || 'homologacao';
+      const tokenHomologacao = flat['FOCUS_NFE_TOKEN_HOMOLOGACAO'] || '';
+      const tokenProducao = flat['FOCUS_NFE_TOKEN_PRODUCAO'] || '';
+      
+      const tokenAtual = ambiente === 'producao' ? tokenProducao : tokenHomologacao;
+
       return res.json({
         sucesso: true,
         dados: {
-          ambiente: cfg.focusNFe.ambiente,
-          token_homologacao: cfg.focusNFe.token || '',
-          token_producao: '',
-          token_atual_preview: cfg.focusNFe.token ? cfg.focusNFe.token.substring(0, 10) + '...' : 'Não configurado',
+          ambiente: ambiente,
+          token_homologacao: tokenHomologacao,
+          token_producao: tokenProducao,
+          token_atual_preview: tokenAtual ? tokenAtual.substring(0, 10) + '...' : 'Não configurado',
           ambiente_atual: 'tenant'
         }
       });
